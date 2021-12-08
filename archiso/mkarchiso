@@ -39,6 +39,7 @@ airootfs_image_tool_options=()
 cert_list=()
 sign_netboot_artifacts=""
 declare -A file_permissions=()
+efiboot_files=()
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -516,6 +517,38 @@ _make_efibootimg() {
     mmd -i "${work_dir}/efiboot.img" ::/EFI ::/EFI/BOOT
 }
 
+_make_bootmode_uefi-ia32.grub.esp() {
+    # Fill Grub configuration files
+    sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+         s|%INSTALL_DIR%|${install_dir}|g;
+         s|%ARCH%|${arch}|g" \
+        "${profile}/efiboot/grub.cfg" > "${work_dir}/grub.cfg" # | mcopy -i "${work_dir}/efiboot.img" - "::/grub.cfg"
+    # Create EFI file
+    grub-mkstandalone -d /usr/lib/grub/i386-efi \
+                      -O i386-efi \
+                      --modules="part_gpt part_msdos" \
+                      --locales="en@quot" \
+                      --themes="" \
+                      -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub.cfg"
+    # Add GRUB to the list of files used to calculate the required FAT image size.
+    efiboot_files+=("${work_dir}/BOOTIA32.EFI")
+    # Create a FAT image for the EFI system partition
+    _run_once _make_bootmode_uefi-x64.systemd-boot.esp
+    # Copy grub EFI binary to the default/fallback boot path
+    mcopy -i "${work_dir}/efiboot.img" \
+        "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
+
+    # Additionally set up system-boot in ISO 9660. This allows creating a medium for the live environment by using
+    # manual partitioning and simply copying the ISO 9660 file system contents.
+    # This is not related to El Torito booting and no firmware uses these files.
+    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
+    install -d -m 0755 -- "${isofs_dir}/EFI/BOOT"
+
+    # Copy GRUB EFI binary to the default/fallback boot path
+    install -m 0644 -- "${work_dir}/BOOTIA32.EFI" \
+        "${isofs_dir}/EFI/BOOT/BOOTIA32.EFI"
+}
+
 # Prepare system-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _file efiboot_imgsize
@@ -528,13 +561,13 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
         fi
     done
     # Calculate the required FAT image size in bytes
-    efiboot_imgsize="$(du -bc \
-        "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" \
-        "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" \
-        "${profile}/efiboot/" \
-        "${pacstrap_dir}/boot/vmlinuz-"* \
-        "${pacstrap_dir}/boot/initramfs-"*".img" \
-        "${_available_ucodes[@]}" \
+    efiboot_files+=("${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
+                    "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
+                    "${profile}/efiboot/"
+                    "${pacstrap_dir}/boot/vmlinuz-"*
+                    "${pacstrap_dir}/boot/initramfs-"*".img"
+                    "${_available_ucodes[@]}")
+    efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
         2>/dev/null | awk 'END { print $1 }')"
     # Create a FAT image for the EFI system partition
     _make_efibootimg "$efiboot_imgsize"
@@ -685,6 +718,19 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
 
 _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
     # uefi-x64.systemd-boot.eltorito has the exact same requirements as uefi-x64.systemd-boot.esp
+    _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
+}
+
+_validate_requirements_bootmode_uefi-ia32.grub.esp() {
+    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Using 'uefi-ia32.grub.esp' boot mode without 'uefi-x64.systemd-boot.esp' is not supported." 0
+    fi
+    # Check if GRUB is available
+    if ! command -v grub-install &> /dev/null; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${bootmode}': grub-install is not available on this host. Install 'grub'!" 0
+    fi
     _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
 }
 
