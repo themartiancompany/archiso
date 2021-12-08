@@ -40,6 +40,7 @@ cert_list=()
 sign_netboot_artifacts=""
 declare -A file_permissions=()
 efiboot_files=()
+encryption=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -214,7 +215,7 @@ _mkairootfs_squashfs() {
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_erofs() {
-    local fsuuid mkfs_erofs_options=()
+    local fsuuid mkfs_erofs_options=() image_device="${image_path}"
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
@@ -223,9 +224,27 @@ _mkairootfs_erofs() {
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+
+    if [[ $encryption = "true" ]]; then
+        pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+        image_size=$((pacstrap_size+200000))
+        _msg_info "Encryption with cryptsetup (${image_size}KB)"
+        notify-send "mkarchiso" "LUKS encryption prompt"
+        fallocate -l "${image_size}K" "${image_path}" 
+        cryptsetup -y luksFormat "${image_path}"
+        cryptsetup luksOpen "${image_path}" "archiso_mapper"
+        image_device="/dev/mapper/archiso_mapper"
+    fi
     mkfs_erofs_options+=('-U' "${fsuuid}" "${airootfs_image_tool_options[@]}")
     _msg_info "Creating EROFS image, this may take some time..."
-    mkfs.erofs "${mkfs_erofs_options[@]}" -- "${image_path}" "${pacstrap_dir}"
+    mkfs.erofs "${mkfs_erofs_options[@]}" -- "${image_device}" "${pacstrap_dir}"
+    if [[ $encryption = "true" ]]; then
+        cryptsetup luksClose "archiso_mapper"
+        if [ -f "/dev/mapper/archiso_mapper" ]; then
+            dmsetup remove "archiso_mapper" 
+        fi
+        sync
+    fi
     _msg_info "Done!"
 }
 
@@ -1133,6 +1152,15 @@ _validate_options() {
             _msg_error "${_buildmode} is not a valid build mode!" 0
         fi
     done
+
+    # Check if the cryptsetup-encryption package is in the package list
+    # shellcheck disable=SC2076
+    if [[ $encryption = "true" ]]; then
+        if [[ ! " ${pkg_list[*]} " =~ ' cryptsetup-encryption ' ]]; then
+            (( validation_error=validation_error+1 ))
+            _msg_error "Validating '${bootmode}': The 'cryptsetup-encryption' package is missing from the package list!" 0
+        fi
+    fi
 
     if (( validation_error )); then
         _msg_error "${validation_error} errors were encountered while validating the profile. Aborting." 1

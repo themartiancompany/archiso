@@ -1,5 +1,6 @@
 base
 cloud-init
+cryptsetup-encryption
 linux
 mkinitcpio
 mkinitcpio-archiso
