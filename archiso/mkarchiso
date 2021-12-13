@@ -215,11 +215,12 @@ _mkairootfs_squashfs() {
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_erofs() {
-    local fsuuid mkfs_erofs_options=() image_device="${image_path}"
+    local fsuuid mkfs_erofs_options=()
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    local image_device="${image_path}"
     rm -f -- "${image_path}"
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
@@ -551,8 +552,16 @@ _make_bootmode_uefi-ia32.grub.esp() {
                       -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub.cfg"
     # Add GRUB to the list of files used to calculate the required FAT image size.
     efiboot_files+=("${work_dir}/BOOTIA32.EFI")
-    # Create a FAT image for the EFI system partition
-    _run_once _make_bootmode_uefi-x64.systemd-boot.esp
+
+    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+        efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
+            2>/dev/null | awk 'END { print $1 }')"
+        # Create a FAT image for the EFI system partition
+        _make_efibootimg "$efiboot_imgsize"
+    else
+        _run_once _make_bootmode_uefi-x64.systemd-boot.esp
+    fi
+
     # Copy grub EFI binary to the default/fallback boot path
     mcopy -i "${work_dir}/efiboot.img" \
         "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
@@ -741,12 +750,8 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
 }
 
 _validate_requirements_bootmode_uefi-ia32.grub.esp() {
-    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg_error "Using 'uefi-ia32.grub.esp' boot mode without 'uefi-x64.systemd-boot.esp' is not supported." 0
-    fi
     # Check if GRUB is available
-    if ! command -v grub-install &> /dev/null; then
+    if ! command -v grub-mkstandalone &> /dev/null; then
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${bootmode}': grub-install is not available on this host. Install 'grub'!" 0
     fi
