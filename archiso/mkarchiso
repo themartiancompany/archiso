@@ -559,6 +559,9 @@ _make_bootmode_uefi-ia32.grub.esp() {
                     "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
 
     if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+       efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
+                       "${pacstrap_dir}/boot/initramfs-"*".img")
+
         efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
             2>/dev/null | awk 'END { print $1 }')"
         # Create a FAT image for the EFI system partition
