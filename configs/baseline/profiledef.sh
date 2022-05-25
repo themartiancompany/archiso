@@ -14,6 +14,7 @@ pacman_conf="pacman.conf"
 airootfs_image_type="erofs"
 airootfs_image_tool_options=('-zlz4hc,12')
 encryption="false"
+encryption_key=""
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
 )
