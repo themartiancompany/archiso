@@ -1226,12 +1226,12 @@ _validate_options() {
         fi
     done
 
-    # Check if the cryptsetup-encryption package is in the package list
+    # Check if the cryptsetup-archiso package is in the package list
     # shellcheck disable=SC2076
     if [[ $encryption = "true" ]]; then
-        if [[ ! " ${pkg_list[*]} " =~ ' cryptsetup-encryption ' ]]; then
+        if [[ ! " ${pkg_list[*]} " =~ ' cryptsetup-archiso ' ]]; then
             (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': The 'cryptsetup-encryption' package is missing from the package list!" 0
+            _msg_error "Validating '${bootmode}': The 'cryptsetup-archiso' package is missing from the package list!" 0
         fi
     fi
 
