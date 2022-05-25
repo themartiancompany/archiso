@@ -42,6 +42,7 @@ declare -A file_permissions=()
 efibootimg=""
 efiboot_files=()
 encryption=""
+encryption_key=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -233,7 +234,10 @@ _mkairootfs_erofs() {
         _msg_info "Encryption with cryptsetup (${image_size}KB)"
         notify-send "mkarchiso" "LUKS encryption prompt"
         fallocate -l "${image_size}K" "${image_path}" 
-        cryptsetup -y luksFormat --pbkdf-memory 256 "${image_path}"
+        if [[ $encryption_key != "" ]]; then
+            encryption_key="--key-file ${encryption_key}"
+        fi
+        cryptsetup -y luksFormat --pbkdf-memory 256 "${image_path}" "${encryption_key}"
         cryptsetup luksOpen "${image_path}" "archiso_mapper"
         image_device="/dev/mapper/archiso_mapper"
     fi
@@ -559,8 +563,8 @@ _make_bootmode_uefi-ia32.grub.esp() {
                     "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
 
     if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-       efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
-                       "${pacstrap_dir}/boot/initramfs-"*".img")
+        efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
+                        "${pacstrap_dir}/boot/initramfs-"*".img")
 
         efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
             2>/dev/null | awk 'END { print $1 }')"
@@ -579,11 +583,9 @@ _make_bootmode_uefi-ia32.grub.esp() {
         "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
 
     # shellia32.efi is picked up automatically when on /
-    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-        if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-            mcopy -i "${efibootimg}" \
-                "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
-        fi
+    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
+        mcopy -i "${efibootimg}" \
+            "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
     fi
 
     _msg_info "Done! GRUB set up for UEFI booting successfully."
@@ -606,14 +608,13 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
         "${isofs_dir}/EFI/BOOT/BOOTIA32.EFI"
 
     # Copy GRUB configuration files
-    install -m 0644 -- "${work_dir}/grub.cfg" "${isofs_dir}"
+    install -m 0644 -- "${work_dir}/grub.cfg" "${isofs_dir}/EFI/BOOT/grub.cfg"
 
     # edk2-shell based UEFI shell
     # shellia32.efi is picked up automatically when on /
-    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.eltorito ]]; then
-        if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" "${isofs_dir}/shellia32.efi"
-        fi
+    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
+        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" \
+                           "${isofs_dir}/shellia32.efi"
     fi
 
     _msg_info "Done!"
