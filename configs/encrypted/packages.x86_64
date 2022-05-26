@@ -11,7 +11,7 @@ btrfs-progs
 clonezilla
 cloud-init
 crda
-cryptsetup-archiso
+cryptsetup
 darkhttpd
 ddrescue
 dhclient
@@ -61,7 +61,7 @@ mc
 mdadm
 memtest86+
 mkinitcpio
-mkinitcpio-archiso
+mkinitcpio-archiso-encryption
 mkinitcpio-nfs-utils
 modemmanager
 mtools

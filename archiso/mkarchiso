@@ -41,7 +41,6 @@ sign_netboot_artifacts=""
 declare -A file_permissions=()
 efibootimg=""
 efiboot_files=()
-encryption=""
 encryption_key=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
@@ -166,20 +165,46 @@ _cleanup_pacstrap_dir() {
     _msg_info "Done!"
 }
 
-# Create a squashfs image and place it in the ISO 9660 file system.
-# $@: options to pass to mksquashfs
-_run_mksquashfs() {
-    local mksquashfs_options=() image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
-    rm -f -- "${image_path}"
-    [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
-    mksquashfs "$@" "${image_path}" -noappend "${airootfs_image_tool_options[@]}" "${mksquashfs_options[@]}"
+# Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
+_run_mkluks() {
+    local _image_path="${1}"
+    local _pacstrap_size
+    _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+    local _image_size=$((_pacstrap_size+200000))
+    _msg_info "Encryption with cryptsetup (${_image_size}KB)"
+    fallocate -l "${_image_size}K" "${_image_path}" 
+    # TODO
+    # if [[ $encryption_key != "" ]]; then
+    #     encryption_key="--key-file ${encryption_key}"
+    # fi
+    cryptsetup -y luksFormat --pbkdf-memory 256 "${_image_path}" # "${encryption_key}"
+    cryptsetup luksOpen "${_image_path}" "${app_name}_mapper"
+    image_device="/dev/mapper/${app_name}_mapper"
 }
 
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
-# Save the squashfs image on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs() {
+# Removes the LUKS device
+_close_luks_device() {
+    cryptsetup luksClose "${app_name}_mapper"
+    if [ -f "${image_device}" ]; then
+        dmsetup remove "${app_name}_mapper" 
+    fi
+    sync
+}
+
+# Create a squashfs image from a file system image or directory.
+_run_mksquashfs() {
+    local _directory_or_fs="${1}"
+    local _image_path="${2}"
+    local mksquashfs_options=() # 
+    [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
+    _msg_info "Creating SQUASHFS image, this may take some time..."
+    mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${airootfs_image_tool_options[@]}" "${mksquashfs_options[@]}"
+}
+
+# Create an ext4 image containing the root file system.
+_run_mkext4() {
+    local _image_path="${1}"
     local ext4_hash_seed mkfs_ext4_options=()
-    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     _msg_info "Creating ext4 image of 32 GiB and copying '${pacstrap_dir}/' to it..."
 
@@ -194,14 +219,53 @@ _mkairootfs_ext4+squashfs() {
         '-U' 'clear'
     )
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
-    rm -f -- "${pacstrap_dir}.img"
-    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${pacstrap_dir}.img" 32G
-    tune2fs -c 0 -i 0 -- "${pacstrap_dir}.img" > /dev/null
+    rm -f -- "${_image_path}"
+    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" 32G
+    tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
     _msg_info "Done!"
+}
+
+
+# Create an EROFS image containing the root file system.
+_run_mkerofs() {
+    local _image_path="${1}"
+    local fsuuid mkfs_erofs_options=()
+    [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
+    # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
+    fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+    mkfs_erofs_options+=('-U' "${fsuuid}" "${airootfs_image_tool_options[@]}")
+    _msg_info "Creating EROFS image, this may take some time..."
+    mkfs.erofs "${mkfs_erofs_options[@]}" -- "${_image_path}" "${pacstrap_dir}"
+    _msg_info "Done!"
+}
+
+# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Save the squashfs image on the ISO 9660 file system.
+_mkairootfs_ext4+squashfs() {
+    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    _msg_info "Creating SquashFS image, this may take some time..."
-    _run_mksquashfs "${pacstrap_dir}.img"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    rm -f -- "${image_path}"
+
+    _run_mkext4 "${pacstrap_dir}.img"
+    _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
+    _msg_info "Done!"
+    rm -- "${pacstrap_dir}.img"
+}
+
+# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
+_mkairootfs_ext4+squashfs+luks() {
+    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
+
+    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    rm -f -- "${image_path}"
+    _run_mkluks "${image_path}"
+    _run_mkext4 "${pacstrap_dir}.img"
+    _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
+    _close_luks_device
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
 }
@@ -211,46 +275,45 @@ _mkairootfs_squashfs() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    _msg_info "Creating SquashFS image, this may take some time..."
-    _run_mksquashfs "${pacstrap_dir}"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    rm -f -- "${image_path}"
+    _run_mksquashfs "${pacstrap_dir}" "${image_path}"
 }
 
-# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_erofs() {
-    local fsuuid mkfs_erofs_options=()
+# Create a squashfs image containing the root file system and saves it on the LUKS image.
+# Saves the LUKS image on the ISO 9660 file system.
+_mkairootfs_squashfs+luks() {
+    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
+
+    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    rm -f -- "${image_path}"
+    _run_mkluks "${image_path}"
+    _run_mksquashfs "${pacstrap_dir}" "${image_device}"
+    _close_luks_device
+}
+
+# Create an EROFS image containing the root file system and saves it on the LUKS image.
+# Save the LUKS image on the ISO 9660 file system.
+_mkairootfs_erofs+luks() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
-    local image_device="${image_path}"
     rm -f -- "${image_path}"
-    [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
-    # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
-    fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+    _run_mkluks "${image_path}"
+    _run_mkerofs "${image_device}"
+    _close_luks_device
+}
 
-    if [[ $encryption = "true" ]]; then
-        pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
-        image_size=$((pacstrap_size+200000))
-        _msg_info "Encryption with cryptsetup (${image_size}KB)"
-        notify-send "mkarchiso" "LUKS encryption prompt"
-        fallocate -l "${image_size}K" "${image_path}" 
-        if [[ $encryption_key != "" ]]; then
-            encryption_key="--key-file ${encryption_key}"
-        fi
-        cryptsetup -y luksFormat --pbkdf-memory 256 "${image_path}" "${encryption_key}"
-        cryptsetup luksOpen "${image_path}" "archiso_mapper"
-        image_device="/dev/mapper/archiso_mapper"
-    fi
-    mkfs_erofs_options+=('-U' "${fsuuid}" "${airootfs_image_tool_options[@]}")
-    _msg_info "Creating EROFS image, this may take some time..."
-    mkfs.erofs "${mkfs_erofs_options[@]}" -- "${image_device}" "${pacstrap_dir}"
-    if [[ $encryption = "true" ]]; then
-        cryptsetup luksClose "archiso_mapper"
-        if [ -f "/dev/mapper/archiso_mapper" ]; then
-            dmsetup remove "archiso_mapper" 
-        fi
-        sync
-    fi
+# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
+_mkairootfs_erofs() {
+    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
+
+    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    rm -f -- "${image_path}"
+    _run_mkerofs "${image_path}"
     _msg_info "Done!"
 }
 
@@ -862,12 +925,22 @@ _validate_requirements_airootfs_image_type_squashfs() {
     fi
 }
 
-_validate_requirements_airootfs_image_type_ext4+squashfs() {
+_validate_requirements_airootfs_image_type_ext4() {
     if ! { command -v mkfs.ext4 &> /dev/null && command -v tune2fs &> /dev/null; }; then
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${airootfs_image_type}': mkfs.ext4 and/or tune2fs is not available on this host. Install 'e2fsprogs'!" 0
     fi
+}
+
+_validate_requirements_airootfs_image_type_ext4+squashfs() {
+    _validate_requirements_airootfs_image_type_ext4
     _validate_requirements_airootfs_image_type_squashfs
+}
+
+_validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
+    _validate_requirements_airootfs_image_type_luks
+    _validate_requirements_airootfs_image_type_squashfs
+    _validate_requirements_airootfs_image_type_ext4
 }
 
 _validate_requirements_airootfs_image_type_erofs() {
@@ -875,6 +948,18 @@ _validate_requirements_airootfs_image_type_erofs() {
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${airootfs_image_type}': mkfs.erofs is not available on this host. Install 'erofs-utils'!" 0
     fi
+}
+
+_validate_requirements_airootfs_image_type_luks() {
+    if ! command -v cryptsetup &> /dev/null && command -v mkfs.erofs &> /dev/null; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${airootfs_image_type}': cryptsetup is not available on this host. Install 'cryptsetup'!" 0
+    fi
+}
+
+_validate_requirements_airootfs_image_type_erofs+luks() {
+    _validate_requireemnts_image_type_luks
+    _validate_requirements_image_type_erofs
 }
 
 _validate_common_requirements_buildmode_all() {
@@ -1229,12 +1314,12 @@ _validate_options() {
         fi
     done
 
-    # Check if the cryptsetup-archiso package is in the package list
+    # Check if the mkinitcpio-archiso-encryption package is in the package list
     # shellcheck disable=SC2076
-    if [[ $encryption = "true" ]]; then
-        if [[ ! " ${pkg_list[*]} " =~ ' cryptsetup-archiso ' ]]; then
+    if [[ "${airootfs_image_type}" == *"luks"* ]]; then
+        if [[ ! " ${pkg_list[*]} " =~ ' mkinitcpio-archiso-encryption ' ]]; then
             (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': The 'cryptsetup-archiso' package is missing from the package list!" 0
+            _msg_error "Validating '${bootmode}': The 'mkinitcpio-archiso-encryption' package is missing from the package list!" 0
         fi
     fi
 
