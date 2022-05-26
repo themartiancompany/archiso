@@ -965,8 +965,8 @@ _validate_requirements_airootfs_image_type_luks() {
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
-    _validate_requirements_image_type_luks
-    _validate_requirements_image_type_erofs
+    _validate_requirements_airootfs_image_type_luks
+    _validate_requirements_airootfs_image_type_erofs
 }
 
 _validate_common_requirements_buildmode_all() {
