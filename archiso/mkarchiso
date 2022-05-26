@@ -293,6 +293,17 @@ _mkairootfs_squashfs+luks() {
     _close_luks_device
 }
 
+# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
+_mkairootfs_erofs() {
+    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
+
+    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
+    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    rm -f -- "${image_path}"
+    _run_mkerofs "${image_path}"
+    _msg_info "Done!"
+}
+
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkairootfs_erofs+luks() {
@@ -306,16 +317,6 @@ _mkairootfs_erofs+luks() {
     _close_luks_device
 }
 
-# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_erofs() {
-    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
-
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
-    rm -f -- "${image_path}"
-    _run_mkerofs "${image_path}"
-    _msg_info "Done!"
-}
 
 # Create checksum file for the rootfs image.
 _mkchecksum() {
@@ -934,6 +935,11 @@ _validate_requirements_airootfs_image_type_ext4() {
 
 _validate_requirements_airootfs_image_type_ext4+squashfs() {
     _validate_requirements_airootfs_image_type_ext4
+    _validate_requirements_airootfs_image_type_squashfs
+}
+
+_validate_requirements_airootfs_image_type_squashfs+luks() {
+    _validate_requirements_airootfs_image_type_luks
     _validate_requirements_airootfs_image_type_squashfs
 }
 
