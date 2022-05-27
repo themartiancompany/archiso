@@ -1323,15 +1323,6 @@ _validate_options() {
         fi
     done
 
-    # Check if the mkinitcpio-archiso-encryption package is in the package list
-    # shellcheck disable=SC2076
-    if [[ "${airootfs_image_type}" == *"luks"* ]]; then
-        if [[ ! " ${pkg_list[*]} " =~ ' mkinitcpio-archiso-encryption ' ]]; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': The 'mkinitcpio-archiso-encryption' package is missing from the package list!" 0
-        fi
-    fi
-
     if (( validation_error )); then
         _msg_error "${validation_error} errors were encountered while validating the profile. Aborting." 1
     fi
