@@ -171,7 +171,7 @@ _run_mkluks() {
     local _pacstrap_size
     _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     local _image_size=$((_pacstrap_size+200000))
-    _msg_info "Encryption with cryptsetup (${_image_size}KB)"
+    _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_image_size}KB)"
     fallocate -l "${_image_size}K" "${_image_path}" 
     # TODO
     if [[ $encryption_key != "" ]]; then
@@ -181,6 +181,8 @@ _run_mkluks() {
     cryptsetup luksOpen "${_image_path}" "${app_name}_mapper"
     # cryptsetup config "${_image_path}" --label "${app_name}.luks"
     image_device="/dev/mapper/${app_name}_mapper"
+
+    _msg_info "Done!"
 }
 
 # Removes the LUKS device
