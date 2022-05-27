@@ -22,10 +22,16 @@ stages:
 
 check:
   before_script:
+    # NOTE: Install latest archlinux-keyring before upgrading system. In the
+    # future this should not be needed anymore when we can guarantee a valid
+    # keyring for longer:
+    # https://gitlab.archlinux.org/archlinux/archlinux-keyring/-/issues/4
+    - pacman -Sy --needed --noconfirm archlinux-keyring
     - pacman --noconfirm -Syu --needed make shellcheck
   script:
     - make check
   stage: check
+  interruptible: true
 
 build_short:
   extends: .build
@@ -33,6 +39,17 @@ build_short:
     matrix:
       - BUILD_SCRIPT_ARGS: baseline bootstrap
       - BUILD_SCRIPT_ARGS: releng bootstrap
+  only:
+    refs:
+      - master
+      - merge_requests
+    changes:
+      - archiso/*
+      - configs/**/*
+      - Makefile
+      - .gitlab-ci.yml
+      - .gitlab/ci/*
+  interruptible: true
 
 build_long:
   extends: .build
@@ -44,3 +61,14 @@ build_long:
       - BUILD_SCRIPT_ARGS: releng netboot
   tags:
     - fast-single-thread
+  only:
+    refs:
+      - master
+      - merge_requests
+    changes:
+      - archiso/*
+      - configs/**/*
+      - Makefile
+      - .gitlab-ci.yml
+      - .gitlab/ci/*
+  interruptible: true
