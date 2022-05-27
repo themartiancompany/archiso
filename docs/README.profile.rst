@@ -58,8 +58,11 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
 * ``airootfs_image_type``: The image type to create. The following options are understood (defaults to ``squashfs``):
 
   - ``squashfs``: Create a squashfs image directly from the airootfs work directory
+  - ``squashfs+luks``: Create a LUKS image containing a squashfs generated directly from the airootfs work directory
   - ``ext4+squashfs``: Create an ext4 partition, copy the airootfs work directory to it and create a squashfs image from it
+  - ``ext4+squashfs+luks``: Create an ext4 partition, copy the airootfs work directory to it and create a LUKS containing a squashfs image generated from it
   - ``erofs``: Create an EROFS image for the airootfs work directory
+  - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
 * ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
