@@ -198,7 +198,7 @@ _close_luks_device() {
 _run_mksquashfs() {
     local _directory_or_fs="${1}"
     local _image_path="${2}"
-    local mksquashfs_options=() # 
+    local mksquashfs_options=()
     [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
     _msg_info "Creating SQUASHFS image, this may take some time..."
     mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${airootfs_image_tool_options[@]}" "${mksquashfs_options[@]}"
