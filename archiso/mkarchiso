@@ -687,6 +687,84 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
     _msg_info "Done!"
 }
 
+_make_bootmode_uefi-ia32.grub.esp() {
+    # Fill Grub configuration files
+    sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+         s|%INSTALL_DIR%|${install_dir}|g;
+         s|%ARCH%|${arch}|g" \
+        "${profile}/grub/grub.cfg" > "${work_dir}/grub.cfg"
+
+    # shellcheck disable=SC2016
+    printf 'configfile ${cmdpath}/grub.cfg\n' > "${work_dir}/grub-embed.cfg"
+
+    # Create EFI file
+    grub-mkstandalone -O i386-efi \
+                      --modules="part_gpt part_msdos fat iso9660" \
+                      --locales="en@quot" \
+                      --themes="" \
+                      -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
+    # Add GRUB to the list of files used to calculate the required FAT image size.
+    efiboot_files+=("${work_dir}/BOOTIA32.EFI"
+                    "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
+
+    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+       efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
+                       "${pacstrap_dir}/boot/initramfs-"*".img")
+
+        efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
+            2>/dev/null | awk 'END { print $1 }')"
+        # Create a FAT image for the EFI system partition
+        _make_efibootimg "$efiboot_imgsize"
+    else
+        _run_once _make_bootmode_uefi-x64.systemd-boot.esp
+    fi
+
+    # Copy grub EFI binary to the default/fallback boot path
+    mcopy -i "${work_dir}/efiboot.img" \
+        "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
+
+    # Copy GRUB configuration files
+    mcopy -i "${work_dir}/efiboot.img" \
+        "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
+
+    # shellia32.efi is picked up automatically when on /
+    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
+        mcopy -i "${work_dir}/efiboot.img" \
+            "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
+    fi
+
+    _msg_info "Done! GRUB set up for UEFI booting successfully."
+}
+
+# Prepare GRUB for El Torito booting
+_make_bootmode_uefi-ia32.grub.eltorito() {
+    # El Torito UEFI boot requires an image containing the EFI system partition.
+    # uefi-ia32.grub.eltorito has the same requirements as uefi-ia32.grub.esp
+    _run_once _make_bootmode_uefi-ia32.grub.esp
+
+    # Additionally set up system-boot in ISO 9660. This allows creating a medium for the live environment by using
+    # manual partitioning and simply copying the ISO 9660 file system contents.
+    # This is not related to El Torito booting and no firmware uses these files.
+    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
+    install -d -m 0755 -- "${isofs_dir}/EFI/BOOT"
+
+    # Copy GRUB EFI binary to the default/fallback boot path
+    install -m 0644 -- "${work_dir}/BOOTIA32.EFI" \
+        "${isofs_dir}/EFI/BOOT/BOOTIA32.EFI"
+
+    # Copy GRUB configuration files
+    install -m 0644 -- "${work_dir}/grub.cfg" "${isofs_dir}/EFI/BOOT/grub.cfg"
+
+    # edk2-shell based UEFI shell
+    # shellia32.efi is picked up automatically when on /
+    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
+        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" \
+                           "${isofs_dir}/shellia32.efi"
+    fi
+
+    _msg_info "Done!"
+}
+
 # Prepare system-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _file efiboot_imgsize
@@ -872,11 +950,6 @@ _validate_requirements_bootmode_uefi-ia32.grub.esp() {
 _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
     # uefi-ia32.grub.eltorito has the exact same requirements as uefi-ia32.grub.esp
     _validate_requirements_bootmode_uefi-ia32.grub.esp
-}
-
-_validate_requirements_bootmode_wii() {
-    # wii has the exact same requirements as uefi-x64.systemd-boot.esp
-    _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
 }
 
 # Build airootfs filesystem image
