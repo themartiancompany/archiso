@@ -128,6 +128,7 @@ _show_config() {
     _msg_info "              Build modes:   ${buildmodes[*]}"
     _msg_info "                  GPG key:   ${gpg_key:-None}"
     _msg_info "               GPG signer:   ${gpg_sender:-None}"
+    _msg_info "           Encryption Key:   ${encryption_key:-None}"
     _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
     _msg_info "                  Profile:   ${profile}"
     _msg_info "Pacman configuration file:   ${pacman_conf}"
@@ -720,16 +721,16 @@ _make_bootmode_uefi-ia32.grub.esp() {
     fi
 
     # Copy grub EFI binary to the default/fallback boot path
-    mcopy -i "${work_dir}/efiboot.img" \
+    mcopy -i "${efibootimg}" \
         "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
 
     # Copy GRUB configuration files
-    mcopy -i "${work_dir}/efiboot.img" \
+    mcopy -i "${efibootimg}" \
         "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
 
     # shellia32.efi is picked up automatically when on /
     if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        mcopy -i "${work_dir}/efiboot.img" \
+        mcopy -i "${efibootimg}" \
             "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
     fi
 
