@@ -1603,7 +1603,7 @@ _build_keys_base() {
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
 
-    cp "${encryption_key}" "${keys_dir}"
+    cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
 
     _run_once _prepare_keysfs_image
 }
