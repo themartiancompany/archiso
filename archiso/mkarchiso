@@ -32,6 +32,7 @@ pacman_conf=""
 packages=""
 bootstrap_packages=""
 pacstrap_dir=""
+keys_dir=""
 buildmodes=()
 bootmodes=()
 airootfs_image_type=""
@@ -169,16 +170,17 @@ _cleanup_pacstrap_dir() {
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
 _run_mkluks() {
     local _image_path="${1}"
+    local _encryption_key="${2}"
     local _pacstrap_size
     _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     local _image_size=$((_pacstrap_size+200000))
     _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_image_size}KB)"
     fallocate -l "${_image_size}K" "${_image_path}" 
     # TODO
-    if [[ $encryption_key != "" ]]; then
-        encryption_key=" --key-file ${encryption_key}"
+    if [[ $_encryption_key != "" ]]; then
+        _encryption_key=" --key-file ${_encryption_key}"
     fi
-    cryptsetup -y luksFormat --pbkdf-memory 256 "${_image_path}${encryption_key}"
+    cryptsetup -y luksFormat --pbkdf-memory 256 "${_image_path}${_encryption_key}"
     cryptsetup config "${_image_path}" --label "${app_name}.luks"
     cryptsetup luksOpen "${_image_path}" "${app_name}_mapper"
     image_device="/dev/mapper/${app_name}_mapper"
@@ -207,15 +209,16 @@ _run_mksquashfs() {
 
 # Create an ext4 image containing the root file system.
 _run_mkext4() {
-    local _image_path="${1}"
+    local _dir="${1}"
+    local _image_path="${1}.img"
     local ext4_hash_seed mkfs_ext4_options=()
 
-    _msg_info "Creating ext4 image of 32 GiB and copying '${pacstrap_dir}/' to it..."
+    _msg_info "Creating ext4 image of 1 MB and copying '${_dir}/' to it..."
 
     ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
         --name "${SOURCE_DATE_EPOCH} ext4 hash seed")"
     mkfs_ext4_options=(
-        '-d' "${pacstrap_dir}"
+        '-d' "${_dir}"
         '-O' '^has_journal,^resize_inode'
         '-E' "lazy_itable_init=0,root_owner=0:0,hash_seed=${ext4_hash_seed}"
         '-m' '0'
@@ -252,7 +255,7 @@ _mkairootfs_ext4+squashfs() {
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
     rm -f -- "${image_path}"
 
-    _run_mkext4 "${pacstrap_dir}.img"
+    _run_mkext4 "${pacstrap_dir}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -266,8 +269,8 @@ _mkairootfs_ext4+squashfs+luks() {
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}"
-    _run_mkext4 "${pacstrap_dir}.img"
+    _run_mkluks "${image_path}" "${encryption_key}"
+    _run_mkext4 "${pacstrap_dir}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device
     _msg_info "Done!"
@@ -292,7 +295,7 @@ _mkairootfs_squashfs+luks() {
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}"
+    _run_mkluks "${image_path}" "${encryption_key}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device
 }
@@ -316,11 +319,38 @@ _mkairootfs_erofs+luks() {
     install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}"
+    _run_mkluks "${image_path}" "${encryption_key}"
     _run_mkerofs "${image_device}"
     _close_luks_device
 }
 
+_mkkeysfs_ext4+squashfs+luks() {
+    local image_path="${keys_iso_dir}/keys.sfs"
+    rm -f -- "${image_path}"
+    _run_mkluks "${image_path}" ""
+    _run_mkext4 "${keys_dir}"
+    _run_mksquashfs "${keys_dir}.img" "${image_device}"
+    _close_luks_device
+    _msg_info "Done!"
+    rm -- "${keys_dir}.img"
+}
+
+_mkkeysfs_erofs+luks() {
+    local image_path="${keys_iso_dir}/keys.erofs"
+    rm -f -- "${image_path}"
+    _run_mkluks "${image_path}" ""
+    _run_mkerofs "${image_device}"
+    _close_luks_device
+}
+
+# Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
+_mkkeysfs_squashfs() {
+    local image_path="${keys_iso_dir}/keys.sfs"
+    rm -f -- "${image_path}"
+    _run_mkluks "${image_path}" ""
+    _run_mksquashfs "${keys_dir}" "${image_device}"
+    _close_luks_device
+}
 
 # Create checksum file for the rootfs image.
 _mkchecksum() {
@@ -962,6 +992,10 @@ _prepare_airootfs_image() {
     fi
 }
 
+_prepare_keysfs_image() {
+    _run_once "_mkkeysfs_${airootfs_image_type}"
+}
+
 # export build artifacts for netboot
 _export_netboot_artifacts() {
     _msg_info "Exporting netboot artifacts..."
@@ -1300,6 +1334,45 @@ _build_bootstrap_image() {
     cd -- "${OLDPWD}"
 }
 
+_build_keys_image() {
+    local xorriso_options=() xorrisofs_options=()
+    local bootmode
+
+    keys_iso_dir="${work_dir}/keys_iso"
+
+    # Add required xorrisofs options for each boot mode
+    for bootmode in "${bootmodes[@]}"; do
+        typeset -f "_add_xorrisofs_options_${bootmode}" &> /dev/null && "_add_xorrisofs_options_${bootmode}"
+    done
+
+    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
+
+    if [[ "${quiet}" == "y" ]]; then
+        # The when xorriso is run in mkisofs compatibility mode (xorrisofs), the mkisofs option -quiet is interpreted
+        # too late (e.g. messages about SOURCE_DATE_EPOCH still get shown).
+        # Instead use native xorriso option to silence the output.
+        xorriso_options=('-report_about' 'SORRY' "${xorriso_options[@]}")
+    fi
+
+    rm -f -- "${out_dir}/${image_name}"
+    _msg_info "Creating ISO image..."
+    xorriso "${xorriso_options[@]}" -as mkisofs \
+            -iso-level 3 \
+            -full-iso9660-filenames \
+            -joliet \
+            -joliet-long \
+            -rational-rock \
+            -volid "${iso_label}_KEYS" \
+            -appid "${iso_application} keys CD" \
+            -publisher "${iso_publisher}" \
+            -preparer "prepared by ${app_name}" \
+            "${xorrisofs_options[@]}" \
+            -output "${out_dir}/${image_name}" \
+            "${keys_iso_dir}/"
+    _msg_info "Done!"
+    du -h -- "${out_dir}/${image_name}"
+}
+
 # Build ISO
 _build_iso_image() {
     local xorriso_options=() xorrisofs_options=()
@@ -1520,6 +1593,23 @@ _make_pkglist() {
 }
 
 # build the base for an ISO and/or a netboot target
+_build_keys_base() {
+    local run_once_mode="base"
+
+    # Set up essential directory paths
+    keys_dir="${work_dir}/keys"
+    keys_iso_dir="${work_dir}/keys_iso"
+
+    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
+    [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
+
+    cp "${encryption_key}" "${keys_dir}"
+
+    _run_once _prepare_keysfs_image
+}
+
+
+# build the base for an ISO and/or a netboot target
 _build_iso_base() {
     local run_once_mode="base"
     local buildmode_packages="${packages}"
@@ -1596,6 +1686,13 @@ _build_buildmode_iso() {
     _run_once _build_iso_image
 }
 
+# Build the encryption keys ISO buildmode
+_build_buildmode_keys() {
+    local image_name="${iso_name}-keys-${iso_version}-${arch}.iso"
+    local run_once_mode="${buildmode}"
+    _build_keys_base
+    _run_once _build_keys_image
+}
 # build all buildmodes
 _build() {
     local buildmode
