@@ -37,6 +37,7 @@ buildmodes=()
 bootmodes=()
 airootfs_image_type=""
 airootfs_image_tool_options=()
+keysfs_image_type=""
 cert_list=()
 sign_netboot_artifacts=""
 declare -A file_permissions=()
@@ -994,7 +995,7 @@ _prepare_airootfs_image() {
 }
 
 _prepare_keysfs_image() {
-    _run_once "_mkkeysfs_${airootfs_image_type}"
+    _run_once "_mkkeysfs_${keysfs_image_type}"
 }
 
 # export build artifacts for netboot
@@ -1339,12 +1340,12 @@ _build_keys_image() {
     local xorriso_options=() xorrisofs_options=()
     local bootmode
 
-    keys_iso_dir="${work_dir}/keys_iso"
+    local keys_iso_dir="${work_dir}/keys_iso"
 
     # Add required xorrisofs options for each boot mode
-    for bootmode in "${bootmodes[@]}"; do
-        typeset -f "_add_xorrisofs_options_${bootmode}" &> /dev/null && "_add_xorrisofs_options_${bootmode}"
-    done
+    # for bootmode in "${bootmodes[@]}"; do
+    #     typeset -f "_add_xorrisofs_options_${bootmode}" &> /dev/null && "_add_xorrisofs_options_${bootmode}"
+    # done
 
     [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
 
@@ -1359,8 +1360,7 @@ _build_keys_image() {
     _msg_info "Creating ISO image..."
     xorriso "${xorriso_options[@]}" -as mkisofs \
             -iso-level 3 \
-            -full-iso9660-filenames \
-            -joliet \
+            -full-iso9660-filenames \ -joliet \
             -joliet-long \
             -rational-rock \
             -volid "${iso_label}_KEYS" \
@@ -1538,6 +1538,7 @@ _set_overrides() {
 
     # Set variables that do not have overrides
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
+    [[ -n "$keysfs_image_type" ]] || keysfs_image_type="squashfs"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
 }
