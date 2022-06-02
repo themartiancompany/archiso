@@ -207,13 +207,14 @@ _run_mksquashfs() {
     mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${airootfs_image_tool_options[@]}" "${mksquashfs_options[@]}"
 }
 
-# Create an ext4 image containing the root file system.
+# Create an ext4 image of a given size (in MB) from a directory.
 _run_mkext4() {
     local _dir="${1}"
     local _image_path="${1}.img"
+    local _size="${2}"
     local ext4_hash_seed mkfs_ext4_options=()
 
-    _msg_info "Creating ext4 image of 1 MB and copying '${_dir}/' to it..."
+    _msg_info "Creating ext4 image of ${_size} MB and copying '${_dir}/' to it..."
 
     ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
         --name "${SOURCE_DATE_EPOCH} ext4 hash seed")"
@@ -227,7 +228,7 @@ _run_mkext4() {
     )
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
-    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" 32G
+    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}M"
     tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
     _msg_info "Done!"
 }
@@ -255,7 +256,7 @@ _mkairootfs_ext4+squashfs() {
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
     rm -f -- "${image_path}"
 
-    _run_mkext4 "${pacstrap_dir}"
+    _run_mkext4 "${pacstrap_dir}" "32000"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -270,7 +271,7 @@ _mkairootfs_ext4+squashfs+luks() {
     local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${encryption_key}"
-    _run_mkext4 "${pacstrap_dir}"
+    _run_mkext4 "${pacstrap_dir}" "32000"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device
     _msg_info "Done!"
@@ -328,7 +329,7 @@ _mkkeysfs_ext4+squashfs+luks() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" ""
-    _run_mkext4 "${keys_dir}"
+    _run_mkext4 "${keys_dir}" "100"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device
     _msg_info "Done!"
