@@ -179,7 +179,7 @@ _run_mkluks() {
     fallocate -l "${_image_size}K" "${_image_path}" 
     # TODO
     if [[ $_encryption_key != "" ]]; then
-        _encryption_key="--key-file ${_encryption_key}"
+        _encryption_key="--key-file=\"${_encryption_key}\""
     fi
     cryptsetup -y luksFormat --pbkdf-memory 256 "${_encryption_key}" "${_image_path}"
     cryptsetup config "${_image_path}" --label "${app_name}.luks"
