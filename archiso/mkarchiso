@@ -337,6 +337,8 @@ _mkkeysfs_ext4+squashfs+luks() {
     rm -- "${keys_dir}.img"
 }
 
+# Create an EROFS image containing the keys file system and saves it on the LUKS image.
+# Save the LUKS image on the ISO 9660 file system.
 _mkkeysfs_erofs+luks() {
     local image_path="${keys_iso_dir}/keys.erofs"
     rm -f -- "${image_path}"
@@ -354,16 +356,26 @@ _mkkeysfs_squashfs() {
     _close_luks_device
 }
 
-# Create checksum file for the rootfs image.
 _mkchecksum() {
-    _msg_info "Creating checksum file for self-test..."
-    cd -- "${isofs_dir}/${install_dir}/${arch}"
-    if [[ -e "${isofs_dir}/${install_dir}/${arch}/airootfs.sfs" ]]; then
-        sha512sum airootfs.sfs > airootfs.sha512
-    elif [[ -e "${isofs_dir}/${install_dir}/${arch}/airootfs.erofs" ]]; then
-        sha512sum airootfs.erofs > airootfs.sha512
+    local _file
+    local _dir
+    local _name
+    _file="${1}"
+    _dir=$(dirname "${_file}")
+    _name=$(basename "${_file%.*}")
+
+    cd -- "${_dir}"
+    if [[ -e "${_file}" ]]; then
+        sha512sum "$(basename "${_file}")" > "${_name}.sha512"
     fi
     cd -- "${OLDPWD}"
+}
+
+# Create checksum file for the rootfs image.
+_mkchecksum_airootfs() {
+    _msg_info "Creating checksum file for self-test..."
+    _mkchecksum "${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    _mkchecksum "${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
     _msg_info "Done!"
 }
 
@@ -988,7 +1000,7 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 # Build airootfs filesystem image
 _prepare_airootfs_image() {
     _run_once "_mkairootfs_${airootfs_image_type}"
-    _mkchecksum
+    _mkchecksum_airootfs
     if [[ -n "${gpg_key}" ]]; then
         _mksignature
     fi
@@ -1606,6 +1618,7 @@ _build_keys_base() {
     [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
 
     cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
+    encryption_key="${keys_dir}/${iso_label}.key"
 
     _run_once _prepare_keysfs_image
 }
