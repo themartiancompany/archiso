@@ -999,6 +999,9 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 
 # Build airootfs filesystem image
 _prepare_airootfs_image() {
+    cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
+    encryption_key="${keys_dir}/${iso_label}.key"
+
     _run_once "_mkairootfs_${airootfs_image_type}"
     _mkchecksum_airootfs
     if [[ -n "${gpg_key}" ]]; then
@@ -1007,6 +1010,9 @@ _prepare_airootfs_image() {
 }
 
 _prepare_keysfs_image() {
+    cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
+    encryption_key="${keys_dir}/${iso_label}.key"
+
     _run_once "_mkkeysfs_${keysfs_image_type}"
 }
 
@@ -1616,9 +1622,6 @@ _build_keys_base() {
 
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
-
-    cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
-    encryption_key="${keys_dir}/${iso_label}.key"
 
     _run_once _prepare_keysfs_image
 }
