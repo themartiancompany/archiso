@@ -1636,6 +1636,7 @@ _build_iso_base() {
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/airootfs"
     isofs_dir="${work_dir}/iso"
+    keys_dir="${work_dir}/keys"
 
     # Create working directory
     [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
