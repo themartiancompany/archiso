@@ -182,8 +182,8 @@ _run_mkluks() {
         _encryption_key="--key-file=${_encryption_key}"
     fi
     cryptsetup -y luksFormat --pbkdf-memory 256 "${_encryption_key}" "${_image_path}"
-    cryptsetup config "${_image_path}" --label "${app_name}.luks"
-    cryptsetup luksOpen "${_image_path}" "${app_name}_mapper"
+    cryptsetup config "${_encryption_key}" "${_image_path}" --label "${app_name}.luks"
+    cryptsetup luksOpen "${_encryption_key}" "${_image_path}" "${app_name}_mapper"
     image_device="/dev/mapper/${app_name}_mapper"
 
     _msg_info "Done!"
