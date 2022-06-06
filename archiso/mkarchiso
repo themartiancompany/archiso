@@ -999,8 +999,10 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 
 # Build airootfs filesystem image
 _prepare_airootfs_image() {
-    cp "${encryption_key}" "${work_dir}/${iso_label}.key"
-    encryption_key="${work_dir}/${iso_label}.key"
+    if [ -z "${encryption_key}" ]; then
+        cp "${encryption_key}" "${work_dir}/${iso_label}.key"
+        encryption_key="${work_dir}/${iso_label}.key"
+    fi
 
     _run_once "_mkairootfs_${airootfs_image_type}"
     _mkchecksum_airootfs
