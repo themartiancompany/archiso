@@ -337,7 +337,7 @@ _mkkeys_erofs+luks() {
 }
 
 # Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
-_mkkeys_squashfs() {
+_mkkeys_squashfs+luks() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}"
@@ -345,6 +345,7 @@ _mkkeys_squashfs() {
     _close_luks_device
 }
 
+# Create checksum for a given file.
 _mkchecksum() {
     local _file
     local _dir
@@ -399,7 +400,7 @@ _mksignature_airootfs() {
     _mksignature "${airootfs_dir}/airootfs.erofs"
 }
 
-# GPG sign the root file system image.
+# GPG sign the keys file system image.
 _mksignature_keys() {
     _msg_info "Signing keys image..."
     _mksignature "${keys_iso_dir}/keys.sfs"
@@ -1025,6 +1026,7 @@ _prepare_airootfs_image() {
     fi
 }
 
+# Build keys filesystem image
 _prepare_keys_image() {
     cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
     encryption_key="${keys_dir}/${iso_label}.key"
