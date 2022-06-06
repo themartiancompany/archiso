@@ -172,18 +172,20 @@ _cleanup_pacstrap_dir() {
 _run_mkluks() {
     local _image_path="${1}"
     local _encryption_key="${2}"
-    local _pacstrap_size
-    _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
-    local _image_size=$((_pacstrap_size+200000))
-    _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_image_size}KB)"
-    fallocate -l "${_image_size}K" "${_image_path}" 
-    # TODO
-    if [[ $_encryption_key != "" ]]; then
-        _encryption_key="--key-file=${_encryption_key}"
-    fi
-    cryptsetup -y luksFormat --pbkdf-memory 256 "${_encryption_key}" "${_image_path}"
+    local _size="${3}"
+    local _cryptsetup_options=('--pbkdf-memory' 256)
+
+    [[ -n "${_encryption_key}" ]] || _cryptsetup_options+=("--key-file=${_encryption_key}")
+
+    _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_size}KB)"
+    fallocate -l "${_size}K" "${_image_path}" 
+    cryptsetup -y luksFormat "${_cryptsetup_options[@]}" "${_image_path}"
+
+    _msg_info "Setting label ${app_name}.luks"
     cryptsetup config "${_encryption_key}" "${_image_path}" --label "${app_name}.luks"
-    cryptsetup luksOpen "${_image_path}" "${app_name}_mapper" "${_encryption_key}" 
+
+    _msg_info "Opening ${_image_path} on ${app_name}_mapper"
+    cryptsetup open --type luks2 "${_image_path}" "${app_name}_mapper" "${_encryption_key}" 
     image_device="/dev/mapper/${app_name}_mapper"
 
     _msg_info "Done!"
@@ -253,8 +255,8 @@ _run_mkerofs() {
 _mkairootfs_ext4+squashfs() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs_dir}/airootfs.sfs"
     rm -f -- "${image_path}"
 
     _run_mkext4 "${pacstrap_dir}" "32000"
@@ -268,10 +270,11 @@ _mkairootfs_ext4+squashfs() {
 _mkairootfs_ext4+squashfs+luks() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs_dir}/airootfs.sfs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" "${encryption_key}"
+
+    _run_mkluks "${image_path}" "${encryption_key}" "${airootfs_size}"
     _run_mkext4 "${pacstrap_dir}" "32000"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device
@@ -283,8 +286,8 @@ _mkairootfs_ext4+squashfs+luks() {
 _mkairootfs_squashfs() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs_dir}/airootfs.sfs"
     rm -f -- "${image_path}"
     _run_mksquashfs "${pacstrap_dir}" "${image_path}"
 }
@@ -294,8 +297,8 @@ _mkairootfs_squashfs() {
 _mkairootfs_squashfs+luks() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs_dir}/airootfs.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${encryption_key}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
@@ -306,8 +309,8 @@ _mkairootfs_squashfs+luks() {
 _mkairootfs_erofs() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs}/airootfs.erofs"
     rm -f -- "${image_path}"
     _run_mkerofs "${image_path}"
     _msg_info "Done!"
@@ -318,8 +321,8 @@ _mkairootfs_erofs() {
 _mkairootfs_erofs+luks() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
 
-    install -d -m 0755 -- "${isofs_dir}/${install_dir}/${arch}"
-    local image_path="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    install -d -m 0755 -- "${airootfs_dir}"
+    local image_path="${airootfs_dir}/airootfs.erofs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${encryption_key}"
     _run_mkerofs "${image_device}"
@@ -374,8 +377,8 @@ _mkchecksum() {
 # Create checksum file for the rootfs image.
 _mkchecksum_airootfs() {
     _msg_info "Creating checksum file for self-test..."
-    _mkchecksum "${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
-    _mkchecksum "${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    _mkchecksum "${airootfs_dir}/airootfs.sfs"
+    _mkchecksum "${airootfs_dir}/airootfs.erofs"
     _msg_info "Done!"
 }
 
@@ -383,10 +386,10 @@ _mkchecksum_airootfs() {
 _mksignature() {
     local airootfs_image_filename gpg_options=()
     _msg_info "Signing rootfs image..."
-    if [[ -e "${isofs_dir}/${install_dir}/${arch}/airootfs.sfs" ]]; then
-        airootfs_image_filename="${isofs_dir}/${install_dir}/${arch}/airootfs.sfs"
-    elif [[ -e "${isofs_dir}/${install_dir}/${arch}/airootfs.erofs" ]]; then
-        airootfs_image_filename="${isofs_dir}/${install_dir}/${arch}/airootfs.erofs"
+    if [[ -e "${airootfs_dir}/airootfs.sfs" ]]; then
+        airootfs_image_filename="${airootfs_dir}/airootfs.sfs"
+    elif [[ -e "${airootfs_dir}/airootfs.erofs" ]]; then
+        airootfs_image_filename="${airootfs_dir}/airootfs.erofs"
     fi
     rm -f -- "${airootfs_image_filename}.sig"
     # Add gpg sender option if the value is provided
@@ -999,10 +1002,16 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 
 # Build airootfs filesystem image
 _prepare_airootfs_image() {
+    local airootfs_dir airootfs_size pacstrap_size
+
     if [ -z "${encryption_key}" ]; then
         cp "${encryption_key}" "${work_dir}/${iso_label}.key"
         encryption_key="${work_dir}/${iso_label}.key"
     fi
+
+    pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+    airootfs_size=$((pacstrap_size+200000))
+    airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
 
     _run_once "_mkairootfs_${airootfs_image_type}"
     _mkchecksum_airootfs
