@@ -37,7 +37,7 @@ buildmodes=()
 bootmodes=()
 airootfs_image_type=""
 airootfs_image_tool_options=()
-keysfs_image_type=""
+keys_image_type=""
 cert_list=()
 sign_netboot_artifacts=""
 declare -A file_permissions=()
@@ -171,8 +171,8 @@ _cleanup_pacstrap_dir() {
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
 _run_mkluks() {
     local _image_path="${1}"
-    local _encryption_key="${2}"
-    local _size="${3}"
+    local _size="${2}"
+    local _encryption_key="${3}"
     local _cryptsetup_options=('--pbkdf-memory' 256)
 
     [[ -n "${_encryption_key}" ]] || _cryptsetup_options+=("--key-file=${_encryption_key}")
@@ -210,7 +210,7 @@ _run_mksquashfs() {
     mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${airootfs_image_tool_options[@]}" "${mksquashfs_options[@]}"
 }
 
-# Create an ext4 image of a given size (in MB) from a directory.
+# Create an ext4 image of given size (in KB) from a directory.
 _run_mkext4() {
     local _dir="${1}"
     local _image_path="${1}.img"
@@ -231,7 +231,7 @@ _run_mkext4() {
     )
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
-    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}M"
+    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
     tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
     _msg_info "Done!"
 }
@@ -261,7 +261,7 @@ _mkairootfs_common() {
 _mkairootfs_ext4+squashfs() {
     local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
-    _run_mkext4 "${pacstrap_dir}" "32000"
+    _run_mkext4 "${pacstrap_dir}" $((airootfs_size/1000-50))
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -272,8 +272,8 @@ _mkairootfs_ext4+squashfs() {
 _mkairootfs_ext4+squashfs+luks() {
     local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
-    _run_mkluks "${image_path}" "${encryption_key}" "${airootfs_size}"
-    _run_mkext4 "${pacstrap_dir}" "32000"
+    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}"
+    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device
     _msg_info "Done!"
@@ -292,7 +292,7 @@ _mkairootfs_squashfs() {
 _mkairootfs_squashfs+luks() {
     local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
-    _run_mkluks "${image_path}" "${encryption_key}"
+    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device
 }
@@ -310,16 +310,16 @@ _mkairootfs_erofs() {
 _mkairootfs_erofs+luks() {
     local image_path="${airootfs_dir}/airootfs.erofs"
     _mkairootfs_common
-    _run_mkluks "${image_path}" "${encryption_key}"
+    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}"
     _run_mkerofs "${image_device}"
     _close_luks_device
 }
 
-_mkkeysfs_ext4+squashfs+luks() {
+_mkkeys_ext4+squashfs+luks() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" ""
-    _run_mkext4 "${keys_dir}" "100"
+    _run_mkluks "${image_path}" "${keys_size}"
+    _run_mkext4 "${keys_dir}" $((keys_size - 50000))
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device
     _msg_info "Done!"
@@ -328,19 +328,19 @@ _mkkeysfs_ext4+squashfs+luks() {
 
 # Create an EROFS image containing the keys file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
-_mkkeysfs_erofs+luks() {
+_mkkeys_erofs+luks() {
     local image_path="${keys_iso_dir}/keys.erofs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" ""
+    _run_mkluks "${image_path}" "${keys_size}"
     _run_mkerofs "${image_device}"
     _close_luks_device
 }
 
 # Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
-_mkkeysfs_squashfs() {
+_mkkeys_squashfs() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" ""
+    _run_mkluks "${image_path}" "${keys_size}"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device
 }
@@ -368,22 +368,42 @@ _mkchecksum_airootfs() {
     _msg_info "Done!"
 }
 
-# GPG sign the root file system image.
-_mksignature() {
-    local airootfs_image_filename gpg_options=()
-    _msg_info "Signing rootfs image..."
-    if [[ -e "${airootfs_dir}/airootfs.sfs" ]]; then
-        airootfs_image_filename="${airootfs_dir}/airootfs.sfs"
-    elif [[ -e "${airootfs_dir}/airootfs.erofs" ]]; then
-        airootfs_image_filename="${airootfs_dir}/airootfs.erofs"
-    fi
-    rm -f -- "${airootfs_image_filename}.sig"
-    # Add gpg sender option if the value is provided
-    [[ -z "${gpg_sender}" ]] || gpg_options+=('--sender' "${gpg_sender}")
-    # always use the .sig file extension, as that is what mkinitcpio-archiso's hooks expect
-    gpg --batch --no-armor --no-include-key-block --output "${airootfs_image_filename}.sig" --detach-sign \
-        --default-key "${gpg_key}" "${gpg_options[@]}" "${airootfs_image_filename}"
+# Create checksum file for the keys image.
+_mkchecksum_keys() {
+    _msg_info "Creating checksum file for self-test..."
+    _mkchecksum "${keys_dir}/keys.sfs"
+    _mkchecksum "${keys_dir}/keys.erofs"
     _msg_info "Done!"
+}
+# GPG sign a file.
+_mksignature() {
+    local _file="${1}"
+    local gpg_options=()
+    rm -f -- "${_file}.sig"
+    [[ -z "${gpg_sender}" ]] || gpg_options+=('--sender' "${gpg_sender}")
+    if [ -e "${_file}" ]; then
+        _msg_info "Signing ${1}..."
+        # always use the .sig file extension, as that is what 
+        # mkinitcpio-archiso's hooks expect
+        gpg --batch --no-armor --no-include-key-block \
+            --output "${_file}.sig" --detach-sign \
+            --default-key "${gpg_key}" "${gpg_options[@]}" "${_file}"
+    fi
+    _msg_info "Done!"
+}
+
+# GPG sign the root file system image.
+_mksignature_airootfs() {
+    _msg_info "Signing rootfs image..."
+    _mksignature "${airootfs_dir}/airootfs.sfs"
+    _mksignature "${airootfs_dir}/airootfs.erofs"
+}
+
+# GPG sign the root file system image.
+_mksignature_keys() {
+    _msg_info "Signing keys image..."
+    _mksignature "${keys_iso_dir}/keys.sfs"
+    _mksignature "${keys_iso_dir}/keys.erofs"
 }
 
 # Helper function to run functions only one time.
@@ -1001,15 +1021,19 @@ _prepare_airootfs_image() {
     _run_once "_mkairootfs_${airootfs_image_type}"
     _mkchecksum_airootfs
     if [[ -n "${gpg_key}" ]]; then
-        _mksignature
+        _mksignature_airootfs
     fi
 }
 
-_prepare_keysfs_image() {
+_prepare_keys_image() {
     cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
     encryption_key="${keys_dir}/${iso_label}.key"
-
-    _run_once "_mkkeysfs_${keysfs_image_type}"
+    keys_size=200000
+    _run_once "_mkkeys_${keys_image_type}"
+    _mkchecksum_keys
+    if [[ -n "${gpg_key}" ]]; then
+        _mksignature_keys
+    fi
 }
 
 # export build artifacts for netboot
@@ -1552,7 +1576,7 @@ _set_overrides() {
 
     # Set variables that do not have overrides
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
-    [[ -n "$keysfs_image_type" ]] || keysfs_image_type="squashfs"
+    [[ -n "$keys_image_type" ]] || keys_image_type="squashfs"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
 }
@@ -1619,7 +1643,7 @@ _build_keys_base() {
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
 
-    _run_once _prepare_keysfs_image
+    _run_once _prepare_keys_image
 }
 
 
