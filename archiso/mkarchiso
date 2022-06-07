@@ -326,7 +326,7 @@ _mkairootfs_erofs+luks() {
 
 # Steps shared by _mkkeys+fs_type functions
 _mkkeys_common() {
-    image_path="${keys_iso_dir}/keys."$(_get_fs_ext "keys")
+    image_path="${keys_isofs_dir}/keys."$(_get_fs_ext "keys")
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" ""
@@ -347,7 +347,7 @@ _mkkeys_ext4+squashfs+luks() {
 # Save the LUKS image on the ISO 9660 file system.
 _mkkeys_erofs+luks() {
     _mkkeys_common
-    _run_mkerofs "${image_device}" "${keys_iso_dir}"
+    _run_mkerofs "${image_device}" "${keys_isofs_dir}"
     _close_luks_device "${image_device}"
 }
 
@@ -369,23 +369,10 @@ _mkchecksum() {
 
     cd -- "${_dir}"
     if [[ -e "${_file}" ]]; then
+        _msg_info "Creating checksum of ${_file} for self-test..."
         sha512sum "$(basename "${_file}")" > "${_name}.sha512"
     fi
     cd -- "${OLDPWD}"
-}
-
-# Create checksum file for the rootfs image.
-_mkchecksum_airootfs() {
-    _msg_info "Creating checksum file for self-test..."
-    _mkchecksum "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
-    _msg_info "Done!"
-}
-
-# Create checksum file for the keys image.
-_mkchecksum_keys() {
-    _msg_info "Creating checksum file for self-test..."
-    _mkchecksum "${keys_dir}/keys.$(_get_fs_ext "keys")"
-    _msg_info "Done!"
 }
 
 # GPG sign a file.
@@ -403,18 +390,6 @@ _mksignature() {
             --default-key "${gpg_key}" "${gpg_options[@]}" "${_file}"
     fi
     _msg_info "Done!"
-}
-
-# GPG sign the root file system image.
-_mksignature_airootfs() {
-    _msg_info "Signing rootfs image..."
-    _mksignature "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
-}
-
-# GPG sign the keys file system image.
-_mksignature_keys() {
-    _msg_info "Signing keys image..."
-    _mksignature "${keys_iso_dir}/keys.$(_get_fs_ext "keys")"
 }
 
 # Get image extension.
@@ -1051,9 +1026,9 @@ _prepare_airootfs_image() {
     airootfs_size=$((pacstrap_size+200000))
 
     _run_once "_mkairootfs_${airootfs_image_type}"
-    _mkchecksum_airootfs
+    _mkchecksum "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
     if [[ -n "${gpg_key}" ]]; then
-        _mksignature_airootfs
+        _mksignature "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
     fi
 }
 
@@ -1063,9 +1038,10 @@ _prepare_keys_image() {
     encryption_key="${keys_dir}/${iso_label}.key"
     keys_size=200000
     _run_once "_mkkeys_${keys_image_type}"
-    _mkchecksum_keys
+
+    _mkchecksum "${keys_dir}/keys.$(_get_fs_ext "keys")"
     if [[ -n "${gpg_key}" ]]; then
-        _mksignature_keys
+        _mksignature "${keys_isofs_dir}/keys.$(_get_fs_ext "keys")"
     fi
 }
 
@@ -1415,8 +1391,6 @@ _build_keys_image() {
     local xorriso_options=() xorrisofs_options=()
     local bootmode
 
-    local keys_iso_dir="${work_dir}/keys_iso"
-
     # Add required xorrisofs options for each boot mode
     # for bootmode in "${bootmodes[@]}"; do
     #     typeset -f "_add_xorrisofs_options_${bootmode}" &> /dev/null && "_add_xorrisofs_options_${bootmode}"
@@ -1445,7 +1419,7 @@ _build_keys_image() {
             -preparer "prepared by ${app_name}" \
             "${xorrisofs_options[@]}" \
             -output "${out_dir}/${image_name}" \
-            "${keys_iso_dir}/"
+            "${keys_isofs_dir}/"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 }
@@ -1676,10 +1650,10 @@ _build_keys_base() {
 
     # Set up essential directory paths
     keys_dir="${work_dir}/keys"
-    keys_iso_dir="${work_dir}/keys_iso"
+    keys_isofs_dir="${work_dir}/keys_iso"
 
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
-    [[ -d "${keys_iso_dir}" ]] || install -d -- "${keys_iso_dir}"
+    [[ -d "${keys_isofs_dir}" ]] || install -d -- "${keys_isofs_dir}"
 
     _run_once _prepare_keys_image
 }
