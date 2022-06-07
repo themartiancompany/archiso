@@ -185,7 +185,7 @@ _run_mkluks() {
 	    _key_msg="with key ${_encryption_key}"
     fi
 
-    _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_size}KB) ${_key_msg}"
+    _msg_info "Creating LUKS image $(basename ${_image_path}) with cryptsetup (${_size}KB) ${_key_msg}"
     fallocate -l "${_size}K" "${_image_path}" 
     cryptsetup -y luksFormat "${_cryptsetup_options[@]}" "${_image_path}"
 
