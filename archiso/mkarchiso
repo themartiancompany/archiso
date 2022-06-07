@@ -201,9 +201,9 @@ _run_mkluks() {
 _close_luks_device() {
     local _device
     _device=$(basename "${1}")
-    cryptsetup luksClose "${_device}.map"
+    cryptsetup luksClose "${_device}"
     if [ -f "${image_device}" ]; then
-        dmsetup remove "${_device}.map" 
+        dmsetup remove "${_device}" 
     fi
     sync
 }
@@ -356,7 +356,7 @@ _mkkeys_squashfs+luks() {
     _run_mkluks "${image_path}" "${keys_size}" \
 	         "${iso_label}_KEYS"
     _run_mksquashfs "${keys_dir}" "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
 }
 
 # Create checksum for a given file.
