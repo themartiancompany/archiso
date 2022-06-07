@@ -1578,7 +1578,7 @@ _set_overrides() {
 
     # Set variables that do not have overrides
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
-    [[ -n "$keys_image_type" ]] || keys_image_type="squashfs"
+    [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
 }
