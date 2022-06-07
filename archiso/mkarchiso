@@ -260,6 +260,7 @@ _run_mkerofs() {
     _msg_info "Done!"
 }
 
+# Steps shared by _mkairootfs+fs_type functions
 _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_dir}"
@@ -323,6 +324,7 @@ _mkairootfs_erofs+luks() {
     _close_luks_device "${image_device}"
 }
 
+# Steps shared by _mkkeys+fs_type functions
 _mkkeys_common() {
     image_path="${keys_iso_dir}/keys."$(_get_fs_ext "keys")
     rm -f -- "${image_path}"
@@ -330,6 +332,8 @@ _mkkeys_common() {
 	            "${iso_label}_KEYS" ""
 }
 
+# Create an ext4 image containing the keys file system and pack it inside a squashfs image.
+# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkext4 "${keys_dir}" $((keys_size - 50000))
