@@ -178,6 +178,7 @@ _run_mkluks() {
     local _cryptsetup_options=('--pbkdf-memory' 256)
     local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
+    image_device="/dev/mapper/${_mapper}"
 
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_options=("--key-file=${_encryption_key}")
@@ -193,20 +194,19 @@ _run_mkluks() {
     cryptsetup config "${_key_options[@]}" "${_image_path}" --label "${_label}"
 
     while ! cryptsetup open --type luks2 "${_image_path}" "${_mapper}" "${_key_options[@]}"; do
-        _close_luks_device "${_mapper}"
+        _close_luks_device "${_image_device}"
     done
     
-    image_device="/dev/mapper/${_mapper}"
-
     _msg_info "Done!"
 }
 
 # Close a LUKS device mapper
 _close_luks_device() {
-    local _device
-    _device=$(basename "${1}")
-    cryptsetup luksClose "${_device}"
-    if [ -f "${image_device}" ]; then
+    local _device="${1}"
+    local _mapper
+    _mapper=$(basename "${_device}")
+    cryptsetup luksClose "${_mapper}"
+    if [ -f "${_device}" ]; then
         dmsetup remove "${_device}" 
     fi
     sync
