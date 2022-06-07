@@ -382,7 +382,7 @@ _mksignature() {
     rm -f -- "${_file}.sig"
     [[ -z "${gpg_sender}" ]] || gpg_options+=('--sender' "${gpg_sender}")
     if [ -e "${_file}" ]; then
-        _msg_info "Signing ${_file}..."
+        _msg_info "Signing $(basename "${_file}")..."
         # always use the .sig file extension, as that is what 
         # mkinitcpio-archiso's hooks expect
         gpg --batch --no-armor --no-include-key-block \
