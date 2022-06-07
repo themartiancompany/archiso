@@ -170,18 +170,19 @@ _cleanup_pacstrap_dir() {
 
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
 _run_mkluks() {
+    local _encryption_key
     local _image_path="${1}"
     local _size="${2}"
     local _label="${3}"
     local _encryption_key="${4}"
     local _cryptsetup_options=('--pbkdf-memory' 256)
-    local _key_msg _mapper
+    local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
 
     if [[ -n "${_encryption_key}" ]]; then
-	_key_options=("--key-file=${_encryption_key}")
-	_cryptsetup_options+=("${_key_options[@]}")
-	_key_msg="with key ${_encryption_key}"
+	    _key_options=("--key-file=${_encryption_key}")
+	    _cryptsetup_options+=("${_key_options[@]}")
+	    _key_msg="with key ${_encryption_key}"
     fi
 
     _msg_info "Creating LUKS image ${_image_path} with cryptsetup (${_size}KB) ${_key_msg}"
