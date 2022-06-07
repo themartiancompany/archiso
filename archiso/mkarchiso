@@ -246,7 +246,7 @@ _run_mkext4() {
 }
 
 
-# Create an EROFS image containing the root file system.
+# Create an EROFS image given a directory.
 _run_mkerofs() {
     local _image_path="${1}"
     local _dir="${2}"
