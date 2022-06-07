@@ -179,7 +179,7 @@ _run_mkluks() {
     local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
 
-    if [[ -n "${_encryption_key}" ]]; then
+    if [[ "${_encryption_key}" != "" ]]; then
 	    _key_options=("--key-file=${_encryption_key}")
 	    _cryptsetup_options+=("${_key_options[@]}")
 	    _key_msg="with key ${_encryption_key}"
@@ -1017,7 +1017,7 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 _prepare_airootfs_image() {
     local airootfs_size pacstrap_size
 
-    if [ -n "${encryption_key}" ]; then
+    if [ "${encryption_key}" != "" ]; then
         cp "${encryption_key}" "${work_dir}/${iso_label}.key"
         encryption_key="${work_dir}/${iso_label}.key"
     fi
