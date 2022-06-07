@@ -197,11 +197,13 @@ _run_mkluks() {
     _msg_info "Done!"
 }
 
-# Removes the LUKS device
+# Close a LUKS device mapper
 _close_luks_device() {
-    cryptsetup luksClose "${app_name}_mapper"
+    local _device
+    _device=$(basename "${1}")
+    cryptsetup luksClose "${_device}.map"
     if [ -f "${image_device}" ]; then
-        dmsetup remove "${app_name}_mapper" 
+        dmsetup remove "${_device}.map" 
     fi
     sync
 }
@@ -279,10 +281,10 @@ _mkairootfs_ext4+squashfs+luks() {
     local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	        "${app_name}" "${encryption_key}" 
+	        "${iso_label}" "${encryption_key}" 
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
 }
@@ -300,9 +302,9 @@ _mkairootfs_squashfs+luks() {
     local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	        "${app_name}" "${encryption_key}" 
+	        "${iso_label}" "${encryption_key}" 
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
 }
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
@@ -319,19 +321,19 @@ _mkairootfs_erofs+luks() {
     local image_path="${airootfs_dir}/airootfs.erofs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	        "${app_name}" "${encryption_key}" 
+	        "${iso_label}" "${encryption_key}" 
     _run_mkerofs "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
 }
 
 _mkkeys_ext4+squashfs+luks() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}"
-	         "${app_name}_KEYS"
+	         "${iso_label}_KEYS"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000))
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${keys_dir}.img"
 }
@@ -342,9 +344,9 @@ _mkkeys_erofs+luks() {
     local image_path="${keys_iso_dir}/keys.erofs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
-	         "${app_name}_KEYS"
+	         "${iso_label}_KEYS"
     _run_mkerofs "${image_device}"
-    _close_luks_device
+    _close_luks_device "${image_device}"
 }
 
 # Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
@@ -352,7 +354,7 @@ _mkkeys_squashfs+luks() {
     local image_path="${keys_iso_dir}/keys.sfs"
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
-	         "${app_name}_KEYS"
+	         "${iso_label}_KEYS"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device
 }
