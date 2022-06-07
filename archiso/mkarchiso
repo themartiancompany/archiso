@@ -192,7 +192,7 @@ _run_mkluks() {
     cryptsetup config "${_key_options[@]}" "${_image_path}" --label "${_label}"
 
     cryptsetup open --type luks2 "${_image_path}" "${_mapper}" "${_key_options[@]}" 
-    image_device="/dev/mapper/${app_name}_mapper"
+    image_device="/dev/mapper/${_mapper}"
 
     _msg_info "Done!"
 }
