@@ -1017,7 +1017,7 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 _prepare_airootfs_image() {
     local airootfs_size pacstrap_size
 
-    if [ -z "${encryption_key}" ]; then
+    if [ -n "${encryption_key}" ]; then
         cp "${encryption_key}" "${work_dir}/${iso_label}.key"
         encryption_key="${work_dir}/${iso_label}.key"
     fi
