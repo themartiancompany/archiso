@@ -264,12 +264,12 @@ _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_dir}"
     rm -f -- "${image_path}"
+    image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
 # Save the squashfs image on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs() {
-    local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size/1000-50))
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
@@ -280,7 +280,6 @@ _mkairootfs_ext4+squashfs() {
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs+luks() {
-    local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
 	            "${iso_label}" "${encryption_key}" 
@@ -293,7 +292,6 @@ _mkairootfs_ext4+squashfs+luks() {
 
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_squashfs() {
-    local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mksquashfs "${pacstrap_dir}" "${image_path}"
 }
@@ -301,7 +299,6 @@ _mkairootfs_squashfs() {
 # Create a squashfs image containing the root file system and saves it on the LUKS image.
 # Saves the LUKS image on the ISO 9660 file system.
 _mkairootfs_squashfs+luks() {
-    local image_path="${airootfs_dir}/airootfs.sfs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
 	            "${iso_label}" "${encryption_key}" 
@@ -311,7 +308,6 @@ _mkairootfs_squashfs+luks() {
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_erofs() {
-    local image_path="${airootfs_dir}/airootfs.erofs"
     _mkairootfs_common
     _run_mkerofs "${image_path}" "${pacstrap_dir}"
     _msg_info "Done!"
@@ -320,7 +316,6 @@ _mkairootfs_erofs() {
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkairootfs_erofs+luks() {
-    local image_path="${airootfs_dir}/airootfs.erofs"
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
 	            "${iso_label}" "${encryption_key}" 
@@ -328,11 +323,15 @@ _mkairootfs_erofs+luks() {
     _close_luks_device "${image_device}"
 }
 
-_mkkeys_ext4+squashfs+luks() {
-    local image_path="${keys_iso_dir}/keys.sfs"
+_mkkeys_common() {
+    image_path="${keys_iso_dir}/keys."$(_get_fs_ext "keys")
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
 	            "${iso_label}_KEYS" ""
+}
+
+_mkkeys_ext4+squashfs+luks() {
+    _mkkeys_common
     _run_mkext4 "${keys_dir}" $((keys_size - 50000))
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -343,20 +342,14 @@ _mkkeys_ext4+squashfs+luks() {
 # Create an EROFS image containing the keys file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkkeys_erofs+luks() {
-    local image_path="${keys_iso_dir}/keys.erofs"
-    rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" "${keys_size}" \
-	            "${iso_label}_KEYS" ""
+    _mkkeys_common
     _run_mkerofs "${image_device}" "${keys_iso_dir}"
     _close_luks_device "${image_device}"
 }
 
 # Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
 _mkkeys_squashfs+luks() {
-    local image_path="${keys_iso_dir}/keys.sfs"
-    rm -f -- "${image_path}"
-    _run_mkluks "${image_path}" "${keys_size}" \
-	            "${iso_label}_KEYS" ""
+    _mkkeys_common
     _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -392,6 +385,7 @@ _mkchecksum_keys() {
     _mkchecksum "${keys_dir}/keys.erofs"
     _msg_info "Done!"
 }
+
 # GPG sign a file.
 _mksignature() {
     local _file="${1}"
@@ -421,6 +415,26 @@ _mksignature_keys() {
     _msg_info "Signing keys image..."
     _mksignature "${keys_iso_dir}/keys.sfs"
     _mksignature "${keys_iso_dir}/keys.erofs"
+}
+
+# Get image extension.
+_get_fs_ext() {
+    local _image="${1}"
+    local _fs_type
+    _fs_type=$(_get_fs_type "${_image}")
+    if [ "${_fs_type}" = "squashfs" ]; then
+        echo "sfs"
+    else
+        echo "${_fs_type}"
+    fi
+}
+
+# Get image extension.
+_get_fs_type() {
+    local _image="${1}"
+    local _no_luks
+    _no_luks=$(eval echo \$"{${_image}_image_type%%+luks}")
+    echo "${_no_luks##*"+"}"
 }
 
 # Helper function to run functions only one time.
@@ -588,6 +602,7 @@ _make_bootmode_bios.syslinux.mbr() {
     for _cfg in "${profile}/syslinux/"*.cfg; do
         sed "s|%ARCHISO_LABEL%|${iso_label}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
+             s|%KEYS_IMAGE_TYPE%|${keys_image_type}|g;
              s|%ARCH%|${arch}|g" \
              "${_cfg}" > "${isofs_dir}/syslinux/${_cfg##*/}"
     done
