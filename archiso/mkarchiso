@@ -283,7 +283,7 @@ _mkairootfs_ext4+squashfs() {
 _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	            "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" 
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -302,7 +302,7 @@ _mkairootfs_squashfs() {
 _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	            "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" 
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -319,7 +319,7 @@ _mkairootfs_erofs() {
 _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-	            "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" 
     _run_mkerofs "${image_device}" "${pacstrap_dir}"
     _close_luks_device "${image_device}"
 }
@@ -329,7 +329,7 @@ _mkkeys_common() {
     image_path="${keys_iso_dir}/keys."$(_get_fs_ext "keys")
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
-	            "${iso_label}_KEYS" ""
+                "${iso_label}_KEYS" ""
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -377,16 +377,14 @@ _mkchecksum() {
 # Create checksum file for the rootfs image.
 _mkchecksum_airootfs() {
     _msg_info "Creating checksum file for self-test..."
-    _mkchecksum "${airootfs_dir}/airootfs.sfs"
-    _mkchecksum "${airootfs_dir}/airootfs.erofs"
+    _mkchecksum "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
     _msg_info "Done!"
 }
 
 # Create checksum file for the keys image.
 _mkchecksum_keys() {
     _msg_info "Creating checksum file for self-test..."
-    _mkchecksum "${keys_dir}/keys.sfs"
-    _mkchecksum "${keys_dir}/keys.erofs"
+    _mkchecksum "${keys_dir}/keys.$(_get_fs_ext "keys")"
     _msg_info "Done!"
 }
 
@@ -410,15 +408,13 @@ _mksignature() {
 # GPG sign the root file system image.
 _mksignature_airootfs() {
     _msg_info "Signing rootfs image..."
-    _mksignature "${airootfs_dir}/airootfs.sfs"
-    _mksignature "${airootfs_dir}/airootfs.erofs"
+    _mksignature "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
 }
 
 # GPG sign the keys file system image.
 _mksignature_keys() {
     _msg_info "Signing keys image..."
-    _mksignature "${keys_iso_dir}/keys.sfs"
-    _mksignature "${keys_iso_dir}/keys.erofs"
+    _mksignature "${keys_iso_dir}/keys.$(_get_fs_ext "keys")"
 }
 
 # Get image extension.
