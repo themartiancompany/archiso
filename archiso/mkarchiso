@@ -269,7 +269,7 @@ _mkairootfs_common() {
     install -d -m 0755 -- "${airootfs_dir}"
     image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
     rm -f -- "${image_path}"
-    _mkfs_options=$airootfs_image_tool_options
+    _mkfs_options=("${airootfs_image_tool_options[@]}")
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -334,7 +334,7 @@ _mkkeys_common() {
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" ""
-    _mkfs_options=$keys_image_tool_options
+    _mkfs_options=("${keys_image_tool_options[@]}")
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
