@@ -212,7 +212,7 @@ _close_luks_device() {
     local _mapper
     _mapper=$(basename "${_device}")
     cryptsetup luksClose "${_mapper}" || true
-    if [ -f "${_device}" ]; then
+    if [ -e "${_device}" ]; then
         dmsetup remove "${_device}" || true
     fi
     sync
