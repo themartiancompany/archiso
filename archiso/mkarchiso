@@ -217,7 +217,8 @@ _close_luks_device() {
 _run_mksquashfs() {
     local _directory_or_fs="${1}"
     local _image_path="${2}"
-    local _options=${3}
+    shift 2
+    declare -a _options=$*
     [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
     _msg_info "Creating SQUASHFS image, this may take some time..."
     mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${_options[@]}"
@@ -254,7 +255,8 @@ _run_mkext4() {
 _run_mkerofs() {
     local _image_path="${1}"
     local _dir="${2}"
-    local _options="${3}"
+    shift 2
+    declare -a _options=$*
     local fsuuid
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
