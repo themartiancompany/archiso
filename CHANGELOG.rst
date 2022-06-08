@@ -7,9 +7,6 @@ Changelog
 
 Added
 -----
-
-- Add ``uefi-ia32.grub.esp`` boot mode to support IA32 UEFI boot on x86_64 machines.
-- Add GRUB configuration files to profiles.
 - Add support for LUKS2 image disks.
 
 Changed
@@ -17,6 +14,22 @@ Changed
 
 Removed
 -------
+
+[64] - 2022-05-30
+=================
+
+Added
+-----
+
+- Add ``uefi-ia32.grub.esp`` boot mode to support IA32 UEFI boot on x86_64 machines.
+- Add GRUB configuration files to profiles.
+- Add accessible ``copytoram`` entry.
+- Enable beeps in systemd-boot menu.
+
+Changed
+-------
+
+- Fix systemd-boot menu entry sorting by using the ``sort-key`` option.
 
 [63] - 2022-04-30
 =================
