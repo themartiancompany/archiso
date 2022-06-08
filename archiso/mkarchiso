@@ -199,7 +199,7 @@ _run_mkluks() {
         _close_luks_device "${image_device}"
     done
     
-    _msg_info "Opening device on mapper ${_mapper} with options ${_key_opts[*]}"
+    _msg_info "Opening device on mapper ${_mapper}"
     while ! eval "cryptsetup ${_key_opts[*]} open --type luks2 ${_image_path} ${_mapper}"; do
         _close_luks_device "${image_device}"
     done
