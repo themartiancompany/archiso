@@ -1062,8 +1062,8 @@ _prepare_airootfs_image() {
 
 # Build keys filesystem image
 _prepare_keys_image() {
-    cp "${encryption_key}" "${keys_dir}/${iso_label}.key"
-    encryption_key="${keys_dir}/${iso_label}.key"
+    cp "${encryption_key}" "${keys_dir}/airootfs.key"
+    encryption_key="${keys_dir}/airootfs.key"
     keys_size=200000
     _run_once "_mkkeys_${keys_image_type}"
 
