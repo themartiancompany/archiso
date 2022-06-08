@@ -189,11 +189,16 @@ _run_mkluks() {
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
     fallocate -l "${_size}K" "${_image_path}" 
-    cryptsetup -y luksFormat "${_cryptsetup_options[@]}" "${_image_path}"
+    while ! cryptsetup -y luksFormat "${_cryptsetup_options[@]}" "${_image_path}"; do
+        sleep 1
+    done
 
     _msg_info "Setting label ${_label}"
-    cryptsetup config "${_key_options[@]}" "${_image_path}" --label "${_label}"
-
+    while ! cryptsetup config "${_key_options[@]}" "${_image_path}" --label "${_label}"; do
+        _close_luks_device "${image_device}"
+    done
+    
+    _msg_info "Opening device on mapper ${_mapper}"
     while ! cryptsetup open --type luks2 "${_image_path}" "${_mapper}" "${_key_options[@]}"; do
         _close_luks_device "${image_device}"
     done
