@@ -586,7 +586,7 @@ _make_boot_on_iso9660() {
 _get_crypto_params() {
     declare -a _cparams
     local _airootfs_path _keys_ext _keys_path
-    _airootfs_path="${install_dir}/airootfs.$(_get_fs_ext "airootfs")"
+    _airootfs_path="${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
     _keys_fs_type="$(_get_fs_type "keys")"
     _keys_path="keys.$(_get_fs_ext "keys")"
     _cparams=("root=/dev/mapper/root"
