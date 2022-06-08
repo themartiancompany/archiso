@@ -184,7 +184,7 @@ _run_mkluks() {
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_options=("--key-file=${_encryption_key}")
 	    _cryptsetup_options+=("${_key_options[@]}")
-	    _key_msg="with key ${_encryption_key}"
+        _key_msg="with key $(basename ${_encryption_key})"
     fi
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
@@ -200,7 +200,7 @@ _run_mkluks() {
     done
     
     _msg_info "Opening device on mapper ${_mapper}"
-    while ! cryptsetup open --type luks2 "${_image_path}" "${_mapper}" "${_key_options[@]}"; do
+    while ! cryptsetup "${_key_options[@]}" open --type luks2 "${_image_path}" "${_mapper}"; do
         _close_luks_device "${image_device}" || true
         sleep 1
     done
