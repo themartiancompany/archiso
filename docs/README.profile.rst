@@ -143,7 +143,6 @@ respective variables in ``profiledef.sh``:
 * ``%ARCHISO_LABEL%``: Set this using the ``iso_label`` variable in ``profiledef.sh``.
 * ``%INSTALL_DIR%``: Set this using the ``iso_label`` variable in ``profiledef.sh``.
 * ``%ARCH%``: Set this using the ``arch`` variable in ``profiledef.sh``.
-* ``%KEYS_IMAGE_TYPE%``: Set this using the ``keys_image_type`` variable in ``profiledef.sh``.
 
 efiboot
 -------

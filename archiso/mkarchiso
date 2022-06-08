@@ -580,6 +580,23 @@ _make_boot_on_iso9660() {
     _msg_info "Done!"
 }
 
+# Produce the 'encrypt' hook's kernel parameters needed to boot an encrypted ISO.
+_get_crypto_params() {
+    declare -a _cparams
+    local _airootfs_path _keys_ext _keys_path
+    _airootfs_path="${install_dir}/airootfs.$(_get_fs_ext "airootfs")"
+    _keys_type="$(_get_fs_type "keys")"
+    _keys_path="/keys.$(_get_fs_ext "keys")"
+    _cparams=("root=/dev/mapper/root"
+              "cryptdevice=LABEL=${iso_label},${_airootfs_path}:root"
+              "cryptkey=LABEL=${iso_label}_KEYS:iso9660,${_keys_type}:${_keys_path},airootfs.key")
+    if [ "${encryption_key}" != "" ]; then
+        echo "${_cparams[@]}"
+    else
+        echo ""
+    fi
+}
+
 # Prepare syslinux for booting from MBR (isohybrid)
 _make_bootmode_bios.syslinux.mbr() {
     _msg_info "Setting up SYSLINUX for BIOS booting from a disk..."
@@ -587,7 +604,7 @@ _make_bootmode_bios.syslinux.mbr() {
     for _cfg in "${profile}/syslinux/"*.cfg; do
         sed "s|%ARCHISO_LABEL%|${iso_label}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
-             s|%KEYS_IMAGE_TYPE%|${keys_image_type}|g;
+             s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
              s|%ARCH%|${arch}|g" \
              "${_cfg}" > "${isofs_dir}/syslinux/${_cfg##*/}"
     done
@@ -684,6 +701,7 @@ _make_bootmode_uefi-ia32.grub.esp() {
     # Fill Grub configuration files
     sed "s|%ARCHISO_LABEL%|${iso_label}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
+         s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
          s|%ARCH%|${arch}|g" \
         "${profile}/grub/grub.cfg" > "${work_dir}/grub.cfg"
 
