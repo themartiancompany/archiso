@@ -67,6 +67,7 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
 * ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
+* ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
 * ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
   permissions. The array's keys contain the path and the value is a colon separated list of owner UID, owner GID and
   access mode. E.g. ``file_permissions=(["/etc/shadow"]="0:0:400")``. When directories are listed with a trailing backslash (``/``) **all** files and directories contained within the listed directory will have the same owner UID, owner GID, and access mode applied recursively.
