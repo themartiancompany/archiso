@@ -217,11 +217,9 @@ _close_luks_device() {
 _run_mksquashfs() {
     local _directory_or_fs="${1}"
     local _image_path="${2}"
-    shift 2
-    declare -a _options=$*
     [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
     _msg_info "Creating SQUASHFS image, this may take some time..."
-    mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${_options[@]}"
+    mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${_mkfs_options[@]}"
 }
 
 # Create an ext4 image of given size (in KB) from a directory.
@@ -255,13 +253,11 @@ _run_mkext4() {
 _run_mkerofs() {
     local _image_path="${1}"
     local _dir="${2}"
-    shift 2
-    declare -a _options=$*
     local fsuuid
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
-    mkfs_erofs_options+=('-U' "${fsuuid}" "${_options[@]}")
+    mkfs_erofs_options+=('-U' "${fsuuid}" "${_mkfs_options[@]}")
     _msg_info "Creating EROFS image, this may take some time..."
     mkfs.erofs "${mkfs_erofs_options[@]}" -- "${_image_path}" "${_dir}"
     _msg_info "Done!"
@@ -273,6 +269,7 @@ _mkairootfs_common() {
     install -d -m 0755 -- "${airootfs_dir}"
     image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
     rm -f -- "${image_path}"
+    _mkfs_options=$airootfs_image_tool_options
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -280,8 +277,7 @@ _mkairootfs_common() {
 _mkairootfs_ext4+squashfs() {
     _mkairootfs_common
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
-    _run_mksquashfs "${pacstrap_dir}.img" "${image_path}" \
-                    "${airootfs_image_tool_options[@]}"
+    _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
 }
@@ -293,8 +289,7 @@ _mkairootfs_ext4+squashfs+luks() {
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" 
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
-    _run_mksquashfs "${pacstrap_dir}.img" "${image_device}" \
-                    "${airootfs_image_tool_options[@]}"
+    _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -303,8 +298,7 @@ _mkairootfs_ext4+squashfs+luks() {
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_squashfs() {
     _mkairootfs_common
-    _run_mksquashfs "${pacstrap_dir}" "${image_path}" \
-                    "${airootfs_image_tool_options[@]}"
+    _run_mksquashfs "${pacstrap_dir}" "${image_path}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the LUKS image.
@@ -313,16 +307,14 @@ _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" 
-    _run_mksquashfs "${pacstrap_dir}" "${image_device}" \
-                    "${airootfs_image_tool_options[@]}"
+    _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_erofs() {
     _mkairootfs_common
-    _run_mkerofs "${image_path}" "${pacstrap_dir}" \
-                 "${airootfs_image_tool_options[@]}"
+    _run_mkerofs "${image_path}" "${pacstrap_dir}"
     _msg_info "Done!"
 }
 
@@ -332,8 +324,7 @@ _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" 
-    _run_mkerofs "${image_device}" "${pacstrap_dir}" \
-                 "${airootfs_image_tool_options[@]}"
+    _run_mkerofs "${image_device}" "${pacstrap_dir}"
     _close_luks_device "${image_device}"
 }
 
@@ -343,6 +334,7 @@ _mkkeys_common() {
     rm -f -- "${image_path}"
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" ""
+    _mkfs_options=$keys_image_tool_options
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -350,8 +342,7 @@ _mkkeys_common() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkext4 "${keys_dir}" $((keys_size - 50000))
-    _run_mksquashfs "${keys_dir}.img" "${image_device}" \
-                    "${keys_image_tool_options[@]}"
+    _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${keys_dir}.img"
@@ -361,16 +352,14 @@ _mkkeys_ext4+squashfs+luks() {
 # Save the LUKS image on the ISO 9660 file system.
 _mkkeys_erofs+luks() {
     _mkkeys_common
-    _run_mkerofs "${image_device}" "${keys_isofs_dir}" \
-                 "${keys_image_tool_options[@]}"
+    _run_mkerofs "${image_device}" "${keys_isofs_dir}"
     _close_luks_device "${image_device}"
 }
 
 # Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
 _mkkeys_squashfs+luks() {
     _mkkeys_common
-    _run_mksquashfs "${keys_dir}" "${image_device}" \
-                    "${keys_image_tool_options[@]}"
+    _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
 
