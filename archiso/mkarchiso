@@ -184,7 +184,7 @@ _run_mkluks() {
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_options=("--key-file=${_encryption_key}")
 	    _cryptsetup_options+=("${_key_options[@]}")
-        _key_msg="with key $(basename ${_encryption_key})"
+        _key_msg="with key $(basename "${_encryption_key}")"
     fi
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
