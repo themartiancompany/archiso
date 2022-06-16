@@ -6,7 +6,7 @@ set -e -u
 
 # Control the environment
 umask 0022
-export LC_ALL="C"
+export LC_ALL="C.UTF-8"
 [[ -v SOURCE_DATE_EPOCH ]] || printf -v SOURCE_DATE_EPOCH '%(%s)T' -1
 export SOURCE_DATE_EPOCH
 
@@ -272,8 +272,8 @@ _run_mkerofs() {
 # Steps shared by _mkairootfs+fs_type functions
 _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
-    install -d -m 0755 -- "${airootfs_dir}"
-    image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
+    install -d -m 0755 -- "${airootfs_img_dir}"
+    image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
     rm -f -- "${image_path}"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
 }
@@ -1055,9 +1055,9 @@ _prepare_airootfs_image() {
     airootfs_size=$((pacstrap_size+200000))
 
     _run_once "_mkairootfs_${airootfs_image_type}"
-    _mkchecksum "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
+    _mkchecksum "${airootfs_img_dir}/airootfs.$(_get_fs_ext "airootfs")"
     if [[ -n "${gpg_key}" ]]; then
-        _mksignature "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
+        _mksignature "${airootfs_img_dir}/airootfs.$(_get_fs_ext "airootfs")"
     fi
 }
 
@@ -1698,10 +1698,10 @@ _build_iso_base() {
     pacstrap_dir="${work_dir}/${arch}/airootfs"
     isofs_dir="${work_dir}/iso"
     keys_dir="${work_dir}/keys"
-    airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
+    airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
 
     # Create working directory
-    [[ -d "${airootfs_dir}" ]] || install -d -- "${airootfs_dir}"
+    [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
 
     # Write build date to file or if the file exists, read it from there
