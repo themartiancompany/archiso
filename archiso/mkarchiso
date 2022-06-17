@@ -603,7 +603,8 @@ _make_bootmode_bios.syslinux.mbr() {
     _msg_info "Setting up SYSLINUX for BIOS booting from a disk..."
     install -d -m 0755 -- "${isofs_dir}/syslinux"
     for _cfg in "${profile}/syslinux/"*.cfg; do
-        sed "s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+        sed "s|%ARCHISO_LABEL%|${iso_label}|g
+             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
              s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
              s|%ARCH%|${arch}|g" \
@@ -700,7 +701,8 @@ _make_efibootimg() {
 
 _make_bootmode_uefi-ia32.grub.esp() {
     # Fill Grub configuration files
-    sed "s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}${iso_label}|g;
+    sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+         s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
          s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
          s|%ARCH%|${arch}|g" \
@@ -779,7 +781,8 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
 
 _make_bootmode_uefi-ia32.grub.esp() {
     # Fill Grub configuration files
-    sed "s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+    sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+         s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
          s|%ARCH%|${arch}|g" \
         "${profile}/grub/grub.cfg" > "${work_dir}/grub.cfg"
@@ -886,7 +889,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     mmd -i "${efibootimg}" ::/loader ::/loader/entries
     mcopy -i "${efibootimg}" "${profile}/efiboot/loader/loader.conf" ::/loader/
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        sed "s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+        sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
              s|%ARCH%|${arch}|g" \
             "${_conf}" | mcopy -i "${efibootimg}" - "::/loader/entries/${_conf##*/}"
@@ -925,7 +929,8 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     install -d -m 0755 -- "${isofs_dir}/loader/entries"
     install -m 0644 -- "${profile}/efiboot/loader/loader.conf" "${isofs_dir}/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        sed "s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+        sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
              s|%ARCH%|${arch}|g" \
             "${_conf}" > "${isofs_dir}/loader/entries/${_conf##*/}"
