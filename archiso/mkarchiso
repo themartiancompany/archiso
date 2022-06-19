@@ -606,7 +606,7 @@ _make_bootmode_bios.syslinux.mbr() {
     local archiso_uuid
     printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     for _cfg in "${profile}/syslinux/"*.cfg; do
-        sed "s|%ARCHISO_LABEL%|${iso_label}|g
+        sed "s|%ARCHISO_LABEL%|${iso_label}|g;
              s|%ARCHISO_UUID%|${archiso_uuid}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
              s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
