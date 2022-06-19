@@ -635,7 +635,7 @@ _get_crypto_params() {
     TZ=UTC printf -v _archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     _cparams=("root=/dev/mapper/root"
               "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root"
-              "cryptkey=LABEL=${iso_label}_KEYS:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
+              "cryptkey=UUID=${_keys_uuid}:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
     if [ "${encryption_key}" != "" ]; then
         echo "${_cparams[@]}"
     else
