@@ -369,6 +369,8 @@ _mkairootfs_ext4+squashfs() {
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
+    _run_mkluks "${image_path}" "${keys_size}" \
+                "${iso_label}_KEYS" ""
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
