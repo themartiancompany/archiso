@@ -234,8 +234,15 @@ _run_mkext4() {
     local _image_path="${1}.img"
     local _size="${2}"
     local ext4_hash_seed mkfs_ext4_options=()
+    local archiso_uuid
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
 
-    _msg_info "Creating ext4 image of ${_size} KB and copying '${_dir}/' to it..."
+    _msg_info "Creating ext4 image"
+    _msg_info "Size: ${_size} KB"
+    _msg_info "Directory: ${_dir}"
+    _msg_info "Image path: ${_image_path}"
+    _msg_info "UUID: ${archiso_uuid}"
+    _msg_info "this may take a while..."
 
     ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
         --name "${SOURCE_DATE_EPOCH} ext4 hash seed")"
@@ -264,7 +271,11 @@ _run_mkerofs() {
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
     mkfs_erofs_options+=('-U' "${fsuuid}" "${_mkfs_options[@]}")
-    _msg_info "Creating EROFS image, this may take some time..."
+    _msg_info "Creating EROFS image"
+    _msg_info "Directory: ${_dir}"
+    _msg_info "Image path: ${_image_path}"
+    _msg_info "UUID: ${fsuuid}"
+    _msg_info "this may take a while..."
     mkfs.erofs "${mkfs_erofs_options[@]}" -- "${_image_path}" "${_dir}"
     _msg_info "Done!"
 }
