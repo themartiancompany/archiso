@@ -121,7 +121,6 @@ ENDUSAGETEXT
 _show_config() {
     local build_date
     printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
-    printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
     _msg_info "${app_name} configuration settings"
     _msg_info "             Architecture:   ${arch}"
     _msg_info "        Working directory:   ${work_dir}"
