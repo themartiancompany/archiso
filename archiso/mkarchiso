@@ -1399,6 +1399,9 @@ _build_keys_image() {
         xorriso_options=('-report_about' 'SORRY' "${xorriso_options[@]}")
     fi
 
+    # Update SORCE_DATE_EPOCH for keys ISO UUID
+    SOURCE_DATE_EPOCH=$(($SOURCE_DATE_EPOCH + 69 * 42))
+
     rm -f -- "${out_dir}/${image_name}"
     _msg_info "Creating ISO image..."
     xorriso "${xorriso_options[@]}" -as mkisofs \
