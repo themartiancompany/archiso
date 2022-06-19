@@ -355,6 +355,16 @@ _mkkeys_common() {
     TZ=UTC erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
 }
 
+# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Save the squashfs image on the ISO 9660 file system.
+_mkairootfs_ext4+squashfs() {
+    _mkkeys_common
+    _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
+    _run_mksquashfs "${keys_dir}.img" "${image_path}"
+    _msg_info "Done!"
+    rm -- "${keys_dir}.img"
+}
+
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
@@ -380,21 +390,6 @@ _mkkeys_erofs+luks() {
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" ""
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
-    _close_luks_device "${image_device}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
-_mkkeys_squashfs() {
-    _mkkeys_common
-    _run_mksquashfs "${keys_dir}" "${image_path}"
-}
-
-# Create a squashfs image containing the keys file system and saves it on the ISO 9660 file system.
-_mkkeys_squashfs+luks() {
-    _mkkeys_common
-    _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" ""
-    _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
 
