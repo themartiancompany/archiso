@@ -236,7 +236,7 @@ _run_mkext4() {
     local _time="${3}"
     local ext4_hash_seed mkfs_ext4_options=()
     local archiso_uuid
-    TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-%Z)T' "${_time}"
+    TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${_time}"
 
     _msg_info "Creating ext4 image"
     _msg_info "Size: ${_size} KB"
@@ -287,7 +287,7 @@ _mkairootfs_common() {
     rm -f -- "${image_path}"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
-    erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+    TZ=UTC erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -352,7 +352,7 @@ _mkkeys_common() {
     rm -f -- "${image_path}"
     _mkfs_options=("${keys_image_tool_options[@]}")
     keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
-    erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
+    TZ=UTC erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
