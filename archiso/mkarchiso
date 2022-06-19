@@ -121,6 +121,7 @@ ENDUSAGETEXT
 _show_config() {
     local build_date
     printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
+    printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
     _msg_info "${app_name} configuration settings"
     _msg_info "             Architecture:   ${arch}"
     _msg_info "        Working directory:   ${work_dir}"
@@ -602,9 +603,11 @@ _get_crypto_params() {
 _make_bootmode_bios.syslinux.mbr() {
     _msg_info "Setting up SYSLINUX for BIOS booting from a disk..."
     install -d -m 0755 -- "${isofs_dir}/syslinux"
+    local archiso_uuid
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     for _cfg in "${profile}/syslinux/"*.cfg; do
         sed "s|%ARCHISO_LABEL%|${iso_label}|g
-             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+             s|%ARCHISO_UUID%|${archiso_uuid}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
              s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
              s|%ARCH%|${arch}|g" \
@@ -700,9 +703,11 @@ _make_efibootimg() {
 }
 
 _make_bootmode_uefi-ia32.grub.esp() {
+    local archiso_uuid
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     # Fill Grub configuration files
     sed "s|%ARCHISO_LABEL%|${iso_label}|g;
-         s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+         s|%ARCHISO_UUID%|${archiso_uuid}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
          s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
          s|%ARCH%|${arch}|g" \
@@ -724,85 +729,6 @@ _make_bootmode_uefi-ia32.grub.esp() {
     if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
         efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
                         "${pacstrap_dir}/boot/initramfs-"*".img")
-
-        efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
-            2>/dev/null | awk 'END { print $1 }')"
-        # Create a FAT image for the EFI system partition
-        _make_efibootimg "$efiboot_imgsize"
-    else
-        _run_once _make_bootmode_uefi-x64.systemd-boot.esp
-    fi
-
-    # Copy grub EFI binary to the default/fallback boot path
-    mcopy -i "${efibootimg}" \
-        "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
-
-    # Copy GRUB configuration files
-    mcopy -i "${efibootimg}" \
-        "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
-
-    # shellia32.efi is picked up automatically when on /
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        mcopy -i "${efibootimg}" \
-            "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
-    fi
-
-    _msg_info "Done! GRUB set up for UEFI booting successfully."
-}
-
-# Prepare GRUB for El Torito booting
-_make_bootmode_uefi-ia32.grub.eltorito() {
-    # El Torito UEFI boot requires an image containing the EFI system partition.
-    # uefi-ia32.grub.eltorito has the same requirements as uefi-ia32.grub.esp
-    _run_once _make_bootmode_uefi-ia32.grub.esp
-
-    # Additionally set up system-boot in ISO 9660. This allows creating a medium for the live environment by using
-    # manual partitioning and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and no firmware uses these files.
-    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    install -d -m 0755 -- "${isofs_dir}/EFI/BOOT"
-
-    # Copy GRUB EFI binary to the default/fallback boot path
-    install -m 0644 -- "${work_dir}/BOOTIA32.EFI" \
-        "${isofs_dir}/EFI/BOOT/BOOTIA32.EFI"
-
-    # Copy GRUB configuration files
-    install -m 0644 -- "${work_dir}/grub.cfg" "${isofs_dir}/EFI/BOOT/grub.cfg"
-
-    # edk2-shell based UEFI shell
-    # shellia32.efi is picked up automatically when on /
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" \
-                           "${isofs_dir}/shellia32.efi"
-    fi
-
-    _msg_info "Done!"
-}
-
-_make_bootmode_uefi-ia32.grub.esp() {
-    # Fill Grub configuration files
-    sed "s|%ARCHISO_LABEL%|${iso_label}|g;
-         s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
-         s|%INSTALL_DIR%|${install_dir}|g;
-         s|%ARCH%|${arch}|g" \
-        "${profile}/grub/grub.cfg" > "${work_dir}/grub.cfg"
-
-    # shellcheck disable=SC2016
-    printf 'configfile ${cmdpath}/grub.cfg\n' > "${work_dir}/grub-embed.cfg"
-
-    # Create EFI file
-    grub-mkstandalone -O i386-efi \
-                      --modules="part_gpt part_msdos fat iso9660" \
-                      --locales="en@quot" \
-                      --themes="" \
-                      -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
-    # Add GRUB to the list of files used to calculate the required FAT image size.
-    efiboot_files+=("${work_dir}/BOOTIA32.EFI"
-                    "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
-
-    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-       efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
-                       "${pacstrap_dir}/boot/initramfs-"*".img")
 
         efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
             2>/dev/null | awk 'END { print $1 }')"
@@ -888,10 +814,13 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     # Copy systemd-boot configuration files
     mmd -i "${efibootimg}" ::/loader ::/loader/entries
     mcopy -i "${efibootimg}" "${profile}/efiboot/loader/loader.conf" ::/loader/
+    local archiso_uuid
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
         sed "s|%ARCHISO_LABEL%|${iso_label}|g;
-             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+             s|%ARCHISO_UUID%|${archiso_uuid}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
+             s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
              s|%ARCH%|${arch}|g" \
             "${_conf}" | mcopy -i "${efibootimg}" - "::/loader/entries/${_conf##*/}"
     done
@@ -928,10 +857,13 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     # Copy systemd-boot configuration files
     install -d -m 0755 -- "${isofs_dir}/loader/entries"
     install -m 0644 -- "${profile}/efiboot/loader/loader.conf" "${isofs_dir}/loader/"
+    local archiso_uuid
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
         sed "s|%ARCHISO_LABEL%|${iso_label}|g;
-             s|%ARCHISO_UUID%|${SOURCE_DATE_EPOCH}|g;
+             s|%ARCHISO_UUID%|${archiso_uuid}|g;
              s|%INSTALL_DIR%|${install_dir}|g;
+             s|%CRYPTO_PARAMS%|$(_get_crypto_params)|g;
              s|%ARCH%|${arch}|g" \
             "${_conf}" > "${isofs_dir}/loader/entries/${_conf##*/}"
     done
