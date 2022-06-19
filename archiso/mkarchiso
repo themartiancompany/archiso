@@ -584,12 +584,13 @@ _make_boot_on_iso9660() {
 # Produce the 'encrypt' hook's kernel parameters needed to boot an encrypted ISO.
 _get_crypto_params() {
     declare -a _cparams
-    local _airootfs_path _keys_ext _keys_path
+    local _airootfs_path _archiso_uuid _keys_ext _keys_path
     _airootfs_path="${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
     _keys_fs_type="$(_get_fs_type "keys")"
     _keys_path="keys.$(_get_fs_ext "keys")"
+    printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     _cparams=("root=/dev/mapper/root"
-              "cryptdevice=UUID=${SOURCE_DATE_EPOCH},${_airootfs_path}:root"
+              "cryptdevice=UUID=${archiso_uuid},${_airootfs_path}:root"
               "cryptkey=LABEL=${iso_label}_KEYS:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
     if [ "${encryption_key}" != "" ]; then
         echo "${_cparams[@]}"
