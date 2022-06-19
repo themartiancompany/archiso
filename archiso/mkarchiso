@@ -378,6 +378,16 @@ _mkkeys_ext4+squashfs+luks() {
     rm -- "${keys_dir}.img"
 }
 
+# Create a squashfs image containing the keys file system and saves it on the LUKS image.
+# Saves the LUKS image on the ISO 9660 file system.
+_mkkeys_squashfs+luks() {
+    _mkkeys_common
+    _run_mkluks "${image_path}" "${airootfs_size}" \
+                "${iso_label}" "${encryption_key}" 
+    _run_mksquashfs "${keys_dir}" "${image_device}"
+    _close_luks_device "${image_device}"
+}
+
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkkeys_squashfs() {
     _mkkeys_common
