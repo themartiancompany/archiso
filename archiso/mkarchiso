@@ -233,9 +233,10 @@ _run_mkext4() {
     local _dir="${1}"
     local _image_path="${1}.img"
     local _size="${2}"
+    local _time="${3}"
     local ext4_hash_seed mkfs_ext4_options=()
     local archiso_uuid
-    TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
+    TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-%Z)T' "${_time}"
 
     _msg_info "Creating ext4 image"
     _msg_info "Size: ${_size} KB"
@@ -245,7 +246,7 @@ _run_mkext4() {
     _msg_info "this may take a while..."
 
     ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-        --name "${SOURCE_DATE_EPOCH} ext4 hash seed")"
+        --name "${_time} ext4 hash seed")"
     mkfs_ext4_options=(
         '-d' "${_dir}"
         '-O' '^has_journal,^resize_inode'
@@ -256,7 +257,7 @@ _run_mkext4() {
     )
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
-    E2FSPROGS_FAKE_TIME="${SOURCE_DATE_EPOCH}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
+    E2FSPROGS_FAKE_TIME="${_time}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
     tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
     _msg_info "Done!"
 }
@@ -268,14 +269,12 @@ _run_mkerofs() {
     local _dir="${2}"
     local fsuuid="${3}"
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
-    # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
-    fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
-    mkfs_erofs_options+=('-U' "${fsuuid}" "${_mkfs_options[@]}")
     _msg_info "Creating EROFS image"
     _msg_info "Directory: ${_dir}"
     _msg_info "Image path: ${_image_path}"
     _msg_info "UUID: ${fsuuid}"
     _msg_info "this may take a while..."
+    mkfs_erofs_options+=('-U' "${fsuuid}" "${_mkfs_options[@]}")
     mkfs.erofs "${mkfs_erofs_options[@]}" -- "${_image_path}" "${_dir}"
     _msg_info "Done!"
 }
@@ -287,6 +286,7 @@ _mkairootfs_common() {
     image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
     rm -f -- "${image_path}"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
+    # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
 }
 
@@ -294,7 +294,7 @@ _mkairootfs_common() {
 # Save the squashfs image on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs() {
     _mkairootfs_common
-    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
+    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -306,7 +306,7 @@ _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" 
-    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000))
+    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -351,14 +351,15 @@ _mkkeys_common() {
     image_path="${keys_isofs_dir}/keys."$(_get_fs_ext "keys")
     rm -f -- "${image_path}"
     _mkfs_options=("${keys_image_tool_options[@]}")
-    erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "$(( SOURCE_DATE_EPOCH + 42 * 69 ))")"
+    keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
+    erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
-    _run_mkext4 "${keys_dir}" $((keys_size - 50000))
+    _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
     _msg_info "Done!"
