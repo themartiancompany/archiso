@@ -45,6 +45,8 @@ declare -A file_permissions=()
 efibootimg=""
 efiboot_files=()
 encryption_key=""
+persistent_size=""
+persistent_image_type=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -355,9 +357,9 @@ _mkkeys_common() {
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
 }
 
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Save the squashfs image on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs() {
+_mkkeys_ext4+squashfs() {
     _mkkeys_common
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_path}"
@@ -409,6 +411,33 @@ _mkkeys_erofs+luks() {
                 "${iso_label}_KEYS" ""
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
     _close_luks_device "${image_device}"
+}
+
+# Steps shared by _mkpersistent+fs_type functions
+_mkpersistent_common() {
+    image_path="${persistentimg}"
+    rm -f -- "${image_path}"
+    persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+}
+
+# Create an ext4 image to be used as the persistent ISO partition.
+_mkpersistent_ext4() {
+    _mkpersistent_common
+    _run_mkext4 "${persistent_dir}" "${persistent_size}" "${persistent_epoch}"
+    mv "${persistent_dir}.img" "${image_device}"
+    _msg_info "Done!"
+}
+
+# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
+_mkpersistent_ext4+luks() {
+    _mkpersistent_common
+    _run_mkluks "${image_path}" "${persistent_size}" \
+                "${iso_label}_PERSISTENT" "${encryption_key}"
+    _run_mkext4 "${persistent_dir}" $((persistent_size - 50000)) "${persistent_epoch}"
+    dd if="${persistent_dir}.img" of="${image_device}"
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+    rm -- "${persistent_dir}.img"
 }
 
 # Create checksum for a given file.
@@ -1055,6 +1084,21 @@ _prepare_keys_image() {
     fi
 }
 
+# Build persistent filesystem image
+_prepare_persistent_image() {
+    local persistent_dir_size
+
+    if [ -d "${profile}/persistent" ]; then
+        cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
+        persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
+        persistent_size=$(( persistent_dir_size > persistent_size ? persistent_dir_size : persistent_size ))
+    fi
+
+    if [ "${persistent_size}" != "" ]; then
+        _run_once "_mkpersistent_${persistent_image_type}"
+    fi
+}
+
 # export build artifacts for netboot
 _export_netboot_artifacts() {
     _msg_info "Exporting netboot artifacts..."
@@ -1319,6 +1363,9 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     [[ " ${xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
     xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
+    if [ "${persistent_size}" != "" ]; then
+        xorrisofs_options+=('-append_partition' '3' '0x83' "${persistentimg}")
+    fi
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]]; then
@@ -1602,8 +1649,10 @@ _set_overrides() {
     # Set variables that do not have overrides
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
     [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
+    [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
+    [[ -n "$persistentimg" ]] || persistentimg="${work_dir}/persistent."$(_get_fs_ext "persistent")
 }
 
 _export_gpg_publickey() {
@@ -1683,10 +1732,12 @@ _build_iso_base() {
     isofs_dir="${work_dir}/iso"
     keys_dir="${work_dir}/keys"
     airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
+    persistent_dir="${work_dir}/persistent"
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
+    [[ -d "${persistent_dir}" ]] || install -d -- "${persistent_dir}"
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
@@ -1703,6 +1754,7 @@ _build_iso_base() {
     _run_once _make_version
     _run_once _make_customize_airootfs
     _run_once _make_pkglist
+    _run_once _prepare_persistent_image
     if [[ "${buildmode}" == 'netboot' ]]; then
         _run_once _make_boot_on_iso9660
     else
