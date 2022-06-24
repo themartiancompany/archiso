@@ -186,6 +186,7 @@ _run_mkluks() {
     _key_opts=()
 
     if [ "${_read_only}" = "true" ]; then
+        _msg_info "Integrity journal disabled"
 	    _cryptsetup_options+=("--integrity-no-journal")
     fi
 
