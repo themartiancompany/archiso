@@ -178,6 +178,8 @@ _run_mkluks() {
     local _encryption_key="${4}"
     local _cryptsetup_options=('--type' 'luks2' \
                                '--integrity' 'hmac-sha1' \
+                               '--integrity-no-journal' \
+                               '--persistent' \
                                '--pbkdf-memory' 256)
     local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
