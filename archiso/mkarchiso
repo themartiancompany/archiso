@@ -176,15 +176,19 @@ _run_mkluks() {
     local _size="${2}"
     local _label="${3}"
     local _encryption_key="${4}"
+    local _read_only="${5}"
     local _cryptsetup_options=('--type' 'luks2' \
                                '--integrity' 'hmac-sha1' \
-                               '--integrity-no-journal' \
                                '--persistent' \
                                '--pbkdf-memory' 256)
     local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
+
+    if [ "${_read_only}" = "true" ]; then
+	    _cryptsetup_options+=("--integrity-no-journal")
+    fi
 
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_opts=("--key-file=${_encryption_key}")
@@ -309,7 +313,7 @@ _mkairootfs_ext4+squashfs() {
 _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "true"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -328,7 +332,7 @@ _mkairootfs_squashfs() {
 _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "true"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -345,7 +349,7 @@ _mkairootfs_erofs() {
 _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "true"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
     _close_luks_device "${image_device}"
 }
@@ -374,7 +378,7 @@ _mkkeys_ext4+squashfs() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" ""
+                "${iso_label}_KEYS" "" "true"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -387,7 +391,7 @@ _mkkeys_ext4+squashfs+luks() {
 _mkkeys_squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "true"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -410,7 +414,7 @@ _mkkeys_erofs() {
 _mkkeys_erofs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" ""
+                "${iso_label}_KEYS" "" "true"
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
     _close_luks_device "${image_device}"
 }
