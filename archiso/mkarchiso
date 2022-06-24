@@ -179,11 +179,13 @@ _run_mkluks() {
     local _size="${2}"
     local _label="${3}"
     local _encryption_key="${4}"
+    local _epoch="${5}"
     local _cryptsetup_options=('--integrity' 'hmac-sha256' '--pbkdf-memory' 256)
-    local _key_msg="" _mapper
+    local _key_msg="" _mapper _uuid
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
+    _uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_opts=("--key-file=${_encryption_key}")
@@ -199,6 +201,11 @@ _run_mkluks() {
 
     _msg_info "Setting label ${_label}"
     while ! eval "cryptsetup config ${_key_opts[*]} ${_image_path} --label ${_label}"; do
+        _close_luks_device "${image_device}"
+    done
+
+     _msg_info "Setting UUID ${_uuid}"
+    while ! eval "cryptsetup luksUUID --uuid ${_uuid} ${_image_path}"; do
         _close_luks_device "${image_device}"
     done
     
@@ -291,6 +298,7 @@ _mkairootfs_common() {
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+    luks_uuid="${erofs_uuid}"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -308,7 +316,7 @@ _mkairootfs_ext4+squashfs() {
 _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "${luks_uuid}"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -327,7 +335,7 @@ _mkairootfs_squashfs() {
 _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "${luks_uuid}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -344,7 +352,7 @@ _mkairootfs_erofs() {
 _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
     _close_luks_device "${image_device}"
 }
@@ -356,6 +364,7 @@ _mkkeys_common() {
     _mkfs_options=("${keys_image_tool_options[@]}")
     keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
+    luks_uuid="${erofs_uuid}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -373,7 +382,7 @@ _mkkeys_ext4+squashfs() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" ""
+                "${iso_label}_KEYS" "" "${luks_uuid}"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     _close_luks_device "${image_device}"
@@ -386,7 +395,7 @@ _mkkeys_ext4+squashfs+luks() {
 _mkkeys_squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" 
+                "${iso_label}" "${encryption_key}" "${luks_uuid}"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     _close_luks_device "${image_device}"
 }
@@ -409,7 +418,7 @@ _mkkeys_erofs() {
 _mkkeys_erofs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" ""
+                "${iso_label}_KEYS" "" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
     _close_luks_device "${image_device}"
 }
@@ -419,6 +428,7 @@ _mkpersistent_common() {
     image_path="${persistentimg}"
     rm -f -- "${image_path}"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    luks_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${persistent_epoch}")"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -433,7 +443,7 @@ _mkpersistent_ext4() {
 _mkpersistent_ext4+luks() {
     _mkpersistent_common
     _run_mkluks "${image_path}" "${persistent_size}" \
-                "${iso_label}_PERSISTENT" "${encryption_key}"
+                "${iso_label}_PERSISTENT" "${encryption_key}" "${luks_uuid}"
     _run_mkext4 "${persistent_dir}" $((persistent_size - 50000)) "${persistent_epoch}"
     dd if="${persistent_dir}.img" of="${image_device}"
     _close_luks_device "${image_device}"
