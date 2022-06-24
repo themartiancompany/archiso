@@ -205,7 +205,7 @@ _run_mkluks() {
     done
 
      _msg_info "Setting UUID ${_uuid}"
-    while ! eval "cryptsetup luksUUID --uuid ${_uuid} ${_image_path}"; do
+    while ! eval "cryptsetup -q -y luksUUID --uuid ${_uuid} ${_image_path}"; do
         _close_luks_device "${image_device}"
     done
     
