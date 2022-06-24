@@ -315,6 +315,7 @@ _mkairootfs_ext4+squashfs+luks() {
                 "${iso_label}" "${encryption_key}" "true"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
+    sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -333,6 +334,7 @@ _mkairootfs_squashfs+luks() {
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
+    sync
     _close_luks_device "${image_device}"
 }
 
@@ -350,6 +352,7 @@ _mkairootfs_erofs+luks() {
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
+    sync
     _close_luks_device "${image_device}"
 }
 
@@ -380,6 +383,7 @@ _mkkeys_ext4+squashfs+luks() {
                 "${iso_label}_KEYS" "" "true"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
+    sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${keys_dir}.img"
@@ -392,6 +396,7 @@ _mkkeys_squashfs+luks() {
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mksquashfs "${keys_dir}" "${image_device}"
+    sync
     _close_luks_device "${image_device}"
 }
 
@@ -415,6 +420,7 @@ _mkkeys_erofs+luks() {
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" "" "true"
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
+    sync
     _close_luks_device "${image_device}"
 }
 
