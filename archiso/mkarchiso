@@ -176,7 +176,9 @@ _run_mkluks() {
     local _size="${2}"
     local _label="${3}"
     local _encryption_key="${4}"
-    local _cryptsetup_options=('--integrity' 'hmac-sha256' '--pbkdf-memory' 256)
+    local _cryptsetup_options=('--type' 'luks2' \
+                               '--integrity' 'crc32c' \
+                               '--pbkdf-memory' 256)
     local _key_msg="" _mapper
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
