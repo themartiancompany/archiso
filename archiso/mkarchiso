@@ -1380,7 +1380,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     # Move the first partition away from the start of the ISO, otherwise the GPT will not be valid and ISO 9660
     # partition will not be mountable
     # shellcheck disable=SC2076
-    [[ " ${xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || xorrisofs_options+=('-partition_offset' '16')
+    [[ " ${xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || xorrisofs_options+=('-partition_offset' '32')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
     xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
     if [ "${persistent_size}" != "" ]; then
