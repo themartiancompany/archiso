@@ -279,7 +279,7 @@ _run_mkerofs() {
     _msg_info "Done!"
 }
 
-# Steps shared by _mkairootfs+fs_type functions
+# Steps shared by _mkairootfs_fs_type functions
 _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_img_dir}"
@@ -355,9 +355,9 @@ _mkkeys_common() {
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
 }
 
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Save the squashfs image on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs() {
+_mkkeys_ext4+squashfs() {
     _mkkeys_common
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_path}"
