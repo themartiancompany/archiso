@@ -177,39 +177,42 @@ _run_mkluks() {
     local _label="${3}"
     local _encryption_key="${4}"
     local _read_only="${5}"
-    local _cryptsetup_options=('--type' 'luks2' \
-                               '--integrity' 'hmac-sha1' \
-                               '--sector-size' '4096' \
-                               '--pbkdf-memory' 256)
-    local _key_msg="" _mapper
+    local _activation_opts _format_opts _key_msg="" _mapper
+    local _cryptsetup_opts=('--type' 'luks2')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
 
-    if [ "${_read_only}" = "true" ]; then
-        _msg_info "Integrity journal disabled"
-	    _cryptsetup_options+=("--integrity-no-journal")
-    fi
-
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_opts=("--key-file=${_encryption_key}")
-	    _cryptsetup_options+=("${_key_opts[@]}")
+	    _cryptsetup_opts+=("${_key_opts[@]}")
         _key_msg="with key $(basename "${_encryption_key}")"
     fi
 
+    _activation_opts=("${_cryptsetup_opts[@]}")
+     _format_opts=("${_cryptsetup_opts[@]}" \
+                  '--integrity' 'hmac-sha1' \
+                  '--sector-size' '4096' \
+                  '--pbkdf-memory' 256)
+
+    if [ "${_read_only}" = "true" ]; then
+        _msg_info "Integrity journal disabled"
+	    _activation_opts+=('--persistent' '--integrity-no-journal')
+    fi
+ 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
     fallocate -l "${_size}K" "${_image_path}" 
-    while ! eval "cryptsetup -q -y luksFormat ${_cryptsetup_options[*]} ${_image_path}"; do
+    while ! eval "cryptsetup -q -y luksFormat ${_format_opts[*]} ${_image_path}"; do
         sleep 1
     done
 
     _msg_info "Setting label ${_label}"
-    while ! eval "cryptsetup config ${_key_opts[*]} ${_image_path} --label ${_label}"; do
+    while ! eval "cryptsetup config ${_cryptsetup_opts[*]} ${_image_path} --label ${_label}"; do
         _close_luks_device "${image_device}"
     done
-    
+
     _msg_info "Opening device on mapper ${_mapper}"
-    while ! eval "cryptsetup ${_key_opts[*]} --persistent open --type luks2 ${_image_path} ${_mapper}"; do
+    while ! eval "cryptsetup ${_activation_opts} open ${_image_path} ${_mapper}"; do
         _close_luks_device "${image_device}"
     done
     
@@ -221,6 +224,7 @@ _close_luks_device() {
     local _device="${1}"
     local _mapper
     _mapper=$(basename "${_device}")
+    integritysetup ${_device} --flushbufs 
     cryptsetup luksClose "${_mapper}" || true
     if [ -e "${_device}" ]; then
         dmsetup remove "${_device}" || true
