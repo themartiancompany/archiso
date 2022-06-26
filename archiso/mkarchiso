@@ -652,10 +652,12 @@ _get_crypto_params() {
     _keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     TZ=UTC printf -v _keys_uuid '%(%F-%H-%M-%S-00)T' "${_keys_epoch}"
     TZ=UTC printf -v _archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
-    _cparams=("root=/dev/mapper/root"
-              "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root:readonly"
-              "cryptkey=UUID=${_keys_uuid}:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
-    if [ "${encryption_key}" != "" ]; then
+    if [[ "${airootfs_image_type}" == *luks ]]; then
+        _cparams=("root=/dev/mapper/root"
+                  "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root:readonly")
+        if [ "${encryption_key}" != "" ]; then
+            _cparams+=("cryptkey=UUID=${_keys_uuid}:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
+        fi
         echo "${_cparams[@]}"
     else
         echo ""
@@ -1046,10 +1048,7 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 _prepare_airootfs_image() {
     local airootfs_size pacstrap_size
 
-    if [ "${encryption_key}" != "" ]; then
-        cp "${encryption_key}" "${work_dir}/${iso_label}.key"
-        encryption_key="${work_dir}/${iso_label}.key"
-    fi
+    [ -n "${encryption_key}" ] && cp "${encryption_key}" "${work_dir}/${iso_label}.key"
 
     pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((pacstrap_size+200000))
@@ -1127,6 +1126,20 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
     _validate_requirements_airootfs_image_type_squashfs
 }
 
+_resolve_encryption_key(){
+    if [ ! -f "${encryption_key}" ]; then
+        if [ "${encryption_key}" = 'auto' ]; then
+            local _out="${work_dir}/${iso_label}.key"
+            dd if=/dev/random \
+               bs=32 count=1 \
+               of="${_out}"
+            encryption_key="${_out}"
+        else
+            _msg_error "File '${encryption_key}' does not exist." 0
+        fi
+    fi
+}
+
 _validate_requirements_airootfs_image_type_squashfs+luks() {
     _validate_requirements_airootfs_image_type_luks
     _validate_requirements_airootfs_image_type_squashfs
@@ -1150,6 +1163,7 @@ _validate_requirements_airootfs_image_type_luks() {
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${airootfs_image_type}': cryptsetup is not available on this host. Install 'cryptsetup'!" 0
     fi
+    [[ -n "$encryption_key" ]] && _resolve_encryption_key
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -1227,7 +1241,7 @@ _validate_common_requirements_buildmode_iso_netboot() {
 }
 
 _validate_requirements_buildmode_keys() {
-    echo "TODO"
+    [[ -n "$encryption_key" ]] && _resolve_encryption_key
 }
 
 _validate_requirements_buildmode_iso() {
@@ -1513,6 +1527,7 @@ _read_profile() {
         # Resolve paths of files that are expected to reside in the profile's directory
         [[ -n "$arch" ]] || arch="$(uname -m)"
         [[ -n "$packages" ]] || packages="${profile}/packages.${arch}"
+
         packages="$(realpath -- "${packages}")"
         pacman_conf="$(realpath -- "${pacman_conf}")"
 
@@ -1705,7 +1720,9 @@ _build_iso_base() {
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
-    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
+    if [ "${airootfs_image_type}" == "*luks" ]; then
+        [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
+    fi 
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
