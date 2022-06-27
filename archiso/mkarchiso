@@ -1141,6 +1141,7 @@ _resolve_encryption_key(){
     if [ ! -f "${encryption_key}" ]; then
         if [ "${encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
+            [ ! -d "${work_dir}" ] && install -d "${work_dir}"
             dd if=/dev/random bs=32 count=1 of="${encryption_key}"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
