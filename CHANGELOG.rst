@@ -7,7 +7,10 @@ Changelog
 
 Added
 -----
-- Add support for LUKS2 image disks.
+- Add support for LUKS2 image disks:
+  - ``+luks`` airootfs image types;
+  - ``keys`` buildmode;
+  - ``encryption_key`` parameter.
 - Configure the locale for the baseline profile to ``C.UTF-8`` so that a UTF-8 locale is used.
 
 Changed
