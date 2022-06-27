@@ -191,7 +191,7 @@ _run_mkluks() {
 
     _activation_opts+=("${_cryptsetup_opts[@]}")
     _format_opts+=("${_cryptsetup_opts[@]}" \
-                   '--integrity' 'hmac-sha1' \
+                   '--integrity' 'cmac-aes' \
                    '--sector-size' '4096' \
                    '--pbkdf-memory' 256)
 
