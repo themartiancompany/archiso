@@ -1148,7 +1148,7 @@ _resolve_encryption_key(){
                of="${_out}"
             encryption_key="${_out}"
             cp "${_out}" "${out_dir}"
-        elif [ "${encryption_key}" != 'auto' ];
+        elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
     fi
