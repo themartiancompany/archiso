@@ -292,6 +292,16 @@ _run_mkerofs() {
     _msg_info "Done!"
 }
 
+_mkluks_common() {
+    local _out="${work_dir}/${iso_label}.key"
+    if [ "${encryption_key}" = "" ]; then
+        echo -n Airootfs password: 
+        read -s password
+        echo "${password}" > "${_out}"
+        encryption_key="${_out}"
+    fi
+}
+
 # Steps shared by _mkairootfs_fs_type functions
 _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
@@ -317,6 +327,7 @@ _mkairootfs_ext4+squashfs() {
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
@@ -337,6 +348,7 @@ _mkairootfs_squashfs() {
 # Saves the LUKS image on the ISO 9660 file system.
 _mkairootfs_squashfs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
@@ -355,6 +367,7 @@ _mkairootfs_erofs() {
 # Save the LUKS image on the ISO 9660 file system.
 _mkairootfs_erofs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
@@ -1048,8 +1061,6 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 _prepare_airootfs_image() {
     local airootfs_size pacstrap_size
 
-    [ -n "${encryption_key}" ] && cp "${encryption_key}" "${work_dir}/${iso_label}.key"
-
     pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((pacstrap_size+200000))
 
@@ -1127,6 +1138,8 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 }
 
 _resolve_encryption_key(){
+    keys_dir="${work_dir}/keys"
+    [ -d "${keys_dir}" ] || install -d -- "${keys_dir}"
     if [ ! -f "${encryption_key}" ]; then
         if [ "${encryption_key}" = 'auto' ]; then
             local _out="${work_dir}/${iso_label}.key"
@@ -1134,7 +1147,8 @@ _resolve_encryption_key(){
                bs=32 count=1 \
                of="${_out}"
             encryption_key="${_out}"
-        else
+            cp "${_out}" "${out_dir}"
+        elif [ "${encryption_key}" != 'auto' ];
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
     fi
@@ -1506,6 +1520,11 @@ _build_iso_image() {
             "${isofs_dir}/"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
+
+    if [[ ! " ${buildmodes[*]} " =~ ' keys ' ]]; then
+        cp "${encryption_key}" "${out_dir}"
+    fi
+
 }
 
 # Read profile's values from profiledef.sh
@@ -1696,10 +1715,8 @@ _build_keys_base() {
     local run_once_mode="base"
 
     # Set up essential directory paths
-    keys_dir="${work_dir}/keys"
     keys_isofs_dir="${work_dir}/keys_iso"
 
-    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_isofs_dir}" ]] || install -d -- "${keys_isofs_dir}"
 
     _run_once _prepare_keys_image
@@ -1715,14 +1732,10 @@ _build_iso_base() {
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/airootfs"
     isofs_dir="${work_dir}/iso"
-    keys_dir="${work_dir}/keys"
     airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
-    if [ "${airootfs_image_type}" == "*luks" ]; then
-        [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
-    fi 
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
