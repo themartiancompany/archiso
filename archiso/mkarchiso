@@ -292,6 +292,7 @@ _run_mkerofs() {
     _msg_info "Done!"
 }
 
+# Ask the user for a passphrase if not specified
 _mkluks_common() {
     local _out="${work_dir}/${iso_label}.key"
     if [ "${encryption_key}" = "" ]; then
@@ -1073,8 +1074,6 @@ _prepare_airootfs_image() {
 
 # Build keys filesystem image
 _prepare_keys_image() {
-    cp "${encryption_key}" "${keys_dir}/airootfs.key"
-    encryption_key="${keys_dir}/airootfs.key"
     keys_size=200000
     _run_once "_mkkeys_${keys_image_type}"
 
@@ -1137,17 +1136,12 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
     _validate_requirements_airootfs_image_type_squashfs
 }
 
+# 
 _resolve_encryption_key(){
-    keys_dir="${work_dir}/keys"
-    [ -d "${keys_dir}" ] || install -d -- "${keys_dir}"
     if [ ! -f "${encryption_key}" ]; then
         if [ "${encryption_key}" = 'auto' ]; then
-            local _out="${work_dir}/${iso_label}.key"
-            dd if=/dev/random \
-               bs=32 count=1 \
-               of="${_out}"
-            encryption_key="${_out}"
-            cp "${_out}" "${out_dir}"
+            encryption_key="${work_dir}/${iso_label}.key"
+            dd if=/dev/random bs=32 count=1 of="${encryption_key}"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
@@ -1716,8 +1710,12 @@ _build_keys_base() {
 
     # Set up essential directory paths
     keys_isofs_dir="${work_dir}/keys_iso"
+    keys_dir="${work_dir}/keys"
 
+    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_isofs_dir}" ]] || install -d -- "${keys_isofs_dir}"
+
+    cp "${encryption_key}" "${keys_dir}/airootfs.key"
 
     _run_once _prepare_keys_image
 }
