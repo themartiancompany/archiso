@@ -179,9 +179,10 @@ _run_mkluks() {
     local _size="${2}"
     local _label="${3}"
     local _encryption_key="${4}"
-    local _epoch="${5}"
-    local _cryptsetup_options=('--integrity' 'hmac-sha256' '--pbkdf-memory' 256)
-    local _key_msg="" _mapper _uuid
+    local _read_only="${5}"
+    local _epoch="${6}"
+    local _activation_opts=() _format_opts=() _key_msg="" _mapper
+    local _cryptsetup_opts=('--type' 'luks2')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
@@ -189,18 +190,29 @@ _run_mkluks() {
 
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_opts=("--key-file=${_encryption_key}")
-	    _cryptsetup_options+=("${_key_opts[@]}")
+	    _cryptsetup_opts+=("${_key_opts[@]}")
         _key_msg="with key $(basename "${_encryption_key}")"
     fi
 
+    _activation_opts+=("${_cryptsetup_opts[@]}")
+    _format_opts+=("${_cryptsetup_opts[@]}" \
+                   '--integrity' 'cmac-aes' \
+                   '--sector-size' '4096' \
+                   '--pbkdf-memory' 256)
+
+    if [ "${_read_only}" = "true" ]; then
+        _msg_info "Integrity journal disabled"
+	    _activation_opts+=('--persistent' '--integrity-no-journal')
+    fi
+ 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
     fallocate -l "${_size}K" "${_image_path}" 
-    while ! eval "cryptsetup -q -y luksFormat ${_cryptsetup_options[*]} ${_image_path}"; do
+    while ! eval "cryptsetup -q -y luksFormat ${_format_opts[*]} ${_image_path}"; do
         sleep 1
     done
 
     _msg_info "Setting label ${_label}"
-    while ! eval "cryptsetup config ${_key_opts[*]} ${_image_path} --label ${_label}"; do
+    while ! eval "cryptsetup config ${_cryptsetup_opts[*]} ${_image_path} --label ${_label}"; do
         _close_luks_device "${image_device}"
     done
 
@@ -209,8 +221,10 @@ _run_mkluks() {
         _close_luks_device "${image_device}"
     done
     
+    _close_luks_device "${image_device}"
+
     _msg_info "Opening device on mapper ${_mapper}"
-    while ! eval "cryptsetup ${_key_opts[*]} open --type luks2 ${_image_path} ${_mapper}"; do
+    while ! eval "cryptsetup ${_activation_opts[*]} open ${_image_path} ${_mapper}"; do
         _close_luks_device "${image_device}"
     done
     
@@ -222,6 +236,7 @@ _close_luks_device() {
     local _device="${1}"
     local _mapper
     _mapper=$(basename "${_device}")
+    blockdev --flushbufs "${_device}"
     cryptsetup luksClose "${_mapper}" || true
     if [ -e "${_device}" ]; then
         dmsetup remove "${_device}" || true
@@ -289,7 +304,18 @@ _run_mkerofs() {
     _msg_info "Done!"
 }
 
-# Steps shared by _mkairootfs+fs_type functions
+# Ask the user for a passphrase if not specified
+_mkluks_common() {
+    local _out="${work_dir}/${iso_label}.key"
+    if [ "${encryption_key}" = "" ]; then
+        echo -n Airootfs password: 
+        read -rs password
+        echo "${password}" > "${_out}"
+        encryption_key="${_out}"
+    fi
+}
+
+# Steps shared by _mkairootfs_fs_type functions
 _mkairootfs_common() {
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_img_dir}"
@@ -315,8 +341,9 @@ _mkairootfs_ext4+squashfs() {
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "${luks_uuid}"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     sync
@@ -335,8 +362,9 @@ _mkairootfs_squashfs() {
 # Saves the LUKS image on the ISO 9660 file system.
 _mkairootfs_squashfs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "${luks_uuid}"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -353,8 +381,9 @@ _mkairootfs_erofs() {
 # Save the LUKS image on the ISO 9660 file system.
 _mkairootfs_erofs+luks() {
     _mkairootfs_common
+    _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "${luks_uuid}"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
     sync
     _close_luks_device "${image_device}"
@@ -385,7 +414,7 @@ _mkkeys_ext4+squashfs() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" "" "${luks_uuid}"
+                "${iso_label}_KEYS" "" "true" "${luks_uuid}"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     sync
@@ -399,7 +428,7 @@ _mkkeys_ext4+squashfs+luks() {
 _mkkeys_squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "${luks_uuid}"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -423,7 +452,7 @@ _mkkeys_erofs() {
 _mkkeys_erofs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" "" "${luks_uuid}"
+                "${iso_label}_KEYS" "" "true" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
     sync
     _close_luks_device "${image_device}"
@@ -443,6 +472,7 @@ _mkpersistent_ext4() {
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
     _run_mkext4 "${persistent_dir}" "${persistent_size}" "${persistent_epoch}"
     mv "${persistent_dir}.img" "${image_device}"
+    sync
     _msg_info "Done!"
 }
 
@@ -451,7 +481,7 @@ _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size}" \
-                "${iso_label}_PERSISTENT" "${encryption_key}" "${luks_uuid}"
+                "${iso_label}_PERSISTENT" "${encryption_key}" "false" "${luks_uuid}"
     _run_mkext4 "${persistent_dir}" $((persistent_size - 50000)) "${persistent_epoch}"
     dd if="${persistent_dir}.img" of="${image_device}"
     sync
@@ -682,10 +712,12 @@ _get_crypto_params() {
     _keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     TZ=UTC printf -v _keys_uuid '%(%F-%H-%M-%S-00)T' "${_keys_epoch}"
     TZ=UTC printf -v _archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
-    _cparams=("root=/dev/mapper/root"
-              "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root"
-              "cryptkey=UUID=${_keys_uuid}:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
-    if [ "${encryption_key}" != "" ]; then
+    if [[ "${airootfs_image_type}" == *luks ]]; then
+        _cparams=("root=/dev/mapper/root"
+                  "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root:readonly")
+        if [ "${encryption_key}" != "" ]; then
+            _cparams+=("cryptkey=UUID=${_keys_uuid}:iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
+        fi
         echo "${_cparams[@]}"
     else
         echo ""
@@ -1076,11 +1108,6 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 _prepare_airootfs_image() {
     local airootfs_size pacstrap_size
 
-    if [ "${encryption_key}" != "" ]; then
-        cp "${encryption_key}" "${work_dir}/${iso_label}.key"
-        encryption_key="${work_dir}/${iso_label}.key"
-    fi
-
     pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((pacstrap_size+200000))
 
@@ -1093,8 +1120,6 @@ _prepare_airootfs_image() {
 
 # Build keys filesystem image
 _prepare_keys_image() {
-    cp "${encryption_key}" "${keys_dir}/airootfs.key"
-    encryption_key="${keys_dir}/airootfs.key"
     keys_size=200000
     _run_once "_mkkeys_${keys_image_type}"
 
@@ -1172,6 +1197,19 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
     _validate_requirements_airootfs_image_type_squashfs
 }
 
+# 
+_resolve_encryption_key(){
+    if [ ! -f "${encryption_key}" ]; then
+        if [ "${encryption_key}" = 'auto' ]; then
+            encryption_key="${work_dir}/${iso_label}.key"
+            [ ! -d "${work_dir}" ] && install -d "${work_dir}"
+            dd if=/dev/random bs=32 count=1 of="${encryption_key}"
+        elif [ "${encryption_key}" != 'auto' ]; then
+            _msg_error "File '${encryption_key}' does not exist." 0
+        fi
+    fi
+}
+
 _validate_requirements_airootfs_image_type_squashfs+luks() {
     _validate_requirements_airootfs_image_type_luks
     _validate_requirements_airootfs_image_type_squashfs
@@ -1195,6 +1233,7 @@ _validate_requirements_airootfs_image_type_luks() {
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${airootfs_image_type}': cryptsetup is not available on this host. Install 'cryptsetup'!" 0
     fi
+    [[ -n "$encryption_key" ]] && _resolve_encryption_key
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -1272,7 +1311,7 @@ _validate_common_requirements_buildmode_iso_netboot() {
 }
 
 _validate_requirements_buildmode_keys() {
-    echo "TODO"
+    [[ -n "$encryption_key" ]] && _resolve_encryption_key
 }
 
 _validate_requirements_buildmode_iso() {
@@ -1380,7 +1419,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     # Move the first partition away from the start of the ISO, otherwise the GPT will not be valid and ISO 9660
     # partition will not be mountable
     # shellcheck disable=SC2076
-    [[ " ${xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || xorrisofs_options+=('-partition_offset' '32')
+    [[ " ${xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
     xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
     if [ "${persistent_size}" != "" ]; then
@@ -1540,6 +1579,11 @@ _build_iso_image() {
             "${isofs_dir}/"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
+
+    if [[ ! " ${buildmodes[*]} " =~ ' keys ' ]]; then
+        cp "${encryption_key}" "${out_dir}"
+    fi
+
 }
 
 # Read profile's values from profiledef.sh
@@ -1561,6 +1605,7 @@ _read_profile() {
         # Resolve paths of files that are expected to reside in the profile's directory
         [[ -n "$arch" ]] || arch="$(uname -m)"
         [[ -n "$packages" ]] || packages="${profile}/packages.${arch}"
+
         packages="$(realpath -- "${packages}")"
         pacman_conf="$(realpath -- "${pacman_conf}")"
 
@@ -1731,11 +1776,13 @@ _build_keys_base() {
     local run_once_mode="base"
 
     # Set up essential directory paths
-    keys_dir="${work_dir}/keys"
     keys_isofs_dir="${work_dir}/keys_iso"
+    keys_dir="${work_dir}/keys"
 
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${keys_isofs_dir}" ]] || install -d -- "${keys_isofs_dir}"
+
+    cp "${encryption_key}" "${keys_dir}/airootfs.key"
 
     _run_once _prepare_keys_image
 }
