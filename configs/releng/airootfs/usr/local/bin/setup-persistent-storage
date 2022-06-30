@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 grub_cfg="/run/archiso/bootmnt/EFI/BOOT/grub.cfg"
 archisouuid="$(grep "archisouuid=" < "${grub_cfg}" | head -1 | awk '{print $5}' | sed 's/archisouuid=//g')"
@@ -31,9 +31,10 @@ _resolve_encryption_key() {
         if [ "${encryption_key}" = "auto" ]; then
             encryption_key="${passwd_path}"
 	    dd if="/dev/random" bs=32 count=1 of="${encryption_key}"
+	    echo "The encryption key has been saved to ${encryption_key}"
         elif [ "${encryption_key}" != "auto" ]; then
 	    echo "File ${encryption_key} does not exist."
-	    exit
+	    exit 0
 	fi	
     fi
 }
@@ -75,7 +76,6 @@ _make_persistent() {
     mount -o remount,rw,size=1E "/run/archiso/cowspace"
     fallocate -l "${avail}M" "${image_path}"
     losetup "/dev/loop314" "${image_path}"
-    resolve_encryption_key
     luks_format
     mkfs.ext4 -O '^has_journal,^resize_inode' \
 	      -E 'lazy_itable_init=0,root_owner=0:0' \
@@ -88,4 +88,20 @@ _make_persistent() {
 
 _add_persistent() {
     xorriso -indev "${disk}" -outdev "${disk}" -append_partition 3 "${guid}" "${image_path}" -boot_image any replay
+}
+
+_validate_requirements() {
+    partitions=$(partx -g "${disk}" | wl -l)
+    if [ "${partitions}" -gt 2 ]; then
+        exit 0
+    fi
+    _resolve_encryption_key
+}
+
+_start() {
+    _find_iso
+    _validate_requirements
+    _get_avail_space
+    _make_persistent "auto"
+    _add_persistent
 }
