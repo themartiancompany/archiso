@@ -308,7 +308,7 @@ _run_mkerofs() {
 _mkluks_common() {
     local _out="${work_dir}/${iso_label}.key"
     if [ "${encryption_key}" = "" ]; then
-        echo -n Airootfs password: 
+        echo -n "Airootfs password:" 
         read -rs password
         echo "${password}" > "${_out}"
         encryption_key="${_out}"
