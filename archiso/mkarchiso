@@ -189,8 +189,7 @@ _run_mkluks() {
     _uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
-	    _key_opts=("--key-file=${_encryption_key}" \
-                   "--key-size=512")
+	    _key_opts=("--key-file=${_encryption_key}")
 	    _cryptsetup_opts+=("${_key_opts[@]}")
         _key_msg="with key $(basename "${_encryption_key}")"
     fi
@@ -199,11 +198,14 @@ _run_mkluks() {
     _format_opts+=("${_cryptsetup_opts[@]}" \
                    '--integrity' 'hmac-sha512' \
                    '--sector-size' '4096' \
+                   '--key-size' '512' \
                    '--pbkdf-memory' 256)
 
     if [ "${_read_only}" = "true" ]; then
         _msg_info "Integrity journal disabled"
-	    _activation_opts+=('--persistent' '--integrity-no-journal')
+	    _activation_opts+=('--persistent' \
+                           '--integrity-no-journal' \
+                           '--key-size' '512')
     fi
  
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
