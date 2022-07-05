@@ -122,6 +122,10 @@ _validate_requirements() {
     _resolve_encryption_key
 }
 
+_refresh_partitions() {
+    partprobe "${disk}"
+}
+
 _start() {
     local encryption_key="${1}"
     _find_iso
@@ -129,6 +133,7 @@ _start() {
     _get_avail_space
     _make_persistent "${encryption_key}"
     _add_persistent
+    _refresh_partitions
 }
 
 _start "${1}"
