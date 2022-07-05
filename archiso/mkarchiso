@@ -189,7 +189,8 @@ _run_mkluks() {
     _uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
-	    _key_opts=("--key-file=${_encryption_key}")
+	    _key_opts=("--key-file=${_encryption_key}" \
+                   "--key-size=512")
 	    _cryptsetup_opts+=("${_key_opts[@]}")
         _key_msg="with key $(basename "${_encryption_key}")"
     fi
@@ -1203,7 +1204,7 @@ _resolve_encryption_key(){
         if [ "${encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            dd if=/dev/random bs=409600 count=1 of="${encryption_key}"
+            dd if=/dev/random bs=512 count=1 of="${encryption_key}"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
