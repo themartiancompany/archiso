@@ -237,7 +237,7 @@ _close_luks_device() {
     local _device="${1}"
     local _mapper
     _mapper=$(basename "${_device}")
-    blockdev --flushbufs "${_device}"
+    blockdev --flushbufs "${_device}" || true
     cryptsetup luksClose "${_mapper}" || true
     if [ -e "${_device}" ]; then
         dmsetup remove "${_device}" || true
