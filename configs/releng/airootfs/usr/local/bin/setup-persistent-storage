@@ -2,6 +2,7 @@
 
 grub_cfg="/run/archiso/bootmnt/EFI/BOOT/grub.cfg"
 archisouuid="$(grep "archisouuid=" < "${grub_cfg}" | head -1 | awk '{print $5}' | sed 's/archisouuid=//g')"
+archisolabel="$(grep "archisolabel=" < "${grub_cfg}" | head -1 | awk '{print $5}' | sed 's/archisouuid=//g')"
 guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 
 _find_iso() {
@@ -105,3 +106,5 @@ _start() {
     _make_persistent "auto"
     _add_persistent
 }
+
+_start
