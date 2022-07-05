@@ -669,7 +669,6 @@ _get_crypto_params() {
     TZ=UTC printf -v _keys_uuid '%(%F-%H-%M-%S-00)T' "${_keys_epoch}"
     TZ=UTC printf -v _archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
     if [[ "${airootfs_image_type}" == *"luks"* ]]; then
-        _msg_info "Adding crypto kernel parameters"
         _cparams=("root=/dev/mapper/root"
                   "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root:readonly")
         if [ "${encryption_key}" != "" ]; then
