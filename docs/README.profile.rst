@@ -66,7 +66,7 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
   - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
-* ``encryption_key``: if pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key 
+* ``encryption_key``: if pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key
   at build time; if empty, will prompt for password.
 * ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
 * ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
