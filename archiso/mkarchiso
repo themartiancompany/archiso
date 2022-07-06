@@ -795,6 +795,12 @@ _make_efibootimg() {
     mmd -i "${efibootimg}" ::/EFI ::/EFI/BOOT
 }
 
+# Copy the grub.cfg file in efiboot.img which is used by both IA32 UEFI and x64 UEFI.
+_make_efibootimg_grubcfg() {
+    mcopy -i "${efibootimg}" \
+        "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
+}
+
 _make_bootmode_uefi-ia32.grub.esp() {
     local archiso_uuid
     TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
@@ -836,10 +842,8 @@ _make_bootmode_uefi-ia32.grub.esp() {
         "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
 
     # Copy GRUB configuration files
-    mcopy -i "${efibootimg}" \
-        "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
+    _run_once _make_efibootimg_grubcfg
 
-    # shellia32.efi is picked up automatically when on /
     if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
         mcopy -i "${efibootimg}" \
             "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
