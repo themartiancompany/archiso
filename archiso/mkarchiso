@@ -485,7 +485,7 @@ _mkpersistent_ext4+luks() {
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size}" \
                 "${iso_label}_PERSISTENT" "${encryption_key}" "false" "${luks_uuid}"
-    _run_mkext4 "${persistent_dir}" $((persistent_size - 50000)) "${persistent_epoch}"
+    _run_mkext4 "${persistent_dir}" $((persistent_size - 1000)) "${persistent_epoch}"
     dd if="${persistent_dir}.img" of="${image_device}"
     sync
     _close_luks_device "${image_device}"
