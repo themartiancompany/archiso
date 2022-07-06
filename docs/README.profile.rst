@@ -66,7 +66,7 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
   - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
-* ``encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key 
+* ``encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key
   at build time; if empty, will prompt for password.
 * ``persistent_size``: Size in KB of the persistent partition. 
 * ``persistent_image_type``: The type of the persistent portion of the ISO.
