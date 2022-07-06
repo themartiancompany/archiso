@@ -831,16 +831,16 @@ _make_bootmode_uefi-ia32.grub.esp() {
     efiboot_files+=("${work_dir}/BOOTIA32.EFI"
                     "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
 
-    if [[ ! " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-        efiboot_files+=("${pacstrap_dir}/boot/vmlinuz-"*
-                        "${pacstrap_dir}/boot/initramfs-"*".img")
-
+    if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+        # TODO: Remove this branch.
+        _run_once _make_bootmode_uefi-x64.systemd-boot.esp
+    elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
+        _run_once _make_bootmode_uefi-x64.grub.esp
+    else
         efiboot_imgsize="$(du -bc "${efiboot_files[@]}" \
             2>/dev/null | awk 'END { print $1 }')"
         # Create a FAT image for the EFI system partition
         _make_efibootimg "$efiboot_imgsize"
-    else
-        _run_once _make_bootmode_uefi-x64.systemd-boot.esp
     fi
 
     # Copy grub EFI binary to the default/fallback boot path
