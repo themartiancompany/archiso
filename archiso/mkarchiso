@@ -177,11 +177,13 @@ _run_mkluks() {
     local _label="${3}"
     local _encryption_key="${4}"
     local _read_only="${5}"
+    local _epoch="${6}"
     local _activation_opts=() _format_opts=() _key_msg="" _mapper
     local _cryptsetup_opts=('--type' 'luks2')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
+    _uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
 	    _key_opts=("--key-file=${_encryption_key}")
@@ -193,11 +195,14 @@ _run_mkluks() {
     _format_opts+=("${_cryptsetup_opts[@]}" \
                    '--integrity' 'hmac-sha512' \
                    '--sector-size' '4096' \
+                   '--key-size' '512' \
                    '--pbkdf-memory' 256)
 
     if [ "${_read_only}" = "true" ]; then
         _msg_info "Integrity journal disabled"
-	    _activation_opts+=('--persistent' '--integrity-no-journal')
+	    _activation_opts+=('--persistent' \
+                           '--integrity-no-journal' \
+                           '--key-size' '512')
     fi
  
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
@@ -211,6 +216,11 @@ _run_mkluks() {
         _close_luks_device "${image_device}"
     done
 
+     _msg_info "Setting UUID ${_uuid}"
+    while ! eval "cryptsetup -q -y luksUUID --uuid ${_uuid} ${_image_path}"; do
+        _close_luks_device "${image_device}"
+    done
+    
     _close_luks_device "${image_device}"
 
     _msg_info "Opening device on mapper ${_mapper}"
@@ -298,7 +308,7 @@ _run_mkerofs() {
 _mkluks_common() {
     local _out="${work_dir}/${iso_label}.key"
     if [ "${encryption_key}" = "" ]; then
-        echo -n Airootfs password: 
+        echo -n "Airootfs password:" 
         read -rs password
         echo "${password}" > "${_out}"
         encryption_key="${_out}"
@@ -314,6 +324,7 @@ _mkairootfs_common() {
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     # Generate reproducible file system UUID from SOURCE_DATE_EPOCH
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${SOURCE_DATE_EPOCH}")"
+    luks_uuid="${erofs_uuid}"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -332,7 +343,7 @@ _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "true"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     sync
@@ -353,7 +364,7 @@ _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "true"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -372,7 +383,7 @@ _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "true"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${erofs_uuid}"
     sync
     _close_luks_device "${image_device}"
@@ -385,6 +396,7 @@ _mkkeys_common() {
     _mkfs_options=("${keys_image_tool_options[@]}")
     keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     erofs_uuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${keys_epoch}")"
+    luks_uuid="${erofs_uuid}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -402,7 +414,7 @@ _mkkeys_ext4+squashfs() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" "" "true"
+                "${iso_label}_KEYS" "" "true" "${luks_uuid}"
     _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     sync
@@ -416,7 +428,7 @@ _mkkeys_ext4+squashfs+luks() {
 _mkkeys_squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
-                "${iso_label}" "${encryption_key}" "true"
+                "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -440,7 +452,7 @@ _mkkeys_erofs() {
 _mkkeys_erofs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${iso_label}_KEYS" "" "true"
+                "${iso_label}_KEYS" "" "true" "${luks_uuid}"
     _run_mkerofs "${image_device}" "${keys_dir}" "${erofs_uuid}"
     sync
     _close_luks_device "${image_device}"
@@ -668,7 +680,7 @@ _get_crypto_params() {
     _keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     TZ=UTC printf -v _keys_uuid '%(%F-%H-%M-%S-00)T' "${_keys_epoch}"
     TZ=UTC printf -v _archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
-    if [[ "${airootfs_image_type}" == *"luks"* ]]; then
+    if [[ "${airootfs_image_type}" == *luks ]]; then
         _cparams=("root=/dev/mapper/root"
                   "cryptdevice=UUID=${_archiso_uuid},${_airootfs_path}:root:readonly")
         if [ "${encryption_key}" != "" ]; then
@@ -1144,7 +1156,7 @@ _resolve_encryption_key(){
         if [ "${encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            dd if=/dev/random bs=32 count=1 of="${encryption_key}"
+            dd if=/dev/random bs=512 count=1 of="${encryption_key}"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
@@ -1739,10 +1751,12 @@ _build_iso_base() {
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/airootfs"
     isofs_dir="${work_dir}/iso"
+    keys_dir="${work_dir}/keys"
     airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
+    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
