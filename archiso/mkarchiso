@@ -771,10 +771,16 @@ _make_boot_on_fat() {
 # Create a FAT image (efiboot.img) which will serve as the EFI system partition
 # $1: image size in bytes
 _make_efibootimg() {
-    local imgsize="0"
+    local imgsize_kib="0"
+    local imgsize_bytes=${1}
+
+    if (( imgsize_bytes < 2*1024*1024 )); then
+        _msg_info "Validating '${bootmode}': efiboot.img size is ${imgsize_bytes} bytes is less than 2 MiB! Bumping up to 2 MiB"
+        imgsize_bytes=$((2*1024*1024))
+    fi
 
     # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
-    imgsize="$(awk 'function ceil(x){return int(x)+(x>int(x))}
+    imgsize_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
             function byte_to_kib(x){return x/1024}
             function mib_to_kib(x){return x*1024}
             END {print mib_to_kib(ceil((byte_to_kib($1)+1024)/1024))}' <<< "${1}"
@@ -786,9 +792,9 @@ _make_efibootimg() {
     if [[ "${quiet}" == "y" ]]; then
         # mkfs.fat does not have a -q/--quiet option, so redirect stdout to /dev/null instead
         # https://github.com/dosfstools/dosfstools/issues/103
-        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize}" > /dev/null
+        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize_kib}" > /dev/null
     else
-        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize}"
+        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize_kib}"
     fi
 
     # Create the default/fallback boot path in which a boot loaders will be placed later.
