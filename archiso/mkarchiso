@@ -1699,11 +1699,14 @@ _make_pkglist() {
         "bootstrap")
             pacman -Q --sysroot "${pacstrap_dir}" > "${pacstrap_dir}/pkglist.${arch}.txt"
             ;;
-        "iso"|"netboot")
-            install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+        "iso")
             if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
                 pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
             fi
+            ;;
+        "netboot")
+            install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+            pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
             ;;
     esac
     _msg_info "Done!"
