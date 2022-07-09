@@ -479,20 +479,6 @@ _mkpersistent_ext4() {
     _msg_info "Done!"
 }
 
-_get_internal_size() {
-    local _size="${1}"
-    if [[ "${_size}" -lt 50000 ]]; then
-        ratio=70
-    elif [[ "${_size}" -gt 50000 ]] && [[ "${_size}" -lt 200000 ]]; then
-        ratio=75
-    elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
-        ratio=90
-    else
-        ratio=99
-    fi
-    echo $(((_size * ratio)/100))
-}
-
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
     _mkpersistent_common
@@ -559,6 +545,20 @@ _get_fs_type() {
     local _no_luks
     _no_luks=$(eval echo \$"{${_image}_image_type%%+luks}")
     echo "${_no_luks##*"+"}"
+}
+
+_get_internal_size() {
+    local _size="${1}"
+    if [[ "${_size}" -lt 50000 ]]; then
+        ratio=70
+    elif [[ "${_size}" -gt 50000 ]] && [[ "${_size}" -lt 200000 ]]; then
+        ratio=75
+    elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
+        ratio=90
+    else
+        ratio=99
+    fi
+    echo $(((_size * ratio)/100))
 }
 
 # Helper function to run functions only one time.
@@ -855,6 +855,7 @@ _make_efibootimg_grubcfg() {
     mcopy -i "${efibootimg}" \
         "${work_dir}/grub.cfg" ::/EFI/BOOT/grub.cfg
 }
+
 _make_bootmode_uefi-ia32.grub.esp() {
     local archiso_uuid
     TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${SOURCE_DATE_EPOCH}"
