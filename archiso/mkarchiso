@@ -334,7 +334,7 @@ _mkairootfs_common() {
 # Save the squashfs image on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs() {
     _mkairootfs_common
-    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
+    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
@@ -347,7 +347,7 @@ _mkairootfs_ext4+squashfs+luks() {
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" \
                 "${iso_label}" "${encryption_key}" "true" "${luks_uuid}"
-    _run_mkext4 "${pacstrap_dir}" $((airootfs_size - 50000)) "${SOURCE_DATE_EPOCH}"
+    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" "${SOURCE_DATE_EPOCH}"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -406,7 +406,7 @@ _mkkeys_common() {
 # Save the squashfs image on the ISO 9660 file system.
 _mkkeys_ext4+squashfs() {
     _mkkeys_common
-    _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
+    _run_mkext4 "${keys_dir}" "$(_get_internal_size "${keys_size}")" "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${keys_dir}.img"
@@ -418,7 +418,7 @@ _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
                 "${iso_label}_KEYS" "" "true" "${luks_uuid}"
-    _run_mkext4 "${keys_dir}" $((keys_size - 50000)) "${keys_epoch}"
+    _run_mkext4 "${keys_dir}" "$(_get_internal_size "${keys_size}")" "${keys_epoch}"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -479,13 +479,25 @@ _mkpersistent_ext4() {
     _msg_info "Done!"
 }
 
+_get_internal_size() {
+    local _size="${1}"
+    if [[ "${_size}" -lt 200000 ]]; then
+        ratio=85
+    elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
+        ratio=90
+    else
+        ratio=99
+    fi
+    echo $(((_size * ratio)/100))
+}
+
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size}" \
                 "${iso_label}_PERSISTENT" "${encryption_key}" "false" "${luks_uuid}"
-    _run_mkext4 "${persistent_dir}" $(((persistent_size * 95) / 100)) "${persistent_epoch}"
+    _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size}")" "${persistent_epoch}"
     dd if="${persistent_dir}.img" of="${image_device}" || _close_luks_device "${image_device}" && exit
     sync
     _close_luks_device "${image_device}"
