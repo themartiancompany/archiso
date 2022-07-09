@@ -1850,7 +1850,7 @@ _build_iso_image() {
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 
-    if [[ ! " ${buildmodes[*]} " =~ ' keys ' ]]; then
+    if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ ! " ${buildmodes[*]} " =~ ' keys ' ]]; then
         cp "${encryption_key}" "${out_dir}"
     fi
 
