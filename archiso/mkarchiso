@@ -481,7 +481,9 @@ _mkpersistent_ext4() {
 
 _get_internal_size() {
     local _size="${1}"
-    if [[ "${_size}" -lt 200000 ]]; then
+    if [[ "${_size}" -lt 50000 ]]; then
+        ratio=75
+    elif [[ "${_size}" -gt 50000 ]] && [[ "${_size}" -lt 200000 ]]; then
         ratio=85
     elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
         ratio=90
