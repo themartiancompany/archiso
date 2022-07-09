@@ -500,7 +500,7 @@ _mkpersistent_ext4+luks() {
     _run_mkluks "${image_path}" "${persistent_size}" \
                 "${iso_label}_PERSISTENT" "${encryption_key}" "false" "${luks_uuid}"
     _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size}")" "${persistent_epoch}"
-    dd if="${persistent_dir}.img" of="${image_device}" || _close_luks_device "${image_device}" && exit
+    dd if="${persistent_dir}.img" of="${image_device}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
