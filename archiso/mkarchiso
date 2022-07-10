@@ -474,7 +474,7 @@ _mkpersistent_ext4() {
     _mkpersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
     _run_mkext4 "${persistent_dir}" "${persistent_size}" "${persistent_epoch}"
-    mv "${persistent_dir}.img" "${image_device}"
+    mv "${persistent_dir}.img" "${image_path}"
     sync
     _msg_info "Done!"
 }
