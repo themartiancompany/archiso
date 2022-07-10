@@ -262,6 +262,7 @@ _run_mkext4() {
     local _image_path="${1}.img"
     local _size="${2}"
     local _time="${3}"
+    local _label="${4}"
     local ext4_hash_seed mkfs_ext4_options=()
     local archiso_uuid
     TZ=UTC printf -v archiso_uuid '%(%F-%H-%M-%S-00)T' "${_time}"
@@ -271,6 +272,7 @@ _run_mkext4() {
     _msg_info "Directory: ${_dir}"
     _msg_info "Image path: ${_image_path}"
     _msg_info "UUID: ${archiso_uuid}"
+    _msg_info "Label: ${_label}"
     _msg_info "this may take a while..."
 
     ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
@@ -283,6 +285,7 @@ _run_mkext4() {
         '-F'
         '-U' 'clear'
     )
+    [[ "${_label}" != "" ]] && mkfs_ext4_options+=('-L' "${_label}")
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
     E2FSPROGS_FAKE_TIME="${_time}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
@@ -473,7 +476,7 @@ _mkpersistent_common() {
 _mkpersistent_ext4() {
     _mkpersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
-    _run_mkext4 "${persistent_dir}" "${persistent_size}" "${persistent_epoch}"
+    _run_mkext4 "${persistent_dir}" "${persistent_size}" "${persistent_epoch}" "${iso_label}_PERSISTENT"
     mv "${persistent_dir}.img" "${image_path}"
     sync
     _msg_info "Done!"
