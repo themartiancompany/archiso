@@ -337,7 +337,7 @@ _mkairootfs_common() {
 # Save the squashfs image on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs() {
     _mkairootfs_common
-    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" "${SOURCE_DATE_EPOCH}"
+    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" "${SOURCE_DATE_EPOCH}" "airootfs"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
     _msg_info "Done!"
     rm -- "${pacstrap_dir}.img"
