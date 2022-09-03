@@ -1282,7 +1282,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
 
     efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
-    efiboot_imgsize=$((efiboot_imgsize * 3))
+    efiboot_imgsize=$((efiboot_imgsize * 10))
     # Create a FAT image for the EFI system partition
     _make_efibootimg "$efiboot_imgsize"
 
