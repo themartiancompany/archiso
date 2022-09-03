@@ -786,8 +786,8 @@ _make_boot_on_iso() {
 
     install -d -m 0755 -- "${kernel_dir}"
     for _query in  "${images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" -quit \;
-        find "${kernel_dir}" -iname "${_query}" -exec chmod 0644 {} -quit \;
+        find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \; -quit
+        find "${kernel_dir}" -iname "${_query}" -exec chmod 0644 {} \;
     done
 
     for ucode_image in "${ucodes[@]}"; do
@@ -881,7 +881,7 @@ _make_bootmode_bios.syslinux.mbr() {
             gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
                 "${bootable_dir}/syslinux/hdt/pciids.gz"
         fi
-        find "${pacstrap_dir}/usr/lib/modules" -name 'modules.alias' -print -exec gzip -cn9 '{}' ';' -quit > \
+        find "${pacstrap_dir}/usr/lib/modules" -name 'modules.alias' -print -exec gzip -cn9 '{}' ';' > \
             "${bootable_dir}/syslinux/hdt/modalias.gz"
     fi
 
@@ -936,7 +936,7 @@ _make_boot_on_fat() {
     mmd -D o -i "${efibootimg}" \
         "::/${install_dir}" "::/${install_dir}/boot" "::/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/${arch}/" -quit \;
+        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/${arch}/" \; -quit
     done
     for _ucode_image in "${ucodes[@]}"; do
         find "${work_dir}" -iname "${_ucode_image}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/" \;
