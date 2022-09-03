@@ -1276,7 +1276,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
                     "${_available_ucodes[@]}")
     _images=("initramfs-*.img" "vmlinuz-*")
     for _query in "${_images[@]}"; do
-        _efiboot_files+=($(find "${work_dir}" -iname "${_query}" -exec echo {} \;))
+        mapfile -t _efiboot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \;)
     done
  
     efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" \
