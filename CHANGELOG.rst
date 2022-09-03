@@ -7,6 +7,44 @@ Changelog
 
 Added
 -----
+- Add support for LUKS2 image disks:
+  - ``+luks`` airootfs image types;
+  - ``keys`` buildmode;
+  - ``encryption_key`` parameter.
+- Upgraded storage handling function functions:
+  - Set overwrite flag in ``mtools`` commands.
+  - Refactor ``run_<fs_type_or_container>`` functions.
+- Add support for persistent partition on ISO:
+  - ''persistent_size'' parameter;
+
+Changed
+-------
+
+Removed
+-------
+
+[66] - 2022-08-28
+=================
+
+Added
+-----
+
+- Add ``efibootimg`` to ``mkarchiso`` to abstract the FAT image path.
+- Unset ``LANGUAGE`` since ``LC_ALL=C.UTF-8``, unlike ``LC_ALL=C``, does not override ``LANGUAGE``.
+- Copy all files from the ``grub`` directory to ISO9660 and the FAT image, not just only ``grub.cfg``.
+- Touching ``/usr/lib/clock-epoch`` to to help ``systemd`` with screwed or broken RTC.
+
+Changed
+-------
+
+- Disable GRUB's shim_lock verifier and preload more modules. This allows reusing the GRUB EFI binaries when repacking
+  the ISO to support Secure Boot with custom signatures.
+
+[65] - 2022-06-30
+=================
+
+Added
+-----
 
 - Configure the locale for the baseline profile to ``C.UTF-8`` so that a UTF-8 locale is used.
 - Add ``uefi-x64.grub.esp`` and ``uefi-x64.grub.eltorito`` boot mode to support x86_64 UEFI boot on x86_64 machines.

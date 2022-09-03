@@ -39,6 +39,7 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
   understood:
 
   - ``bootstrap``: Build a compressed file containing a minimal system to bootstrap from
+  - ``keys``: Build a "keys" ISO that is able to boot encrypted bootable ISO images.
   - ``iso``: Build a bootable ISO image (implicit default, if no ``buildmodes`` are set)
   - ``netboot``: Build artifacts required for netboot using iPXE
 * ``bootmodes``: A list of strings, that state the supported boot modes of the resulting image. Only the following are
@@ -60,10 +61,21 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
 * ``airootfs_image_type``: The image type to create. The following options are understood (defaults to ``squashfs``):
 
   - ``squashfs``: Create a squashfs image directly from the airootfs work directory
+  - ``squashfs+luks``: Create a LUKS image containing a squashfs generated directly from the airootfs work directory
   - ``ext4+squashfs``: Create an ext4 partition, copy the airootfs work directory to it and create a squashfs image from it
+  - ``ext4+squashfs+luks``: Create an ext4 partition, copy the airootfs work directory to it and create a LUKS containing a squashfs image generated from it
   - ``erofs``: Create an EROFS image for the airootfs work directory
+  - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
+* ``encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key
+  at build time; if empty, will prompt for password.
+* ``persistent_size_kib``: Size in KB of the persistent partition. 
+* ``persistent_image_type``: The type of the persistent portion of the ISO.
+  - ``ext4``: Create an ext4 partition.
+  - ``ext4+luks``: Create a LUKS container with an ext4 partition inside.
+* ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
+* ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
 * ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
   permissions. The array's keys contain the path and the value is a colon separated list of owner UID, owner GID and
   access mode. E.g. ``file_permissions=(["/etc/shadow"]="0:0:400")``. When directories are listed with a trailing backslash (``/``) **all** files and directories contained within the listed directory will have the same owner UID, owner GID, and access mode applied recursively.
