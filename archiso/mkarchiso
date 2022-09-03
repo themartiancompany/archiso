@@ -1260,7 +1260,7 @@ _make_bootmode_uefi-x64.grub.eltorito_dongle() {
 
 # Prepare systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
-    local _file efiboot_imgsize
+    local _file efiboot_imgsize _results
     local _available_ucodes=()
     _msg_info "Setting up systemd-boot for UEFI booting..."
 
@@ -1273,9 +1273,12 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     efiboot_files+=("${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
                     "${profile}/efiboot/"
-                    "${pacstrap_dir}/boot/vmlinuz-"*
-                    "${pacstrap_dir}/boot/initramfs-"*".img"
                     "${_available_ucodes[@]}")
+    _images=("initramfs-*.img" "vmlinuz-*")
+    for _query in "${_images[@]}"; do
+        _efiboot_files=($(find "${work_dir}" -iname "${_query}" -exec echo {} \;))
+    done
+ 
     efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" \
         2>/dev/null | awk 'END { print $1 }')"
     # Create a FAT image for the EFI system partition
