@@ -1278,11 +1278,11 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
                     "${_available_ucodes[@]}")
     _images=("initramfs-*.img" "vmlinuz-*")
     for _query in "${_images[@]}"; do
-        mapfile -t efiboot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \;)
+        mapfile -t efiboot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
     done
- 
-    efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" \
-        2>/dev/null | awk 'END { print $1 }')"
+
+    efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+    efiboot_imgsize=$((efiboot_imgsize * 3))
     # Create a FAT image for the EFI system partition
     _make_efibootimg "$efiboot_imgsize"
 
