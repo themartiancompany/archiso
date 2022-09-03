@@ -2364,8 +2364,7 @@ _export_gpg_publickey() {
                                     --batch --no-armor --output "${work_dir}/pubkey.gpg" \
                                     --export "${gpg_key}"
     else
-        gpg "${_gpg_options[@]}" \
-            --batch --no-armor --output "${work_dir}/pubkey.gpg" \
+        gpg --batch --no-armor --output "${work_dir}/pubkey.gpg" \
             --export "${gpg_key}"
     fi
 }
