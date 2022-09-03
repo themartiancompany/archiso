@@ -179,7 +179,7 @@ _cleanup_pacstrap_dir() {
     # Move kernel, initramfs and microcodes for later usage
     install -d -m 0755 "${work_dir}/boot" 
     for _query in "${_images[@]}"; do
-        find "${_boot}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${work_dir}/boot" \;
+        find "${_boot}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${work_dir}/boot" -quit \;
     done
     [[ -d "${_boot}" ]] && find "${_boot}" -maxdepth 1 -type f -delete
     # Delete pacman database sync cache files (*.tar.gz)
@@ -786,8 +786,8 @@ _make_boot_on_iso() {
 
     install -d -m 0755 -- "${kernel_dir}"
     for _query in  "${images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \;
-        find "${kernel_dir}" -iname "${_query}" -exec chmod 0644 {} \;
+        find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" -quit \;
+        find "${kernel_dir}" -iname "${_query}" -exec chmod 0644 {} -quit \;
     done
 
     for ucode_image in "${ucodes[@]}"; do
@@ -936,7 +936,7 @@ _make_boot_on_fat() {
     mmd -D o -i "${efibootimg}" \
         "::/${install_dir}" "::/${install_dir}/boot" "::/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/${arch}/" \;
+        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/${arch}/" -quit \;
     done
     for _ucode_image in "${ucodes[@]}"; do
         find "${work_dir}" -iname "${_ucode_image}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/" \;
@@ -955,7 +955,7 @@ _make_efibootimg() {
         imgsize_bytes=$((20*1024*1024))
     fi
 
-    imgsize_bytes=$((imgsize_bytes * 10))
+    # imgsize_bytes=$((imgsize_bytes * 10))
 
     # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
     imgsize_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
