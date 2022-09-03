@@ -955,7 +955,7 @@ _make_efibootimg() {
         imgsize_bytes=$((2*1024*1024))
     fi
 
-    imgsize_bytes=$((imgsize_bytes * 12 / 10))
+    imgsize_bytes=$((imgsize_bytes * 14 / 10))
 
     # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
     imgsize_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
