@@ -952,10 +952,10 @@ _make_efibootimg() {
 
     if (( imgsize_bytes < 2*1024*1024 )); then
         _msg_info "Validating '${bootmode}': efiboot.img size is ${imgsize_bytes} bytes is less than 2 MiB! Bumping up to 2 MiB"
-        imgsize_bytes=$((2*1024*1024))
+        imgsize_bytes=$((20*1024*1024))
     fi
 
-    imgsize_bytes=$((imgsize_bytes * 14 / 10))
+    imgsize_bytes=$((imgsize_bytes * 10))
 
     # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
     imgsize_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
@@ -1282,7 +1282,6 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
 
     efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
-    efiboot_imgsize=$((efiboot_imgsize * 10))
     # Create a FAT image for the EFI system partition
     _make_efibootimg "$efiboot_imgsize"
 
