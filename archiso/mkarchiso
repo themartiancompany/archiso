@@ -2164,7 +2164,7 @@ _build_dongle_image() {
         '-joliet'
         '-joliet-long'
         '-rational-rock'
-        '-volid' "${iso_label}_KEYS"
+        '-volid' "${iso_label}_DONGLE"
         '-appid' "\"${iso_application} dongle CD\""
         '-publisher' "\"${iso_publisher}\"" 
         '-preparer' "\"prepared by ${app_name}\""
