@@ -520,7 +520,7 @@ _mkpersistent_ext4() {
 _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
-    _run_mkluks "${image_path}" "${persistent_size_kib}" "${encryption_key}" \
+    _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
                 "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}"
     _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
                 "${persistent_epoch}" "persistent" "${writable}"
@@ -1588,6 +1588,17 @@ _prepare_persistent_image() {
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
+    fi
+
+    if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
+        persistent_encryption_key="${work_dir}/${iso_label}_PERSISTENT.key"
+        dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
+        install -d -m700 "${pacstrap_dir}/etc/keys"
+        install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+    else
+        _msg_info "WARNING: root file system is not encrypted."
+        _msg_info "Enter persistent partition password:"
+        persistent_encryption_key=""
     fi
 
     if [ "${persistent_size_kib}" != "" ]; then
