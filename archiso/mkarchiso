@@ -1590,19 +1590,18 @@ _prepare_persistent_image() {
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
     fi
 
-    if [[ "${persistent_image_type}" == *luks ]]; then
-        if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
-            persistent_encryption_key="${work_dir}/${iso_label}_PERSISTENT.key"
-            dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
-            install -d -m700 "${pacstrap_dir}/etc/keys"
-            install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
-        else
-            _msg_warning "root file system is not encrypted, you will have to insert a password for persistent partition."
-            persistent_encryption_key=""
-        fi
-    fi
-
     if [ "${persistent_size_kib}" != "" ]; then
+        if [[ "${persistent_image_type}" == *luks ]]; then
+            if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
+                persistent_encryption_key="${work_dir}/${iso_label}_PERSISTENT.key"
+                dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
+                install -d -m700 "${pacstrap_dir}/etc/keys"
+                install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+            else
+                _msg_warning "root file system is not encrypted, you will have to insert a password for persistent partition."
+                persistent_encryption_key=""
+            fi
+        fi
         _run_once "_mkpersistent_${persistent_image_type}"
     fi
 }
