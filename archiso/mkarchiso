@@ -1779,7 +1779,7 @@ _validate_requirements_buildmode_dongle() {
     _validate_common_requirements_buildmode_all
     [[ -n "$encryption_key" ]] && _resolve_encryption_key
     if [[ ! "${airootfs_image_type}" == *luks ]]; then
-        _msg_warning "If you enable the dongle then you probably should encrypt the root file system too."
+        _msg_warning "Dongle buildmode active but root file system encryption disabled."
     fi
 }
 
