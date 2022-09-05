@@ -1,0 +1,9 @@
+[Unit]
+Description=Bluetooth data automount
+
+[Automount]
+Where=/var/lib/bluetooth
+TimeoutIdleSec=3min
+
+[Install]
+WantedBy=multi-user.target
