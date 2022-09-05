@@ -1,0 +1,14 @@
+[Unit]
+Description=Systemd home credentials bind mount
+RequiresMountsFor=/run/archiso/persistent
+
+[Mount]
+What=/run/archiso/persistent/var/lib/systemd/home
+Where=/var/lib/systemd/home
+Type=None
+Options=bind,nofail
+DirectoryMode=0755
+TimeoutSec=5
+
+[Install]
+WantedBy=multi-user.target

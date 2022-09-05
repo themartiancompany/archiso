@@ -1,0 +1,9 @@
+[Unit]
+Description=systemd-homed credentials automount
+
+[Automount]
+Where=/var/lib/systemd/home
+TimeoutIdleSec=3min
+
+[Install]
+WantedBy=multi-user.target
