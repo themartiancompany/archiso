@@ -657,7 +657,7 @@ _make_custom_airootfs() {
     install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
 
     if [[ -d "${profile}/airootfs" ]]; then
-        _build_archiso_hooks
+        _build_archiso_mkinitcpio_conf
         _msg_info "Copying custom airootfs files..."
         cp -af --no-preserve=ownership,mode -- "${profile}/airootfs/." "${pacstrap_dir}"
         # Set ownership and mode for files and directories
@@ -802,15 +802,20 @@ _make_boot_on_iso() {
     _msg_info "Done!"
 }
 
-_build_archiso_hooks() {
-    local _hooks=() _mkinitcpio_conf="${profile}/airootfs/etc/mkinitcpio.conf"
+_build_archiso_mkinitcpio_conf() {
+    local _hooks=() _mkinitcpio_conf="${profile}/airootfs/etc/mkinitcpio.conf" _modules=()
     if [[ "${airootfs_image_type}" == *luks ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _hooks+=("encrypt") 
     fi
     _hooks+=("archiso")
 
+    if [[ "${airootfs_image_type}" == *"ext4"* ]]; then
+        _modules+=("ext4")
+    fi
+
     cp "${_mkinitcpio_conf}" "${work_dir}/mkinitcpio.conf"
-    sed "s|%ARCHISO_HOOKS%|${_hooks[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
+    sed "s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
+         s|%ARCHISO_MODULES%|${_modules[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
 }
 
 _get_dongle_uuid() {
