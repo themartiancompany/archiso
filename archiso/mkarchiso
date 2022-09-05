@@ -1583,7 +1583,7 @@ _prepare_keys_image() {
 # Build persistent filesystem image
 _prepare_persistent_image() {
     local persistent_dir_size persistent_epoch persistent_uuid
-    local _crypttab="${profile}/airootfs/etc/crypttab"
+    local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     persistent_uuid="$(uuidgen --sha1 \
                                --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
@@ -1596,8 +1596,7 @@ _prepare_persistent_image() {
 
     if [ "${persistent_size_kib}" != "" ]; then
         if [[ "${persistent_image_type}" == *luks ]]; then
-${profile}/airootfs/crypttab
-            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_crypttab}" > "${pacstrap_dir}/etc/crypttab"
+            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
