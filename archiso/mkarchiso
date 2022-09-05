@@ -240,6 +240,7 @@ _run_mkext4() {
                        '-E' "lazy_itable_init=0,root_owner=0:0,hash_seed=${ext4_hash_seed}"
                        '-m' '0'
                        '-F'
+                       '-b' 4096
                        '-U' 'clear')
     [[ "${_label}" != "" ]] && mkfs_ext4_options+=('-L' "${_label}")
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
