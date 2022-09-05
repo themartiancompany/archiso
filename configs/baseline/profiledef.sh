@@ -28,4 +28,5 @@ file_permissions=(
   ["/home"]="0:0:711"
   ["/run/archiso/keys"]="0:0:700"
   ["/run/archiso/persistent"]="0:0:711"
+  ["/usr/local/bin/user-setup"]="0:0:755"
 )
