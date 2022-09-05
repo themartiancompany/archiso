@@ -1582,8 +1582,12 @@ _prepare_keys_image() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local persistent_dir_size
-
+    local persistent_dir_size persistent_epoch persistent_uuid
+    local _crypttab="${profile}/airootfs/etc/crypttab"
+    persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    persistent_uuid="$(uuidgen --sha1 \
+                               --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+                               --name "${persistent_epoch}")"
     if [ -d "${profile}/persistent" ]; then
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
@@ -1592,8 +1596,10 @@ _prepare_persistent_image() {
 
     if [ "${persistent_size_kib}" != "" ]; then
         if [[ "${persistent_image_type}" == *luks ]]; then
+${profile}/airootfs/crypttab
+            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
-                persistent_encryption_key="${work_dir}/${iso_label}_PERSISTENT.key"
+                persistent_encryption_key="${work_dir}/persistent.key"
                 dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
                 install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
@@ -1638,28 +1644,40 @@ _sign_netboot_artifacts() {
             -out "${_file}".ipxe.sig
         done
         _msg_info "Done!"
-    }
+}
 
-    _validate_requirements_airootfs_image_type_squashfs() {
-        if ! command -v mksquashfs &> /dev/null; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${airootfs_image_type}': mksquashfs is not available on this host. Install 'squashfs-tools'!" 0
-        fi
-    }
+_validate_requirements_airootfs_image_type_squashfs() {
+    if ! command -v mksquashfs &> /dev/null; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${airootfs_image_type}': mksquashfs is not available on this host. Install 'squashfs-tools'!" 0
+    fi
+}
 
-    _validate_requirements_airootfs_image_type_ext4() {
-        if ! { command -v mkfs.ext4 &> /dev/null && command -v tune2fs &> /dev/null; }; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${airootfs_image_type}': mkfs.ext4 and/or tune2fs is not available on this host. Install 'e2fsprogs'!" 0
-        fi
-    }
+_validate_requirements_airootfs_image_type_ext4() {
+    if ! { command -v mkfs.ext4 &> /dev/null && command -v tune2fs &> /dev/null; }; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${airootfs_image_type}': mkfs.ext4 and/or tune2fs is not available on this host. Install 'e2fsprogs'!" 0
+    fi
+}
 
-    _validate_requirements_airootfs_image_type_ext4+squashfs() {
+_validate_requirements_airootfs_image_type_ext4+squashfs() {
     _validate_requirements_airootfs_image_type_ext4
     _validate_requirements_airootfs_image_type_squashfs
 }
 
-# 
+_validate_requirements_persistent_image_type_ext4() {
+    _validate_requirements_airootfs_image_type_ext4
+}
+
+_validate_requirements_persistent_image_type_ext4+luks() {
+    _validate_requirements_airootfs_image_type_luks
+    _validate_requirements_persistent_image_type_ext4
+    if [ ! -e "${profile}/airootfs/etc/crypttab" ]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${persistent_image_type}' for persistent partition: crypttab not found!" 0
+    fi
+}
+
 _resolve_encryption_key(){
     if [ ! -f "${encryption_key}" ]; then
         if [ "${encryption_key}" = 'auto' ]; then
@@ -1807,6 +1825,18 @@ _validate_requirements_buildmode_iso() {
     if ! command -v awk &> /dev/null; then
         (( validation_error=validation_error+1 ))
         _msg_error "Validating build mode '${_buildmode}': awk is not available on this host. Install 'awk'!" 0
+    fi
+
+    # Check if the profile supports the specified persistent_image_type
+    if typeset -f "_mkpersistent_${persistent_image_type}" &> /dev/null; then
+        if typeset -f "_validate_requirements_persistent_image_type_${persistent_image_type}" &> /dev/null; then
+            "_validate_requirements_persistent_image_type_${persistent_image_type}"
+        else
+            _msg_warning "Function '_validate_requirements_persistent_image_type_${persistent_image_type}' does not exist. Validating the requirements of '${persistent_image_type}' airootfs image type will not be possible."
+        fi
+    else
+        (( validation_error=validation_error+1 ))
+        _msg_error "Unsupported image type for persistent partition: '${persistent_image_type}'" 0
     fi
 }
 

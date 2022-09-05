@@ -1,0 +1,4 @@
+# Configuration for encrypted block devices.
+# See crypttab(5) for details.
+
+  persistent        /dev/disk/by-uuid/%PERSISTENT_UUID%          /etc/keys/persistent.key       x-systemd.device-timeout=3
