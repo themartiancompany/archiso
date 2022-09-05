@@ -1,0 +1,14 @@
+[Unit]
+Description=Home bind mount
+RequiresMountsFor=/run/archiso/persistent
+
+[Mount]
+What=/run/archiso/persistent/home
+Where=/home
+Type=None
+Options=bind,nofail
+DirectoryMode=0711
+TimeoutSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Home partition automount
+
+[Automount]
+Where=/home
+TimeoutIdleSec=3min
+
+[Install]
+WantedBy=multi-user.target
