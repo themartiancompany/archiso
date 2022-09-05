@@ -1606,6 +1606,8 @@ _prepare_persistent_image() {
                 _msg_warning "root file system is not encrypted, you will have to insert a password for persistent partition."
                 persistent_encryption_key=""
             fi
+        else
+            sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once "_mkpersistent_${persistent_image_type}"
     fi
