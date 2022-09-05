@@ -1,0 +1,12 @@
+[Unit]
+Description=Set up an user if not found on the system
+After=systemd-homed.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/homectl create user
+ExecStop=
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
