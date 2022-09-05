@@ -4,7 +4,7 @@ After=systemd-homed.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/homectl create user
+ExecStart=/usr/local/bin/user-setup user
 ExecStop=
 RemainAfterExit=no
 
