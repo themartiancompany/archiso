@@ -1443,6 +1443,26 @@ _validate_common_requirements_bootmode_grub(){
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${bootmode}': grub-mkstandalone is not available on this host. Install 'grub'!" 0
     fi
+
+    # Check if GRUB configuration files exist
+    if [[ ! -d "${profile}/grub" ]]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${bootmode}': The '${profile}/grub' directory is missing!" 0
+    else
+        if [[ ! -e "${profile}/grub/grub.cfg" ]]; then
+            (( validation_error=validation_error+1 ))
+            _msg_error "Validating '${bootmode}': File '${profile}/grub/grub.cfg' not found!" 0
+        fi
+        local conffile
+        for conffile in "${profile}/grub/"*'.cfg'; do
+            if [[ -e "${conffile}" ]]; then
+                break
+            else
+                (( validation_error=validation_error+1 ))
+                _msg_error "Validating '${bootmode}': No configuration file found in '${profile}/grub/'!" 0
+            fi
+        done
+    fi
 }
 
 _validate_common_requirements_bootmode_uefi(){
@@ -1455,6 +1475,29 @@ _validate_common_requirements_bootmode_uefi(){
     if ! { command -v mmd &> /dev/null && command -v mcopy &> /dev/null; }; then
         _msg_error "Validating '${bootmode}': mmd and/or mcopy are not available on this host. Install 'mtools'!" 0
     fi
+}
+
+_validate_requirements_bootmode_bios.grub.mbr() {
+    # bios.syslinux.mbr requires bios.grub.eltorito
+    # actually I'm not sure this is true
+    # shellcheck disable=SC2076
+    _validate_common_requirements_bootmode_grub
+    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Using 'bios.grub.mbr' boot mode without 'bios.grub.eltorito' is not supported." 0
+    fi
+
+    # Check if the grub package is in the package list
+    # shellcheck disable=SC2076
+    if [[ ! " ${pkg_list[*]} " =~ ' grub ' ]]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${bootmode}': The 'grub' package is missing from the package list!" 0
+    fi
+}
+
+_validate_requirements_bootmode_bios.grub.eltorito() {
+    # bios.grub.eltorito has the exact same requirements as bios.grub.mbr
+    _validate_requirements_bootmode_bios.grub.mbr
 }
 
 _validate_requirements_bootmode_bios.syslinux.mbr() {
@@ -1568,26 +1611,6 @@ _validate_requirements_bootmode_uefi-x64.grub.esp() {
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
         _msg_error "Validating '${bootmode}': cannot be used with bootmode uefi-x64.systemd-boot.esp!" 0
-    fi
-
-    # Check if GRUB configuration files exist
-    if [[ ! -d "${profile}/grub" ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The '${profile}/grub' directory is missing!" 0
-    else
-        if [[ ! -e "${profile}/grub/grub.cfg" ]]; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': File '${profile}/grub/grub.cfg' not found!" 0
-        fi
-        local conffile
-        for conffile in "${profile}/grub/"*'.cfg'; do
-            if [[ -e "${conffile}" ]]; then
-                break
-            else
-                (( validation_error=validation_error+1 ))
-                _msg_error "Validating '${bootmode}': No configuration file found in '${profile}/grub/'!" 0
-            fi
-        done
     fi
 
     # Check for optional packages

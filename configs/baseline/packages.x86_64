@@ -1,5 +1,6 @@
 base
 cloud-init
+grub
 hyperv
 linux
 mkinitcpio
@@ -8,5 +9,4 @@ open-vm-tools
 openssh
 pv
 qemu-guest-agent
-syslinux
 virtualbox-guest-utils-nox
