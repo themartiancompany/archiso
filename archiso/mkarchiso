@@ -1480,8 +1480,8 @@ _validate_common_requirements_bootmode_uefi(){
 _validate_requirements_bootmode_bios.grub.mbr() {
     # bios.syslinux.mbr requires bios.grub.eltorito
     # actually I'm not sure this is true
-    # shellcheck disable=SC2076
     _validate_common_requirements_bootmode_grub
+    # shellcheck disable=SC2076
     if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
         (( validation_error=validation_error+1 ))
         _msg_error "Using 'bios.grub.mbr' boot mode without 'bios.grub.eltorito' is not supported." 0
