@@ -1977,7 +1977,7 @@ _add_xorrisofs_options_bios.grub.mbr() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
         # SYSLINUX MBR bootstrap code; does not work without "-eltorito-boot syslinux/isolinux.bin"
-        '--grub2-mbr' "${bootable_dir}/EFI/BOOT/boot_hybrid.img"
+        '--grub2-mbr' "${bootable_dir}/EFI/BOOT/BOOTIA32.MBR"
         # When GPT is used, create an additional partition in the MBR (besides 0xEE) for sectors 0–1 (MBR
         # bootstrap code area) and mark it as bootable
         # May allow booting on some systems
@@ -2005,7 +2005,7 @@ _add_xorrisofs_options_bios.grub.eltorito() {
     _xorrisofs_options+=(# El Torito boot image for x86 BIOS
                          '-eltorito-boot' 'EFI/BOOT/BOOTIA32.ELTORITO'
                          # El Torito boot catalog file
-                         '-eltorito-catalog' 'boot.catalog'
+                         '-eltorito-catalog' 'EFI/BOOT/boot.catalog'
                          # Required options to boot with GRUB
                          '-no-emul-boot' '-boot-load-size' '4' '-boot-info-table')
     echo "${_xorrisofs_options[@]}"
