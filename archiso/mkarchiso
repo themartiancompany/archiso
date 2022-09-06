@@ -2121,7 +2121,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     fi
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]]; then
+    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
         # A valid GPT prevents BIOS booting on some systems, instead use an invalid GPT (without a protective MBR).
         # The attached partition will have the EFI system partition type code in MBR, but in the invalid GPT it will
         # have a Microsoft basic partition type code.
@@ -2165,7 +2165,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
           '-no-emul-boot'
     )
     # A valid GPT prevents BIOS booting on some systems, use an invalid GPT instead.
-    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]]; then
+    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
         # If '-isohybrid-gpt-basdat' is specified before '-e', then the appended EFI system partition will have the
         # EFI system partition type ID/GUID in both MBR and GPT. If '-isohybrid-gpt-basdat' is specified after '-e',
         # the appended EFI system partition will have the Microsoft basic data type GUID in GPT.
@@ -2216,7 +2216,7 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
     fi
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]]; then
+    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
         # A valid GPT prevents BIOS booting on some systems, instead use an invalid GPT (without a protective MBR).
         # The attached partition will have the EFI system partition type code in MBR, but in the invalid GPT it will
         # have a Microsoft basic partition type code.
@@ -2261,7 +2261,7 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
           '-no-emul-boot'
         )
     # A valid GPT prevents BIOS booting on some systems, use an invalid GPT instead.
-    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]]; then
+    if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
         # If '-isohybrid-gpt-basdat' is specified before '-e', then the appended EFI system partition will have the
         # EFI system partition type ID/GUID in both MBR and GPT. If '-isohybrid-gpt-basdat' is specified after '-e',
         # the appended EFI system partition will have the Microsoft basic data type GUID in GPT.
