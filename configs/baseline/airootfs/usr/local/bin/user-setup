@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 
-_homectl="/usr/bin/homectl"
 
 _user_setup(){
   local _user=${1}
   local _does_exist
-  _does_exist="$(${_homectl} list | awk '{print $1}' | grep -q "\b${_user}\b")"
+  _does_exist="$(/usr/bin/homectl list | awk '{print $1}' | grep -q "\b${_user}\b")"
 
   if ! "${_does_exist}"; then
-    "${_homectl}" create "${_user}"
+    /usr/bin/homectl create "${_user}"
   fi
 }
 
