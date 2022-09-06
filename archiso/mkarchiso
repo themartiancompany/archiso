@@ -864,7 +864,7 @@ _make_bootmode_bios.grub.mbr() {
     bootable_dir="${1}"
     bootable="${2}"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
-    install -d -m 0755 -- "${bootable_dir}/grub"
+    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
     _run_once _make_common_bootmode_grub_cfg
 
     grub-mkstandalone -O i386-pc \
@@ -877,7 +877,7 @@ _make_bootmode_bios.grub.mbr() {
                       --compress=xz \
                       -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
 
-    install -D -m 0644 "${work_dir}/BOOTIA32.MBR" "${bootable_dir}/grub"
+    install -D -m 0644 "${work_dir}/BOOTIA32.MBR" "${bootable_dir}/EFI/BOOT"
 
     if [[ "${bootable}" == "iso" ]]; then
         _run_once _make_boot_on_iso9660
@@ -900,8 +900,8 @@ _make_bootmode_bios.grub.mbr_dongle() {
 _make_bootmode_bios.grub.eltorito() {
     local bootable_dir="${1}"
     _msg_info "Setting up GRUB for BIOS booting from an optical disc..."
-    install -d -m 0755 -- "${bootable_dir}/grub"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" "${bootable_dir}/grub/"
+    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
+    install -m 0644 -- "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" "${bootable_dir}/EFI/BOOT/"
     _run_once _make_common_bootmode_grub_cfg
 
     grub-mkstandalone -O i386-pc-eltorito \
@@ -914,7 +914,7 @@ _make_bootmode_bios.grub.eltorito() {
                       --compress=xz \
                       -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
 
-    install -m 0644 -- "${work_dir}/BOOTIA32.ELTORITO" "${bootable_dir}/grub"
+    install -m 0644 -- "${work_dir}/BOOTIA32.ELTORITO" "${bootable_dir}/EFI/BOOT"
 
     if [[ "${bootable}" == "iso" ]]; then
         _run_once _make_boot_on_iso9660
@@ -1144,7 +1144,6 @@ _make_common_bootmode_grub_copy_to_isofs() {
         files_to_copy+=("${profile}/grub/"!(*.cfg))
     fi
     install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/EFI/BOOT/"
-    install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/grub"
 }
 
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
@@ -1976,7 +1975,7 @@ _add_xorrisofs_options_bios.grub.mbr() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
         # SYSLINUX MBR bootstrap code; does not work without "-eltorito-boot syslinux/isolinux.bin"
-        '--grub2-mbr' "${bootable_dir}/grub/boot_hybrid.img"
+        '--grub2-mbr' "${bootable_dir}/EFI/BOOT/boot_hybrid.img"
         # When GPT is used, create an additional partition in the MBR (besides 0xEE) for sectors 0–1 (MBR
         # bootstrap code area) and mark it as bootable
         # May allow booting on some systems
@@ -2002,9 +2001,9 @@ _add_xorrisofs_options_bios.grub.mbr_dongle() {
 _add_xorrisofs_options_bios.grub.eltorito() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(# El Torito boot image for x86 BIOS
-                         '-eltorito-boot' 'grub/BOOTIA32.ELTORITO'
+                         '-eltorito-boot' 'EFI/BOOT/BOOTIA32.ELTORITO'
                          # El Torito boot catalog file
-                         # '-eltorito-catalog' 'syslinux/boot.cat'
+                         '-eltorito-catalog' 'boot.catalog'
                          # Required options to boot with GRUB
                          '-no-emul-boot' '-boot-load-size' '4' '-boot-info-table')
     echo "${_xorrisofs_options[@]}"
