@@ -875,7 +875,7 @@ _make_bootmode_bios.grub.mbr() {
                       --install-modules="$(_get_grubmodules "bios")" \
                       --disable-shim-lock \
                       --compress=xz \
-                      -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${profile}/grub/grub.cfg"
+                      -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg"
 
     install -D -m 0644 "${work_dir}/BOOTIA32.MBR" "${bootable_dir}/EFI/BOOT"
 
@@ -912,7 +912,7 @@ _make_bootmode_bios.grub.eltorito() {
                       --install-modules="$(_get_grubmodules "bios")" \
                       --disable-shim-lock \
                       --compress=xz \
-                      -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${profile}/grub/grub.cfg"
+                      -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg"
 
     install -m 0644 -- "${work_dir}/BOOTIA32.ELTORITO" "${bootable_dir}/EFI/BOOT"
 
