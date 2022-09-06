@@ -1149,13 +1149,13 @@ _make_common_bootmode_grub_copy_to_isofs() {
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
 _get_grubmodules(){
     local _mode="${1}"
-    _modules=(at_keyboard boot cat chain configfile cryptodisk echo ext2 fat
+    _modules=(at_keyboard biosdisk boot chain configfile cryptodisk ext2 fat
               iso9660 keylayouts linux loadenv luks minicmd normal part_apple
-              part_gpt part_msdos read regexp search search_fs_file
+              part_gpt part_msdos read search
               search_fs_uuid usb)
     if [ "${_mode}" != "bios" ]; then
-        _modules+=(all_video btrfs efifwsetup f2fs font gfxmenu gfxterm gzio halt
-                   hfsplus jpeg loopback lsefi lsefimmap reboot png search_label
+        _modules+=(all_video btrfs cat echo efifwsetup f2fs font gfxmenu gfxterm gzio halt
+                   hfsplus jpeg loopback lsefi lsefimmap reboot png regexp search_fs_file search_label
                    serial sleep tpm usbserial_common usbserial_ftdi usbserial_pl2303
                    usbserial_usbdebug video xfs zstd)
     fi
