@@ -1144,6 +1144,7 @@ _make_common_bootmode_grub_copy_to_isofs() {
         files_to_copy+=("${profile}/grub/"!(*.cfg))
     fi
     install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/EFI/BOOT/"
+    install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/grub"
 }
 
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
