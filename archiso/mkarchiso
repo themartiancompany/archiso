@@ -875,7 +875,7 @@ _make_bootmode_bios.grub.mbr() {
                       --install-modules="$(_get_grubmodules "bios")" \
                       --disable-shim-lock \
                       --compress=xz \
-                      -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
+                      -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${profile}/grub/grub.cfg"
 
     install -D -m 0644 "${work_dir}/BOOTIA32.MBR" "${bootable_dir}/EFI/BOOT"
 
@@ -912,7 +912,7 @@ _make_bootmode_bios.grub.eltorito() {
                       --install-modules="$(_get_grubmodules "bios")" \
                       --disable-shim-lock \
                       --compress=xz \
-                      -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
+                      -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${profile}/grub/grub.cfg"
 
     install -m 0644 -- "${work_dir}/BOOTIA32.ELTORITO" "${bootable_dir}/EFI/BOOT"
 
@@ -1153,7 +1153,7 @@ _get_grubmodules(){
               iso9660 keylayouts linux loadenv luks minicmd normal part_apple
               part_gpt part_msdos read regexp search search_fs_file
               search_fs_uuid usb)
-    if [ "${_mode}" == "efi" ]; then
+    if [ "${_mode}" != "bios" ]; then
         _modules+=(all_video btrfs efifwsetup f2fs font gfxmenu gfxterm gzio halt
                    hfsplus jpeg loopback lsefi lsefimmap reboot png search_label
                    serial sleep tpm usbserial_common usbserial_ftdi usbserial_pl2303
