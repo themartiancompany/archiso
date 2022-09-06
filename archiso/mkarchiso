@@ -1546,8 +1546,8 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
 }
 
 _validate_requirements_bootmode_uefi-ia32.grub.esp() {
-    # shellcheck disable=SC2076
     _validate_common_requirements_bootmode_grub
+    # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
         _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
     elif [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
