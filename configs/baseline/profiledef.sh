@@ -8,8 +8,8 @@ iso_application="Arch Linux baseline"
 iso_version="$(date +%Y.%m.%d)"
 install_dir="arch"
 buildmodes=('iso' 'dongle')
-bootmodes=('bios.syslinux.mbr'
-           'bios.syslinux.eltorito'
+bootmodes=('bios.grub.mbr'
+           'bios.grub.eltorito'
 	   'uefi-ia32.grub.esp'
            'uefi-ia32.grub.eltorito'
            'uefi-x64.systemd-boot.esp'
