@@ -1170,7 +1170,7 @@ _make_bootmode_uefi-ia32.grub.esp() {
 
     # Create EFI binary
     grub-mkstandalone -O i386-efi \
-                      --modules="$(_get_grubmodules)" \
+                      --modules="$(_get_grubmodules "efi")" \
                       --locales="en@quot" \
                       --themes="" \
                       --sbat=/usr/share/grub/sbat.csv \
@@ -1258,7 +1258,7 @@ _make_bootmode_uefi-x64.grub.esp() {
 
     # Create EFI binary
     grub-mkstandalone -O x86_64-efi \
-                      --modules="$(_get_grubmodules)" \
+                      --modules="$(_get_grubmodules "efi")" \
                       --locales="en@quot" \
                       --themes="" \
                       --sbat=/usr/share/grub/sbat.csv \
