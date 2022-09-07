@@ -298,7 +298,9 @@ _run_mkluks() {
         '--integrity' 'hmac-sha512' \
         '--sector-size' '4096' \
         '--key-size' '512' \
-        '--pbkdf-memory' 256)
+        '--pbkdf' 'pbkdf2')
+        # switch to argon2i as soon as GRUB merges support
+        #_format_opts+=('--pbkdf-memory' 256)
 
     if [ "${_writable}" != "true" ]; then
         _msg_info "Integrity journal disabled"
