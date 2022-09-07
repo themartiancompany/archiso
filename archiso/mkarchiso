@@ -1096,7 +1096,7 @@ _get_bootable_uuid() {
 # Fill a bootloader configuration template and copy the result in a file
 _build_bootloader_config() {
     local _template="${1}"
-    local _boot_type="${2}"
+    # local _boot_type="${2}"
     sed "s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
          s|%ARCH%|${arch}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
