@@ -828,6 +828,11 @@ _get_archiso_uuid() {
     echo "$(_epoch_to_uuid "${SOURCE_DATE_EPOCH}")"
 }
 
+_get_persistent_uuid() {
+    #shellcheck disable=SC2005
+    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 3 * 1415)))"
+}
+
 # Produce kernel parameters.
 _get_kernel_params() {
     local _kparams=()
