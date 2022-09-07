@@ -280,6 +280,7 @@ _run_mkluks() {
     local _epoch="${4}"
     local _label="${5}"
     local _writable="${6}"
+    local _grub="${7}"
     local _activation_opts=() _format_opts=() _key_msg="" _mapper
     local _cryptsetup_opts=('--type' 'luks2')
     _mapper=$(basename "${_image_path}")".map"
@@ -295,12 +296,17 @@ _run_mkluks() {
 
     _activation_opts+=("${_cryptsetup_opts[@]}")
     _format_opts+=("${_cryptsetup_opts[@]}" \
-        '--integrity' 'hmac-sha512' \
         '--sector-size' '4096' \
-        '--key-size' '512' \
-        '--pbkdf' 'pbkdf2')
-        # switch to argon2i as soon as GRUB merges support
-        #_format_opts+=('--pbkdf-memory' 256)
+        '--key-size' '512')
+
+    # Remove as soon as gcrypt adds support for argon2i
+    # and GRUB for the dm-integrity layer
+    if [ "${_grub}" == "true" ]; then
+        _format_opts+=('--pbkdf' 'pbkdf2')
+    else
+        _format_opts+=('--pbkdf-memory' 256
+                       '--integrity' 'hmac-sha512')
+    fi
 
     if [ "${_writable}" != "true" ]; then
         _msg_info "Integrity journal disabled"
@@ -506,6 +512,7 @@ _mkpersistent_common() {
     rm -f -- "${image_path}"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     writable="true"
+    grub="true"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -524,7 +531,7 @@ _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
-                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}"
+                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}" "${grub}"
     _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
                 "${persistent_epoch}" "persistent" "${writable}"
     dd if="${persistent_dir}.img" of="${image_device}"
