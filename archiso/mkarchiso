@@ -842,6 +842,11 @@ _get_persistent_uuid() {
     echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 3 * 1415)))"
 }
 
+_get_dongle_persistent_uuid() {
+    #shellcheck disable=SC2005
+    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415)))"
+}
+
 # Produce kernel parameters.
 _get_kernel_params() {
     local _kparams=()
@@ -1093,6 +1098,26 @@ _epoch_to_uuid() {
     echo "${_uuid}"
 }
 
+_get_device_select_cmdline() {
+    local _uuid
+    # _uuid="$(_get_archiso_uuid)"
+    # if [[ "${airootfs_image_type}" == *luks ]]; then # || [[ "${buildmode}" = 'dongle' ]]; then
+    #     
+    # fi
+    # if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    #     _uuid=$(_get_dongle_uuid)
+    # fi
+    # 
+    # echo "${_uuid}"
+    _uuid="$(_get_bootable_uuid)"
+    if [[ "${persistent_image_type}" == *luks ]]; then
+        _get_persistent_uuid
+        echo "cryptomount -u "
+    else
+        echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
+    fi
+}
+
 _get_bootable_uuid() {
     local _uuid
     _uuid="$(_get_archiso_uuid)"
@@ -1107,6 +1132,7 @@ _build_bootloader_config() {
     local _template="${1}"
     # local _boot_type="${2}"
     sed "s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
+         s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
          s|%ARCH%|${arch}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g" \
@@ -1700,7 +1726,7 @@ _prepare_persistent_image() {
     fi
 
     if [ "${persistent_size_kib}" != "" ]; then
-        if [[ "${persistent_image_type}" == *luks ]]; then
+        if [[ "${persistent_image_type}" == *"luks" ]]; then
             sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
@@ -1708,7 +1734,7 @@ _prepare_persistent_image() {
                 install -d -m700 "${pacstrap_dir}/etc/keys"
                 install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
             else
-                _msg_warning "root file system is not encrypted, you will have to insert a password for persistent partition."
+                _msg_warning "Rootfs encryption disabled, you will have to insert a password for the boot partition."
                 persistent_encryption_key=""
             fi
         else
@@ -1773,6 +1799,7 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 
 _validate_requirements_persistent_image_type_ext4() {
     _validate_requirements_airootfs_image_type_ext4
+    _msg_
 }
 
 _validate_requirements_persistent_image_type_ext4+luks() {
@@ -1828,6 +1855,7 @@ _validate_requirements_airootfs_image_type_erofs+luks() {
 }
 
 _validate_common_requirements_buildmode_all() {
+    local _msg=()
     if ! command -v pacman &> /dev/null; then
         (( validation_error=validation_error+1 ))
         _msg_error "Validating build mode '${_buildmode}': pacman is not available on this host. Install 'pacman'!" 0
@@ -1840,8 +1868,11 @@ _validate_common_requirements_buildmode_all() {
         (( validation_error=validation_error+1 ))
         _msg_error "Validating build mode '${_buildmode}': gzip is not available on this host. Install 'gzip'!" 0
     fi
-    if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _msg_warning "Validating build mode '${_buildmode}': 'dongle' build mode not selected, the resulting image will be vulnerable to 'evil maids'."
+    if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]] && [[ "${persistent_image_type}" != *"luks" ]]; then
+        _msg=("Validating build mode '${_buildmode}':"
+              "'dongle' build mode not selected; persistent partition encryption disabled."
+              "Be sure to use the resulting image on a write-once device to not be vulnerable to 'evil maids'.")
+        _msg_warning "${_msg[*]}"
     fi
 }
 
@@ -1872,6 +1903,7 @@ _validate_requirements_buildmode_bootstrap() {
 _validate_common_requirements_buildmode_iso_netboot() {
     local bootmode
     local pkg_list_from_file=()
+    local _msg=()
 
     # Check if the package list file exists and read packages from it
     if [[ -e "${packages}" ]]; then
@@ -1891,7 +1923,9 @@ _validate_common_requirements_buildmode_iso_netboot() {
         if typeset -f "_validate_requirements_airootfs_image_type_${airootfs_image_type}" &> /dev/null; then
             "_validate_requirements_airootfs_image_type_${airootfs_image_type}"
         else
-            _msg_warning "Function '_validate_requirements_airootfs_image_type_${airootfs_image_type}' does not exist. Validating the requirements of '${airootfs_image_type}' airootfs image type will not be possible."
+            _msg=("Function '_validate_requirements_airootfs_image_type_${airootfs_image_type}' does not exist."
+                  "Validating the requirements of '${airootfs_image_type}' airootfs image type will not be possible.")
+            _msg_warning "${_msg[*]}"
         fi
     else
         (( validation_error=validation_error+1 ))
@@ -1908,6 +1942,7 @@ _validate_requirements_buildmode_dongle() {
 }
 
 _validate_requirements_buildmode_iso() {
+    local _msg=()
     _validate_common_requirements_buildmode_iso_netboot
     _validate_common_requirements_buildmode_all
     # Check if the specified bootmodes are supported
@@ -1920,7 +1955,9 @@ _validate_requirements_buildmode_iso() {
             if typeset -f "_validate_requirements_bootmode_${bootmode}" &> /dev/null; then
                 "_validate_requirements_bootmode_${bootmode}"
             else
-                _msg_warning "Function '_validate_requirements_bootmode_${bootmode}' does not exist. Validating the requirements of '${bootmode}' boot mode will not be possible."
+                _msg=("Function '_validate_requirements_bootmode_${bootmode}' does not exist."
+                      "Validating the requirements of '${bootmode}' boot mode will not be possible.")
+                _msg_warning "${_msg[*]}"
             fi
         else
             (( validation_error=validation_error+1 ))
@@ -1938,7 +1975,9 @@ _validate_requirements_buildmode_iso() {
         if typeset -f "_validate_requirements_persistent_image_type_${persistent_image_type}" &> /dev/null; then
             "_validate_requirements_persistent_image_type_${persistent_image_type}"
         else
-            _msg_warning "Function '_validate_requirements_persistent_image_type_${persistent_image_type}' does not exist. Validating the requirements of '${persistent_image_type}' airootfs image type will not be possible."
+            _msg=("Function '_validate_requirements_persistent_image_type_${persistent_image_type}' does not exist."
+                  "Validating the requirements of '${persistent_image_type}' airootfs image type will not be possible.")
+            _msg_warning "${_msg[*]}"
         fi
     else
         (( validation_error=validation_error+1 ))
@@ -2459,7 +2498,7 @@ _read_profile() {
 
 # Validate set options
 _validate_options() {
-    local validation_error=0 _buildmode
+    local validation_error=0 _buildmode _msg=()
 
     _msg_info "Validating options..."
 
@@ -2475,7 +2514,9 @@ _validate_options() {
             if typeset -f "_validate_requirements_buildmode_${_buildmode}" &> /dev/null; then
                 "_validate_requirements_buildmode_${_buildmode}"
             else
-                _msg_warning "Function '_validate_requirements_buildmode_${_buildmode}' does not exist. Validating the requirements of '${_buildmode}' build mode will not be possible."
+                msg=("Function '_validate_requirements_buildmode_${_buildmode}' does not exist."
+                     "Validating the requirements of '${_buildmode}' build mode will not be possible.")
+                _msg_warning "${_msg[*]}"
             fi
         else
             (( validation_error=validation_error+1 ))
