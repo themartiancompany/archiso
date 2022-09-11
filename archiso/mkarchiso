@@ -62,6 +62,7 @@ encryption_key=""
 persistent_size_kib=""
 persistent_image_type=""
 persistentimg=""
+donglepersistentimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -528,6 +529,41 @@ _mkpersistent_ext4() {
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
+    _mkpersistent_common
+    persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
+                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}" "${grub}"
+    _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
+                "${persistent_epoch}" "persistent" "${writable}"
+    dd if="${persistent_dir}.img" of="${image_device}"
+    sync
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+    rm -- "${persistent_dir}.img"
+}
+
+# Steps shared by _mkdonglepersistent+fs_type functions
+_mkdonglepersistent_common() {
+    image_path="${donglepersistentimg}"
+    rm -f -- "${image_path}"
+    persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    writable="true"
+    grub="true"
+}
+
+# Create an ext4 image to be used as the persistent ISO partition.
+_mkdonglepersistent_ext4() {
+    _mkpersistent_common
+    persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+    _run_mkext4 "${persistent_dir}" "${persistent_size_kib}" \
+                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}"
+    mv "${persistent_dir}.img" "${image_path}"
+    sync
+    _msg_info "Done!"
+}
+
+# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
+_mkdonglepersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
@@ -1111,8 +1147,11 @@ _get_device_select_cmdline() {
     # echo "${_uuid}"
     _uuid="$(_get_bootable_uuid)"
     if [[ "${persistent_image_type}" == *luks ]]; then
-        _get_persistent_uuid
-        echo "cryptomount -u "
+        persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+        persistent_uuid="$(uuidgen --sha1 \
+                                   --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+                                   --name "${persistent_epoch}" | sed "s|-||g")"
+        echo "cryptomount -u ${persistent_uuid}"
     else
         echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
     fi
@@ -2600,6 +2639,7 @@ _set_overrides() {
     [[ -n "$dongle_isofs_dir" ]] || dongle_isofs_dir="${work_dir}/dongle_iso"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
     [[ -n "$persistentimg" ]] || persistentimg="${work_dir}/persistent."$(_get_fs_ext "persistent")
+    [[ -n "$donglepersistentimg" ]] || donglepersistentimg="${work_dir}/donglepersistent."$(_get_fs_ext "persistent")
 }
 
 _export_gpg_publickey() {
