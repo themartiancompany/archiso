@@ -1842,7 +1842,7 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 _validate_requirements_persistent_image_type_ext4() {
     local _msg
     _validate_requirements_airootfs_image_type_ext4
-    if [[ ! "${bootmodes[*]}" =~ ' dongle ' ]]; then
+    if [[ ! "${buildmodes[*]}" =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
         _msg_warning "${_msg[*]}"
