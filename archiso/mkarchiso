@@ -1236,7 +1236,7 @@ _make_common_bootmode_grub_copy_to_isofs() {
 _get_grubmodules(){
     local _mode="${1}"
     _modules=(boot chain configfile cryptodisk ext2 fat gcry_rijndael
-              iso9660 keylayouts linux loopback loadenv luks minicmd normal part_apple
+              iso9660 keylayouts linux loopback loadenv luks2 minicmd normal part_apple
               part_gpt part_msdos search search_fs_uuid usb)
     if [ "${_mode}" != "bios" ]; then
         _modules+=(at_keyboard all_video btrfs cat echo efifwsetup f2fs font gfxmenu gfxterm gzio halt
