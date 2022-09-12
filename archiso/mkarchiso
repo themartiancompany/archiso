@@ -1237,12 +1237,12 @@ _get_grubmodules(){
     local _mode="${1}"
     _modules=(at_keyboard boot bufio cat echo chain configfile cryptodisk disk diskfilter ext2 fat gcry_crc gcry_rijndael
               gzio iso9660 keylayouts linux loopback loadenv luks2 lzopio minicmd normal part_apple
-              part_gpt part_msdos png read search search_fs_uuid trig usb zstd)
+              part_gpt part_msdos read search search_fs_uuid trig usb)
     if [ "${_mode}" != "bios" ]; then
         _modules+=(all_video btrfs efifwsetup f2fs font gfxmenu gfxterm halt
-                   hfsplus jpeg lsefi lsefimmap reboot regexp search_fs_file search_label
+                   hfsplus jpeg lsefi lsefimmap png reboot regexp search_fs_file search_label
                    serial sleep tpm usbserial_common usbserial_ftdi usbserial_pl2303
-                   usbserial_usbdebug video xfs)
+                   usbserial_usbdebug video xfs zstd)
     elif [ "${_mode}" == "bios" ] ; then
         _modules+=(biosdisk)
     fi
