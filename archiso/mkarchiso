@@ -884,7 +884,7 @@ _get_archiso_uuid() {
 }
 
 _get_cryptomount_uuid() {
-    if [[ "${bootmodes[*]}" =~ ' dongle ' ]]; then
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))"
     else
         _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
@@ -1780,7 +1780,7 @@ _prepare_persistent_image() {
             sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once "_mkpersistent_${persistent_image_type}"
-        if [[ "${buildmodes[*]}" =~ ' dongle ' ]]; then
+        if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
     fi
@@ -1842,7 +1842,7 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 _validate_requirements_persistent_image_type_ext4() {
     local _msg
     _validate_requirements_airootfs_image_type_ext4
-    if [[ ! "${buildmodes[*]}" =~ ' dongle ' ]]; then
+    if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
         _msg_warning "${_msg[*]}"
