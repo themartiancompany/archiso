@@ -514,11 +514,11 @@ _mkpersistent_common() {
     rm -f -- "${image_path}"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     writable="true"
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        grub="false"
-    else
-        grub="true"
-    fi
+    # if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    #     grub="false"
+    # else
+    #     grub="true"
+    # fi
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -554,7 +554,7 @@ _mkdonglepersistent_common() {
     rm -f -- "${image_path}"
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     writable="true"
-    grub="true"
+    # grub="true"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -1167,9 +1167,15 @@ _get_bootable_uuid() {
 # Fill a bootloader configuration template and copy the result in a file
 _build_bootloader_config() {
     local _template="${1}"
+    local _boot_disk
+    if [[ "${persistent_image_type}" == *luks ]]; then
+        _boot_disk="(crypto0)"
+    else
+        _boot_disk=""
+    fi
     sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
          s|%ARCH%|${arch}|g;
-         s|%INSTALL_DIR%|${install_dir}|g;
+         s|%INSTALL_DIR%|${_boot_disk}/${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g" \
         "${_template}"
 }
