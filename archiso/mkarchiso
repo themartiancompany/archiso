@@ -61,6 +61,7 @@ efiboot_files=()
 encryption_key=""
 persistent_size_kib=""
 persistent_image_type=""
+persistentdongle_isofs_dir=""
 persistentimg=""
 donglepersistentimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
@@ -510,10 +511,15 @@ _mkkeys_erofs+luks() {
 # Steps shared by _mkpersistent+fs_type functions
 _mkpersistent_common() {
     image_path="${persistentimg}"
+    image_label="${iso_label}_PERSISTENT"
     rm -f -- "${image_path}"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     writable="true"
-    grub="true"
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        grub="false"
+    else
+        grub="true"
+    fi
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -521,7 +527,7 @@ _mkpersistent_ext4() {
     _mkpersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
     _run_mkext4 "${persistent_dir}" "${persistent_size_kib}" \
-                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}"
+                "${persistent_epoch}" "${image_label}" "${writable}"
     mv "${persistent_dir}.img" "${image_path}"
     sync
     _msg_info "Done!"
@@ -532,7 +538,7 @@ _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
-                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}" "${grub}"
+                "${persistent_epoch}" "${image_label}" "${writable}" "${grub}"
     _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
                 "${persistent_epoch}" "persistent" "${writable}"
     dd if="${persistent_dir}.img" of="${image_device}"
@@ -545,18 +551,19 @@ _mkpersistent_ext4+luks() {
 # Steps shared by _mkdonglepersistent+fs_type functions
 _mkdonglepersistent_common() {
     image_path="${donglepersistentimg}"
+    image_label="${iso_label}_DONGLE_PERSISTENT"
     rm -f -- "${image_path}"
-    persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     writable="true"
     grub="true"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4() {
-    _mkpersistent_common
+    _mkdonglepersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
-    _run_mkext4 "${persistent_dir}" "${persistent_size_kib}" \
-                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}"
+    _run_mkext4 "${dongle_persistent_dir}" "${persistent_size_kib}" \
+                "${dongle_persistent_epoch}" "${image_label}" "${writable}"
     mv "${persistent_dir}.img" "${image_path}"
     sync
     _msg_info "Done!"
@@ -567,10 +574,10 @@ _mkdonglepersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
-                "${persistent_epoch}" "${iso_label}_PERSISTENT" "${writable}" "${grub}"
-    _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
-                "${persistent_epoch}" "persistent" "${writable}"
-    dd if="${persistent_dir}.img" of="${image_device}"
+                "${dongle_persistent_epoch}" "${image_label}" "${writable}" "${grub}"
+    _run_mkext4 "${dongle_persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
+                "${dongle_persistent_epoch}" "persistent" "${writable}"
+    dd if="${dongle_persistent_dir}.img" of="${image_device}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -814,8 +821,12 @@ _make_boot_on_iso9660() {
 
 # Copy kernel and initramfs to dongle ISO 9660
 _make_boot_on_dongle() {
-    dongle_isofs_dir="${work_dir}/dongle_iso"
-    _make_boot_on_iso "${dongle_isofs_dir}"
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        dongle_boot_dir="${work_dir}/dongle_persistent"
+    else
+        dongle_boot_dir="${work_dir}/dongle_iso"
+    fi
+    _make_boot_on_iso "${dongle_boot_dir}"
 }
 
 # Copy kernel and initramfs to ISO 9660
@@ -873,14 +884,16 @@ _get_archiso_uuid() {
     echo "$(_epoch_to_uuid "${SOURCE_DATE_EPOCH}")"
 }
 
-_get_persistent_uuid() {
-    #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 3 * 1415)))"
-}
-
-_get_dongle_persistent_uuid() {
-    #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415)))"
+_get_cryptomount_uuid() {
+    if [[ "${bootmodes[*]}" =~ ' dongle ' ]]; then
+        _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))"
+    else
+        _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    fi
+    _uuid="$(uuidgen --sha1 \
+                     --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+                     --name "${_epoch}" | sed "s|-||g")"
+    echo "cryptomount -u ${_uuid}"
 }
 
 # Produce kernel parameters.
@@ -1135,23 +1148,8 @@ _epoch_to_uuid() {
 }
 
 _get_device_select_cmdline() {
-    local _uuid
-    # _uuid="$(_get_archiso_uuid)"
-    # if [[ "${airootfs_image_type}" == *luks ]]; then # || [[ "${buildmode}" = 'dongle' ]]; then
-    #     
-    # fi
-    # if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-    #     _uuid=$(_get_dongle_uuid)
-    # fi
-    # 
-    # echo "${_uuid}"
-    _uuid="$(_get_bootable_uuid)"
     if [[ "${persistent_image_type}" == *luks ]]; then
-        persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
-        persistent_uuid="$(uuidgen --sha1 \
-                                   --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-                                   --name "${persistent_epoch}" | sed "s|-||g")"
-        echo "cryptomount -u ${persistent_uuid}"
+        echo "$(_get_cryptomount_uuid)"
     else
         echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
     fi
@@ -1169,9 +1167,7 @@ _get_bootable_uuid() {
 # Fill a bootloader configuration template and copy the result in a file
 _build_bootloader_config() {
     local _template="${1}"
-    # local _boot_type="${2}"
-    sed "s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
-         s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
+    sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
          s|%ARCH%|${arch}|g;
          s|%INSTALL_DIR%|${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g" \
@@ -1732,6 +1728,7 @@ _prepare_airootfs_image() {
         _mksignature "$(_get_airootfs_img)"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             dongle_isofs_dir="${work_dir}/dongle_iso"
+            dongle_persistent_dir="${work_dir}/dongle_persistent"
             _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}"
             install -d -m711 "${_sig_dir}"
             cp "$(_get_airootfs_img).sig" "${_sig_dir}"
@@ -1769,7 +1766,7 @@ _prepare_persistent_image() {
             sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
-                dd if=/dev/random bs=512 count=1 of="${persistent_encryption_key}"
+                _gen_key "${persistent_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
                 install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
             else
@@ -1780,6 +1777,9 @@ _prepare_persistent_image() {
             sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once "_mkpersistent_${persistent_image_type}"
+        if [[ "${buildmodes}" =~ ' dongle ' ]]; then
+            _run_once "_mkdonglepersistent_${persistent_image_type}"
+        fi
     fi
 }
 
@@ -1850,12 +1850,17 @@ _validate_requirements_persistent_image_type_ext4+luks() {
     fi
 }
 
+_gen_key() {
+    local _out="${1}"
+    dd if=/dev/random bs=512 count=1 of="${_out}" > /dev/null 2>&1
+}
+
 _resolve_encryption_key(){
     if [ ! -f "${encryption_key}" ]; then
         if [ "${encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            dd if=/dev/random bs=512 count=1 of="${encryption_key}"
+            _gen_key "${encryption_key}"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
@@ -1885,7 +1890,7 @@ _validate_requirements_airootfs_image_type_luks() {
         (( validation_error=validation_error+1 ))
         _msg_error "Validating '${airootfs_image_type}': cryptsetup is not available on this host. Install 'cryptsetup'!" 0
     fi
-    [[ -n "$encryption_key" ]] && _resolve_encryption_key
+    [[ -n "$encryption_key" ]] && _resolve_encryption_key 
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -2053,13 +2058,18 @@ _validate_requirements_buildmode_netboot() {
 }
 
 _add_xorrisofs_options_persistent_partition() {
-    local _xorrisofs_options=("$@")
+    local _img _xorrisofs_options=("$@")
     if [[ "${persistent_image_type}" == *"luks" ]]; then
         persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     else
         persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
     fi
-    _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${persistentimg}")
+    if [[ " ${buildmode} " == "dongle" ]]; then
+        _img="${donglepersistentimg}"
+    else
+        _img="${persistentimg}"
+    fi
+    _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -2209,7 +2219,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || _xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
     _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
-    if [ "${persistent_size_kib}" != "" ]; then
+    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _xorrisofs_options=("$(_add_xorrisofs_options_persistent_partition "${_xorrisofs_options[@]}")")
     fi
     # Ensure GPT is used as some systems do not support UEFI booting without it
@@ -2304,7 +2314,7 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || _xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
     _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
-    if [ "${persistent_size_kib}" != "" ]; then
+    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _xorrisofs_options=("$(_add_xorrisofs_options_persistent_partition "${_xorrisofs_options[@]}")")
     fi
     # Ensure GPT is used as some systems do not support UEFI booting without it
@@ -2720,6 +2730,7 @@ _build_dongle_base() {
 
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${dongle_isofs_dir}" ]] || install -d -- "${dongle_isofs_dir}"
+    [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
 
     if [ "${encryption_key}" != "" ]; then
         cp "${encryption_key}" "${keys_dir}/airootfs.key"
@@ -2746,11 +2757,13 @@ _build_iso_base() {
     keys_dir="${work_dir}/keys"
     airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
     persistent_dir="${work_dir}/persistent"
+    dongle_persistent_dir="${work_dir}/dongle_persistent"
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${persistent_dir}" ]] || install -d -- "${persistent_dir}"
+    [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
