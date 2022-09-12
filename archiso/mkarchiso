@@ -580,7 +580,7 @@ _mkdonglepersistent_ext4+luks() {
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
-    rm -- "${persistent_dir}.img"
+    rm -- "${dongle_persistent_dir}.img"
 }
 
 # Create checksum for a given file.
