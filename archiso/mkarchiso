@@ -372,6 +372,8 @@ _mkairootfs_common() {
     image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
     rm -f -- "${image_path}"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
+    writable=false
+    grub=false
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -391,7 +393,7 @@ _mkairootfs_ext4+squashfs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}"
+                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
     _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" \
                 "${SOURCE_DATE_EPOCH}" "airootfs"
     _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
@@ -413,7 +415,7 @@ _mkairootfs_squashfs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}"
+                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
     _run_mksquashfs "${pacstrap_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -432,7 +434,7 @@ _mkairootfs_erofs+luks() {
     _mkairootfs_common
     _mkluks_common
     _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}"
+                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
     _run_mkerofs "${image_device}" "${pacstrap_dir}" "${SOURCE_DATE_EPOCH}"
     sync
     _close_luks_device "${image_device}"
@@ -444,6 +446,8 @@ _mkkeys_common() {
     rm -f -- "${image_path}"
     _mkfs_options=("${keys_image_tool_options[@]}")
     keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
+    writable=false
+    grub=false
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -462,7 +466,7 @@ _mkkeys_ext4+squashfs() {
 _mkkeys_ext4+squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" "" \
-                "${keys_epoch}" "${iso_label}_KEYS"
+                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
     _run_mkext4 "${keys_dir}" "$(_get_internal_size "${keys_size}")" \
                 "${keys_epoch}" "keys"
     _run_mksquashfs "${keys_dir}.img" "${image_device}"
@@ -477,7 +481,7 @@ _mkkeys_ext4+squashfs+luks() {
 _mkkeys_squashfs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${airootfs_size}" "" \
-                "${keys_epoch}" "${iso_label}_KEYS"
+                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
     _run_mksquashfs "${keys_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -501,7 +505,7 @@ _mkkeys_erofs() {
 _mkkeys_erofs+luks() {
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" \
-                "${keys_epoch}" "${iso_label}_KEYS"
+                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
     _run_mkerofs "${image_device}" "${keys_dir}" "${keys_epoch}"
     sync
     _close_luks_device "${image_device}"
@@ -514,11 +518,7 @@ _mkpersistent_common() {
     rm -f -- "${image_path}"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     writable="true"
-    # if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-    #     grub="false"
-    # else
-    #     grub="true"
-    # fi
+    grub="false"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -537,7 +537,7 @@ _mkpersistent_ext4+luks() {
     _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
-                "${persistent_epoch}" "${image_label}" "${writable}"
+                "${persistent_epoch}" "${image_label}" "${writable}" "${grub}"
     _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
                 "${persistent_epoch}" "persistent" "${writable}"
     dd if="${persistent_dir}.img" of="${image_device}"
@@ -554,7 +554,7 @@ _mkdonglepersistent_common() {
     rm -f -- "${image_path}"
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     writable="true"
-    # grub="true"
+    grub="false"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -573,7 +573,7 @@ _mkdonglepersistent_ext4+luks() {
     _mkdonglepersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "" \
-                "${dongle_persistent_epoch}" "${image_label}" "${writable}"
+                "${dongle_persistent_epoch}" "${image_label}" "${writable}" "${grub}"
     _run_mkext4 "${dongle_persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
                 "${dongle_persistent_epoch}" "persistent" "${writable}"
     dd if="${dongle_persistent_dir}.img" of="${image_device}"
