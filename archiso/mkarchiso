@@ -1615,7 +1615,7 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
     if [[ ! " ${pkg_list[*]} " =~ ' memtest86+ ' ]]; then
         _msg=("Validating '${bootmode}': 'memtest86+' is not in the package list."
               "Memory testing will not be available from syslinux.")
-        _msg_info "${_msg}"
+        _msg_info "${_msg[*]}"
     fi
 }
 
@@ -1845,7 +1845,7 @@ _validate_requirements_persistent_image_type_ext4() {
     if [[ ! "${bootmodes[*]}" =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
-        _msg_warning "${_msg}"
+        _msg_warning "${_msg[*]}"
     fi
 }
 
