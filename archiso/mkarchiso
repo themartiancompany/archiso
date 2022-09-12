@@ -1786,6 +1786,7 @@ _prepare_persistent_image() {
         else
             sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
+        _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _run_once "_mkdonglepersistent_${persistent_image_type}"
