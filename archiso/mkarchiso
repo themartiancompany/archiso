@@ -570,7 +570,7 @@ _mkdonglepersistent_ext4() {
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4+luks() {
-    _mkpersistent_common
+    _mkdonglepersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
                 "${dongle_persistent_epoch}" "${image_label}" "${writable}" "${grub}"
@@ -1752,7 +1752,7 @@ _prepare_keys_image() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local persistent_dir_size persistent_epoch persistent_uuid
+    local _msg persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     persistent_uuid="$(uuidgen --sha1 \
@@ -1767,13 +1767,20 @@ _prepare_persistent_image() {
     if [ "${persistent_size_kib}" != "" ]; then
         if [[ "${persistent_image_type}" == *"luks" ]]; then
             sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
-            if [[ "${airootfs_image_type}" == *luks ]] || [[ "${buildmode}" = 'dongle' ]]; then
+            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ "${buildmode}" = 'dongle' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 _gen_key "${persistent_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
                 install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+            elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ "${buildmode}" = 'dongle' ]]; then
+                persistent_encryption_key="${work_dir}/persistent.key"
+                _gen_key "${persistent_encryption_key}"
+                install -d -m700 "${dongle_persistent_dir}/etc/keys"
+                install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
             else
-                _msg_warning "Rootfs encryption disabled, you will have to insert a password for the boot partition."
+                _msg=("Rootfs encryption and dongle buildmode disabled."
+                      "You will be prompted to insert a password for the boot partition.")
+                _msg_warning "${_msg[*]}"
                 persistent_encryption_key=""
             fi
         else
