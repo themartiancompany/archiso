@@ -61,7 +61,6 @@ efiboot_files=()
 encryption_key=""
 persistent_size_kib=""
 persistent_image_type=""
-persistentdongle_isofs_dir=""
 persistentimg=""
 donglepersistentimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
@@ -1148,6 +1147,7 @@ _epoch_to_uuid() {
 }
 
 _get_device_select_cmdline() {
+    #shellcheck disable=SC2005
     if [[ "${persistent_image_type}" == *luks ]]; then
         echo "$(_get_cryptomount_uuid)"
     else
@@ -1777,7 +1777,7 @@ _prepare_persistent_image() {
             sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once "_mkpersistent_${persistent_image_type}"
-        if [[ "${buildmodes}" =~ ' dongle ' ]]; then
+        if [[ "${buildmodes[*]}" =~ ' dongle ' ]]; then
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
     fi
@@ -2064,7 +2064,7 @@ _add_xorrisofs_options_persistent_partition() {
     else
         persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
     fi
-    if [[ " ${buildmode} " == "dongle" ]]; then
+    if [[ "${buildmode}" == "dongle" ]]; then
         _img="${donglepersistentimg}"
     else
         _img="${persistentimg}"
@@ -2563,7 +2563,7 @@ _validate_options() {
             if typeset -f "_validate_requirements_buildmode_${_buildmode}" &> /dev/null; then
                 "_validate_requirements_buildmode_${_buildmode}"
             else
-                msg=("Function '_validate_requirements_buildmode_${_buildmode}' does not exist."
+                _msg=("Function '_validate_requirements_buildmode_${_buildmode}' does not exist."
                      "Validating the requirements of '${_buildmode}' build mode will not be possible.")
                 _msg_warning "${_msg[*]}"
             fi
