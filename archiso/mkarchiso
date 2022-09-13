@@ -893,9 +893,9 @@ _get_cryptomount_uuid() {
     else
         _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     fi
-    echo "$(uuidgen --sha1 \
-                    --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-                    --name "${_epoch}" | sed "s|-||g")"
+    uuidgen --sha1 \
+            --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+            --name "${_epoch}" | sed "s|-||g"
 }
 
 # Produce kernel parameters.
