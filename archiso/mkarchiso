@@ -893,10 +893,9 @@ _get_cryptomount_uuid() {
     else
         _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     fi
-    _uuid="$(uuidgen --sha1 \
-                     --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-                     --name "${_epoch}" | sed "s|-||g")"
-    echo "cryptomount -u ${_uuid}"
+    echo "$(uuidgen --sha1 \
+                    --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+                    --name "${_epoch}" | sed "s|-||g")"
 }
 
 # Produce kernel parameters.
@@ -1153,7 +1152,7 @@ _epoch_to_uuid() {
 _get_device_select_cmdline() {
     #shellcheck disable=SC2005
     if [[ "${persistent_image_type}" == *luks ]]; then
-        echo "$(_get_cryptomount_uuid)"
+        echo "cryptomount -u $(_get_cryptomount_uuid)"
     else
         echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
     fi
@@ -1180,8 +1179,8 @@ _build_bootloader_config() {
     sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
          s|%ARCH%|${arch}|g;
          s|%INSTALL_DIR%|${_boot_disk}/${install_dir}|g;
-         s|%KERNEL_PARAMS%|$(_get_kernel_params)|g" \
-        "${_template}"
+         s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
+         s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g" "${_template}"
 }
 
 # Prepare GRUB configuration files
@@ -1235,13 +1234,14 @@ _make_common_bootmode_grub_copy_to_isofs() {
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
 _get_grubmodules(){
     local _mode="${1}"
-    _modules=(at_keyboard afsplitter boot bufio echo chain configfile cryptodisk disk ext2  
-              gcry_crc gcry_rijndael gcry_sha256 gcry_sha512
-              iso9660 keylayouts linux loadenv loopback luks2 minicmd normal ntfs part_apple
-              part_gpt part_msdos password_pbkdf2 search search_fs_uuid usb)
+    _modules=(afsplitter boot bufio chain configfile cryptodisk disk ext2 gcry_rijndael
+              gcry_sha256 gcry_sha512 halt iso9660 linux loadenv loopback luks2 minicmd
+              normal ntfs part_apple part_gpt part_msdos password_pbkdf2 reboot search
+              search_fs_uuid usb)
     if [ "${_mode}" != "bios" ]; then
-        _modules+=(all_video btrfs cat diskfilter efifwsetup f2fs fat font gcry_crc gfxmenu gfxterm gzio
-                   halt hfsplus jpeg ls lsefi lsefimmap lzopio png reboot read regexp search_fs_file search_label
+        _modules+=(at_keyboard all_video btrfs cat echo diskfilter echo efifwsetup f2fs
+                   fat font gcry_crc gfxmenu gfxterm gzio hfsplus jpeg keylayouts ls
+                   lsefi lsefimmap lzopio png read regexp search_fs_file search_label
                    serial sleep tpm trig usbserial_common usbserial_ftdi usbserial_pl2303
                    usbserial_usbdebug video xfs zstd)
     elif [ "${_mode}" == "bios" ] ; then
@@ -1777,16 +1777,16 @@ _prepare_persistent_image() {
     if [ "${persistent_size_kib}" != "" ]; then
         if [[ "${persistent_image_type}" == *"luks" ]]; then
             sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
-            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ "${buildmode}" = 'dongle' ]]; then
+            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " = ' dongle ' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 _gen_key "${persistent_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
                 install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
-            elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ "${buildmode}" = 'dongle' ]]; then
+            elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " = ' dongle ' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 _gen_key "${persistent_encryption_key}"
                 install -d -m700 "${dongle_persistent_dir}/etc/keys"
-                install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+                install -D -m400 "${persistent_encryption_key}" "${dongle_persistent_dir}/etc/keys"
             else
                 _msg=("Rootfs encryption and dongle buildmode disabled."
                       "You will be prompted to insert a password for the boot partition.")
