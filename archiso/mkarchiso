@@ -1012,7 +1012,7 @@ _make_bootmode_bios.syslinux.mbr() {
     _msg_info "Setting up SYSLINUX for BIOS booting from a disk..."
     install -d -m 0755 -- "${bootable_dir}/syslinux"
     for _cfg in "${profile}/syslinux/"*.cfg; do
-        _build_bootloader_config "${_cfg}" > "${bootable_dir}/syslinux/${_cfg##*/}"
+        _build_bootloader_config "${_cfg}" "syslinux" > "${bootable_dir}/syslinux/${_cfg##*/}"
     done
     if [[ -e "${profile}/syslinux/splash.png" ]]; then
         install -m 0644 -- "${profile}/syslinux/splash.png" "${bootable_dir}/syslinux/"
@@ -1170,8 +1170,9 @@ _get_bootable_uuid() {
 # Fill a bootloader configuration template and copy the result in a file
 _build_bootloader_config() {
     local _template="${1}"
+    local _bootloader="${2}"
     local _boot_disk
-    if [[ "${persistent_image_type}" == *luks ]]; then
+    if [[ "${persistent_image_type}" == *luks ]] && [[ "${_bootloader}" = "grub" ]]; then
         _boot_disk="(crypto0)"
     else
         _boot_disk=""
@@ -1191,7 +1192,7 @@ _make_common_bootmode_grub_cfg(){
 
     # Fill GRUB configuration files
     for _cfg in "${profile}/grub/"*'.cfg'; do
-        _build_bootloader_config "${_cfg}" > "${work_dir}/grub/${_cfg##*/}"
+        _build_bootloader_config "${_cfg}" "grub" > "${work_dir}/grub/${_cfg##*/}"
     done
     # Add all GRUB files to the list of files used to calculate the required FAT image size.
     efiboot_files+=("${work_dir}/grub/"
@@ -1457,7 +1458,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     mmd -D o -i "${efibootimg}" ::/loader ::/loader/entries
     mcopy -D o -i "${efibootimg}" "${profile}/efiboot/loader/loader.conf" ::/loader/
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _build_bootloader_config "${_conf}" | mcopy -D o -i "${efibootimg}" - "::/loader/entries/${_conf##*/}"
+        _build_bootloader_config "${_conf}" "systemd-boot" | mcopy -D o -i "${efibootimg}" - "::/loader/entries/${_conf##*/}"
         done
 
     # shellx64.efi is picked up automatically when on /
@@ -1503,7 +1504,7 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     install -d -m 0755 -- "${bootable_dir}/loader/entries"
     install -m 0644 -- "${profile}/efiboot/loader/loader.conf" "${bootable_dir}/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _build_bootloader_config "${_conf}" > "${bootable_dir}/loader/entries/${_conf##*/}"
+        _build_bootloader_config "${_conf}" "systemd-boot" > "${bootable_dir}/loader/entries/${_conf##*/}"
         done
 
     # edk2-shell based UEFI shell
