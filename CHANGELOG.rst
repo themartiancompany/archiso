@@ -7,14 +7,15 @@ Changelog
 
 Added
 -----
+- New ``mk<image_name>_<image_type>`` functions.
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
 - Insert known needed extra modules in ``mkinitcpio.conf`` if image configuration requires it.
 - Insert known needed keys in ``crypttab`` if image configuration requires it.
-- Add support for ``dongle`` buildmode.
+- Add support for ``dongle`` buildmode to mitigate evil maids class of attacks.
 - Add support for a new ISO partition intended to be "persistent"
   on both ``iso`` (``persistent``) and ``dongle`` (``donglepersistent``).
-- New ``mk<image_name>_<image_type>`` functions.
+    - new ``validate_requirements_<buildmode>`` functions.
 - Add support for GRUB as MBR bootloader.
 - Add support for GRUB booting system from persistent partitions.
 - Added known vulnerabilities warnings.
