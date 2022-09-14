@@ -9,13 +9,15 @@ Added
 -----
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
-  - insert known needed extra modules for the new configurations.
+- Insert known needed extra modules in ``mkinitcpio.conf`` if image configuration requires it.
 - Add support for ``dongle`` buildmode.
-- Add support for a third persistent partition on both ``iso`` and ``dongle``.
+- Add support for a new ISO partition intended to be "persistent"
+  on both ``iso`` (``persistent``) and ``dongle`` (``donglepersistent``).
+- New ``mk<image_name>_<image_type>`` functions.
 - Add support for GRUB as MBR bootloader.
-- Add support for GRUB booting system from both ``iso`` and ``dongle`` persistent partition.
+- Add support for GRUB booting system from persistent partitions.
 - Added known vulnerabilities warnings.
-- Added functions to determine file system type.
+- Added functions to determine chosen file system image type.
 Profiles:
   - Add systemd automounts for persistent partition.
 
@@ -24,6 +26,8 @@ Changed
 - Upgraded storage handling function functions:
   - Set overwrite flag in ``mtools`` commands.
   - Refactor ``run_<fs_type_or_container>`` functions.
+- Upgraded image building functions:
+  - Abstract ``mkairootfs_<image_type>`` as ``mk<image_name>_<image_type>``.
 - Abstract signature and checksum functions.
 - Grouped all bootloader seds in a single function.
 - Profiles:
