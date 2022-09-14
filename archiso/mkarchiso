@@ -403,7 +403,7 @@ _mkimg_ext4+luks() {
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
                 "${_epoch}" "${_name}" "${_writable}"
-    dd if="${_dir}.img" of="${image_device}"  > /dev/null 2>&1
+    dd if="${_dir}.img" of="${image_device}" > /dev/null 2>&1
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -498,10 +498,20 @@ _mkimg_erofs+luks() {
     local _label="${7}"
     local _grub="${8}"
     local _writable="false"
+    local _tmp_img="${work_dir}/tmp.erofs" _tmp_img_size
+    if [[ "${_size_kib}" == "" ]]; then
+        _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
+        _tmp_img_size=$(du -s "${_tmp_img}" | cut -f 1)
+        _size_kib="${_tmp_img_size}"
+    fi
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
     _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
+    if [[ "${_tmp_img_size}" != "" ]]; then
+        dd if="${_tmp_img}" of="${image_device}" > /dev/null 2>&1
+    else
+        _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
+    fi 
     sync
     _close_luks_device "${image_device}"
 }
@@ -562,7 +572,7 @@ _mkairootfs_erofs() {
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkairootfs_erofs+luks() {
-    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_auto_size}" \
                       "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
@@ -614,7 +624,7 @@ _mkkeys_erofs() {
 # Create an EROFS image containing the keys file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkkeys_erofs+luks() {
-    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_auto_size}" \
                       "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
@@ -1838,7 +1848,7 @@ _get_airootfs_img(){
 
 # Build airootfs filesystem image
 _prepare_airootfs_image() {
-    local _sig_dir airootfs_size pacstrap_size
+    local _sig_dir pacstrap_size
 
     pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((pacstrap_size+200000))
