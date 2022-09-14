@@ -30,6 +30,7 @@ Changed
   - Abstract ``mkairootfs_<image_type>`` as ``mk<image_name>_<image_type>``.
 - Abstract signature and checksum functions.
 - Grouped all bootloader seds in a single function.
+- Grouped UEFI requirements.
 - Profiles:
   - Completely switch to GRUB.
   - Reduced bootloader configuration files complexity.
