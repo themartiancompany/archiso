@@ -376,7 +376,7 @@ _mkluks_common() {
             [[ "${_passphrase}" == "${_confirm}" ]] && break
             echo "Passphrases mismatch"
         done
-        echo "${_password}" > "${_out}"
+        echo "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     fi
 }
