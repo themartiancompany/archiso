@@ -364,10 +364,19 @@ _mkluks_common() {
     local _key="${2}"
     local _label="${3}"
     local _out="${work_dir}/${_label}.key"
+    local _confirm _passphrase
     if [ "${_key}" = "" ]; then
-        printf "Insert %s (%s) password: " "${_name}" "${_label}"
-        read -rs password
-        echo "${password}" > "${_out}"
+        while true; do
+            printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
+            read -rs _password
+            echo
+            echo "Confirm: "
+            read -rs _confirm
+            echo
+            [[ "${_passphrase}" == "${_confirm}" ]] && break
+            echo "Passphrases mismatch"
+        done
+        echo "${_password}" > "${_out}"
         _encryption_key="${_out}"
     fi
 }
