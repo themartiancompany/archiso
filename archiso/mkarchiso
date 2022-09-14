@@ -1868,7 +1868,7 @@ _prepare_persistent_image() {
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
     fi
 
-    if [ "${persistent_size_kib}" != "" ]; then
+    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         if [[ "${persistent_image_type}" == *"luks" ]]; then
             sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then

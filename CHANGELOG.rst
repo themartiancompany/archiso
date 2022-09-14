@@ -10,6 +10,7 @@ Added
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
 - Insert known needed extra modules in ``mkinitcpio.conf`` if image configuration requires it.
+- Insert known needed keys in ``crypttab`` if image configuration requires it.
 - Add support for ``dongle`` buildmode.
 - Add support for a new ISO partition intended to be "persistent"
   on both ``iso`` (``persistent``) and ``dongle`` (``donglepersistent``).
@@ -18,8 +19,10 @@ Added
 - Add support for GRUB booting system from persistent partitions.
 - Added known vulnerabilities warnings.
 - Added functions to determine chosen file system image type.
+- Add preliminary support for systemd-homed.
 Profiles:
   - Add systemd automounts for persistent partition.
+  - Add templatized ``mkinitcpio.conf`` and ``crypttab``
 
 Changed
 -------
