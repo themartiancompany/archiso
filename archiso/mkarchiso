@@ -365,7 +365,7 @@ _mkluks_common() {
     local _label="${3}"
     local _out="${work_dir}/${_label}.key"
     if [ "${_key}" = "" ]; then
-        echo -n "Insert ${_name} (${_label}) password: " 
+        echo -n "Insert ${_name} (${_label}) password:\n" 
         read -rs password
         echo "${password}" > "${_out}"
         _encryption_key="${_out}"
