@@ -246,7 +246,11 @@ _run_mkext4() {
     [[ "${_label}" != "" ]] && mkfs_ext4_options+=('-L' "${_label}")
     [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
-    E2FSPROGS_FAKE_TIME="${_epoch}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
+    if [[ ! "${quiet}" == "y" ]]; then
+        E2FSPROGS_FAKE_TIME="${_epoch}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
+    else
+        E2FSPROGS_FAKE_TIME="${_epoch}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K" > /dev/null 2>&1
+    fi
     tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
     if [ "${_writable}" != "true" ]; then
         tunefs -O read-only "${_image_path}"
