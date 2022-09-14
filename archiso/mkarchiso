@@ -788,7 +788,7 @@ _make_pacman_conf() {
     # see `man 8 pacman` for further info
     pacman-conf --config "${pacman_conf}" | \
         sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
-            /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" > "${work_dir}/${buildmode}.pacman.conf"
+             /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" > "${work_dir}/${buildmode}.pacman.conf"
 }
 
 # Prepare working directory and copy custom root file system files.
