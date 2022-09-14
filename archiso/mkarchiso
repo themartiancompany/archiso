@@ -368,22 +368,6 @@ _mkluks_common() {
     fi
 }
 
-# Steps shared by _mkairootfs_fs_type functions
-_mkairootfs_common() {
-    _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _name="airootfs"
-    _dir="${pacstrap_dir}"
-    _image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
-    _size_kib="${airootfs_size}"
-    _epoch="$((SOURCE_DATE_EPOCH))"
-    _label="${iso_label}"
-    _writable=false
-    _grub=false
-    rm -f -- "${_image_path}"
-    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "${airootfs_img_dir}"
-}
-
 # Create an ext4 fs inside a LUKS container image file.
 _mkimg_ext4() {
     local _dir="${2}"
@@ -516,6 +500,22 @@ _mkimg_erofs+luks() {
     _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
     sync
     _close_luks_device "${image_device}"
+}
+
+# Steps shared by _mkairootfs_fs_type functions
+_mkairootfs_common() {
+    _mkfs_options=("${airootfs_image_tool_options[@]}")
+    _name="airootfs"
+    _dir="${pacstrap_dir}"
+    _image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
+    _size_kib="${airootfs_size}"
+    _epoch="$((SOURCE_DATE_EPOCH))"
+    _label="${iso_label}"
+    _writable=false
+    _grub=false
+    rm -f -- "${_image_path}"
+    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
+    install -d -m 0755 -- "${airootfs_img_dir}"
 }
 
 # Create an ext4 image containing the root file system.
@@ -948,6 +948,7 @@ _make_boot_on_iso() {
     _msg_info "Done!"
 }
 
+# Add archiso modules to profile's mkinitcpio.conf
 _build_archiso_mkinitcpio_conf() {
     local _hooks=() _mkinitcpio_conf="${profile}/airootfs/etc/mkinitcpio.conf" _modules=()
     if [[ "${airootfs_image_type}" == *luks ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -964,16 +965,19 @@ _build_archiso_mkinitcpio_conf() {
          s|%ARCHISO_MODULES%|${_modules[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
 }
 
+# Get UUID for the dongle GRUB plain mount
 _get_dongle_uuid() {
     #shellcheck disable=SC2005
     echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 42 * 69)))"
 }
 
+# Get UUID for the GRUB plain mount
 _get_archiso_uuid() {
     #shellcheck disable=SC2005
     echo "$(_epoch_to_uuid "${SOURCE_DATE_EPOCH}")"
 }
 
+# Get UUID for the GRUB cryptomount
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))"
