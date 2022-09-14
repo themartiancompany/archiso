@@ -643,7 +643,7 @@ _mkpersistent_ext4() {
 _mkpersistent_ext4+luks() {
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkdonglepersistent+fs_type functions
@@ -669,8 +669,8 @@ _mkdonglepersistent_ext4() {
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4+luks() {
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_encryption_key}" "${_epoch}" \
-                     "${_writable}" "${_grub}"
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                     "${_encryption_key}" "${_epoch}" ${_label}" "${_grub}"
 }
 
 # Create checksum for a given file.
