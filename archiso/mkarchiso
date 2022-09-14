@@ -383,8 +383,7 @@ _mkimg_ext4() {
     _msg_info "Done!"
 }
 
-
-# Create an ext4 fs inside a LUKS container image file.
+# Creates an ext4 fs inside a LUKS container image file.
 _mkimg_ext4+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -407,8 +406,8 @@ _mkimg_ext4+luks() {
     rm -- "${_dir}.img"
 }
 
-# Create an ext4 image and pack it inside a squashfs image.
-# Pack the squash image inside a LUKS image.
+# Creates an ext4 image and packs it inside a squashfs image.
+# Packs the squash image inside a LUKS image.
 _mkimg_ext4+squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -431,7 +430,7 @@ _mkimg_ext4+squashfs+luks() {
     rm -- "${_dir}.img"
 }
 
-# Create a squashfs image and saves it on a LUKS image.
+# Creates a squashfs image and saves it on a LUKS image.
 _mkimg_squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -450,6 +449,7 @@ _mkimg_squashfs+luks() {
     _close_luks_device "${image_device}"
 }
 
+# Creates an ext4 file system inside a squashfs image.
 _mkimg_ext4+squashfs() {
     local _name="${1}"
     local _dir="${2}"
@@ -465,7 +465,7 @@ _mkimg_ext4+squashfs() {
     rm -- "${_dir}.img"
 }
 
-# Makes a squash fs image.
+# Creates a squash fs image.
 _mkimg_squashfs() {
     local _name="${1}"
     local _dir="${2}"
