@@ -9,17 +9,27 @@ Added
 -----
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
+  - insert known needed extra modules for the new configurations.
 - Add support for ``dongle`` buildmode.
 - Add support for a third persistent partition on both ``iso`` and ``dongle``.
-- Upgraded storage handling function functions:
-  - Set overwrite flag in ``mtools`` commands;
-  - Refactor ``run_<fs_type_or_container>`` functions.
 - Add support for GRUB as MBR bootloader.
 - Add support for GRUB booting system from both ``iso`` and ``dongle`` persistent partition.
-- Add known vulnerabilities warnings.
+- Added known vulnerabilities warnings.
+- Added functions to determine file system type.
+Profiles:
+  - Add systemd automounts for persistent partition.
 
 Changed
 -------
+- Upgraded storage handling function functions:
+  - Set overwrite flag in ``mtools`` commands.
+  - Refactor ``run_<fs_type_or_container>`` functions.
+- Abstract signature and checksum functions.
+- Grouped all bootloader seds in a single function.
+- Profiles:
+  - Completely switch to GRUB.
+  - Reduced bootloader configuration files complexity.
+  - Reduced mkinitcpio.conf complexity.
 
 Removed
 -------
