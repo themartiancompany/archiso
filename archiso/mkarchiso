@@ -356,24 +356,64 @@ _close_luks_device() {
 
 # Ask the user for a passphrase if not specified
 _mkluks_common() {
-    local _out="${work_dir}/${iso_label}.key"
-    if [ "${encryption_key}" = "" ]; then
-        echo -n "Airootfs password:" 
+    local _name="${1}"
+    local _key="${2}"
+    local _label="${3}"
+    local _out="${work_dir}/${_label}.key"
+    if [ "${_key}" = "" ]; then
+        echo -n "Insert ${_name} (${_label}) password:" 
         read -rs password
         echo "${password}" > "${_out}"
-        encryption_key="${_out}"
+        _encryption_key="${_out}"
     fi
 }
 
 # Steps shared by _mkairootfs_fs_type functions
 _mkairootfs_common() {
+    _mkfs_options=("${airootfs_image_tool_options[@]}")
+    _name="airootfs"
+    _dir="${pacstrap_dir}"
+    _image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
+    _size="${airootfs_size}"
+    _epoch=""
+    _label="${iso_label}"
+    _writable=false
+    _grub=false
+    rm -f -- "${_image_path}"
     [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_img_dir}"
-    image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
-    rm -f -- "${image_path}"
-    _mkfs_options=("${airootfs_image_tool_options[@]}")
-    writable=false
-    grub=false
+}
+
+_mkimg(){
+    name="${1}"
+    image_type="${2}"
+    _run_once "_mk${name}_common"
+    _mkimg "${_name}"
+}
+
+# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
+_mkimg_ext4+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    local _grub="${9}"
+    run_once "_mk${_name}_common"
+    # persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
+    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+                "${_epoch}" "${name}" "${_writable}"
+    dd if="${_dir}.img" of="${image_device}"
+    sync
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+    rm -- "${_dir}.img"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
@@ -390,17 +430,8 @@ _mkairootfs_ext4+squashfs() {
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs+luks() {
-    _mkairootfs_common
-    _mkluks_common
-    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
-    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" \
-                "${SOURCE_DATE_EPOCH}" "airootfs"
-    _run_mksquashfs "${pacstrap_dir}.img" "${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${pacstrap_dir}.img"
+    _mkimg "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+           "${_epoch}" "${_writable}" "${_grub}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
@@ -442,12 +473,13 @@ _mkairootfs_erofs+luks() {
 
 # Steps shared by _mkkeys+fs_type functions
 _mkkeys_common() {
-    image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
-    rm -f -- "${image_path}"
     _mkfs_options=("${keys_image_tool_options[@]}")
+    _name="keys"
+    _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
     keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     writable=false
     grub=false
+    rm -f -- "${_image_path}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
@@ -464,6 +496,10 @@ _mkkeys_ext4+squashfs() {
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
+    _mkkeys_common
+    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                              "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
+
     _mkkeys_common
     _run_mkluks "${image_path}" "${keys_size}" "" \
                 "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
