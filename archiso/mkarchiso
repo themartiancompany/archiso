@@ -1924,7 +1924,6 @@ _prepare_persistent_image() {
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${persistent_image_type}"
-    _run_once "_mkairootfs_common"
         fi
     fi
 }
