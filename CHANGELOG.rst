@@ -7,15 +7,16 @@ Changelog
 
 Added
 -----
-- Add support for LUKS2 image disks:
-  - ``+luks`` airootfs image types;
-  - ``keys`` buildmode;
-  - ``encryption_key`` parameter.
+- Add support for LUKS2 image disks;
+  - new ``+luks`` image types.
+- Add support for ``dongle`` buildmode.
+- Add support for a third persistent partition on both ``iso`` and ``dongle``.
 - Upgraded storage handling function functions:
-  - Set overwrite flag in ``mtools`` commands.
+  - Set overwrite flag in ``mtools`` commands;
   - Refactor ``run_<fs_type_or_container>`` functions.
-- Add support for persistent partition on ISO:
-  - ''persistent_size'' parameter;
+- Add support for GRUB as MBR bootloader.
+- Add support for GRUB booting system from both ``iso`` and ``dongle`` persistent partition.
+- Add known vulnerabilities warnings.
 
 Changed
 -------
