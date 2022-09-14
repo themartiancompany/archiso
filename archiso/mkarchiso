@@ -374,24 +374,33 @@ _mkairootfs_common() {
     _name="airootfs"
     _dir="${pacstrap_dir}"
     _image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
-    _size="${airootfs_size}"
-    _epoch=""
+    _size_kib="${airootfs_size}"
+    _epoch="$((SOURCE_DATE_EPOCH))"
     _label="${iso_label}"
     _writable=false
     _grub=false
     rm -f -- "${_image_path}"
-    [[ -e "${pacstrap_dir}" ]] || _msg_error "The path '${pacstrap_dir}' does not exist" 1
+    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_img_dir}"
 }
 
-_mkimg(){
-    name="${1}"
-    image_type="${2}"
-    _run_once "_mk${name}_common"
-    _mkimg "${_name}"
+# Create an ext4 fs inside a LUKS container image file.
+_mkimg_ext4() {
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+                "${_epoch}" "${_label}" "${_writable}"
+    mv "${_dir}.img" "${_image_path}"
+    sync
+    _msg_info "Done!"
 }
 
-# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
+
+# Create an ext4 fs inside a LUKS container image file.
 _mkimg_ext4+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -402,13 +411,11 @@ _mkimg_ext4+luks() {
     local _label="${7}"
     local _writable="${8}"
     local _grub="${9}"
-    run_once "_mk${_name}_common"
-    # persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
     _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
-                "${_epoch}" "${name}" "${_writable}"
+                "${_epoch}" "${_name}" "${_writable}"
     dd if="${_dir}.img" of="${image_device}"
     sync
     _close_luks_device "${image_device}"
@@ -416,211 +423,255 @@ _mkimg_ext4+luks() {
     rm -- "${_dir}.img"
 }
 
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
-# Save the squashfs image on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs() {
-    _mkairootfs_common
-    _run_mkext4 "${pacstrap_dir}" "$(_get_internal_size "${airootfs_size}")" \
-                "${SOURCE_DATE_EPOCH}" "airootfs"
-    _run_mksquashfs "${pacstrap_dir}.img" "${image_path}"
+# Create an ext4 image and pack it inside a squashfs image.
+# Pack the squash image inside a LUKS image.
+_mkimg_ext4+squashfs+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    local _grub="${9}"
+    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
+    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+                "${_epoch}" "${_name}" "${_writable}"
+    _run_mksquashfs "${_dir}.img" "${image_device}"
+    sync
+    _close_luks_device "${image_device}"
     _msg_info "Done!"
-    rm -- "${pacstrap_dir}.img"
+    rm -- "${_dir}.img"
 }
 
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
-# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs+luks() {
-    _mkimg "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" "${_encryption_key}" \
-           "${_epoch}" "${_writable}" "${_grub}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_squashfs() {
-    _mkairootfs_common
-    _run_mksquashfs "${pacstrap_dir}" "${image_path}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the LUKS image.
-# Saves the LUKS image on the ISO 9660 file system.
-_mkairootfs_squashfs+luks() {
-    _mkairootfs_common
-    _mkluks_common
-    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
-    _run_mksquashfs "${pacstrap_dir}" "${image_device}"
+# Create a squashfs image and saves it on a LUKS image.
+_mkimg_squashfs+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    local _grub="${9}"
+    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
+    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+    _run_mksquashfs "${_dir}" "${image_device}"
     sync
     _close_luks_device "${image_device}"
 }
 
+_mkimg_ext4+squashfs() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _epoch="${5}"
+    local _label="${6}"
+    local _writable="false"
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+                "${_epoch}" "${_name}" "${_writable}"
+    _run_mksquashfs "${_dir}.img" "${_image_path}"
+    _msg_info "Done!"
+    rm -- "${_dir}.img"
+}
+
+# Makes a squash fs image.
+_mkimg_squashfs() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    _run_mksquashfs "${_dir}" "${_image_path}"
+}
+
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_erofs() {
-    _mkairootfs_common
-    _run_mkerofs "${image_path}" "${pacstrap_dir}" "${SOURCE_DATE_EPOCH}"
+_mkimg_erofs() {
+    local _image_path="${1}"
+    local _dir="${2}"
+    local _epoch="${3}"
+    _run_mkerofs "${_image_path}" "${_dir}" "${_epoch}"
     _msg_info "Done!"
 }
 
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
-_mkairootfs_erofs+luks() {
-    _mkairootfs_common
-    _mkluks_common
-    _run_mkluks "${image_path}" "${airootfs_size}" "${encryption_key}" \
-                "${SOURCE_DATE_EPOCH}" "${iso_label}" "${writable}" "${grub}"
-    _run_mkerofs "${image_device}" "${pacstrap_dir}" "${SOURCE_DATE_EPOCH}"
+_mkimg_erofs+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size_kib="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _grub="${8}"
+    local _writable="false"
+    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
+    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+    _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
     sync
     _close_luks_device "${image_device}"
+}
+
+# Create an ext4 image containing the root file system.
+# Save the image on the ISO 9660 file system.
+_mkairootfs_ext4() {
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}" "${_writable}"
+}
+
+# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Save the squashfs image on the ISO 9660 file system.
+_mkairootfs_ext4+squashfs() {
+    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                         "${_epoch}" "${_label}" "${_writable}"
+}
+
+# Create an ext4 image containing the root file system and pack it inside a squashfs image.
+# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
+_mkairootfs_ext4+squashfs+luks() {
+    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                              "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
+}
+
+# Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
+_mkairootfs_squashfs() {
+    _mkimg_squashfs "${_name}" "${_dir}" "${_image_path}"
+}
+
+# Create a squashfs image containing the root file system and saves it on the LUKS image.
+# Saves the LUKS image on the ISO 9660 file system.
+_mkairootfs_squashfs+luks() {
+    _mkimg_squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                         "${encryption_key}" "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+}
+
+# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
+_mkairootfs_erofs() {
+    _mkimg_erofs "${_image_path}" "${_dir}" "${_epoch}"
+}
+
+# Create an EROFS image containing the root file system and saves it on the LUKS image.
+# Save the LUKS image on the ISO 9660 file system.
+_mkairootfs_erofs+luks() {
+    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkkeys+fs_type functions
 _mkkeys_common() {
     _mkfs_options=("${keys_image_tool_options[@]}")
     _name="keys"
+    _dir="${keys_dir}"
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
-    keys_epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
-    writable=false
-    grub=false
+    _encryption_key=""
+    _size_kib="${keys_size}"
+    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
+    _label="${iso_label}_KEYS"
+    _writable="false"
+    _grub="false"
     rm -f -- "${_image_path}"
 }
 
+# Create an ext4 image containing the keys file system for the dongle.
+# Save the image on the dongle ISO 9660 file system.
+_mkkeys_ext4() {
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}" "${_writable}"
+}
+
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
-# Save the squashfs image on the ISO 9660 file system.
+# Save the squashfs image on the dongle ISO 9660 file system.
 _mkkeys_ext4+squashfs() {
-    _mkkeys_common
-    _run_mkext4 "${keys_dir}" "$(_get_internal_size "${keys_size}")" \
-                "${keys_epoch}" "keys"
-    _run_mksquashfs "${keys_dir}.img" "${image_path}"
-    _msg_info "Done!"
-    rm -- "${keys_dir}.img"
+    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                         "${_epoch}" "${_label}" "${_writable}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
-    _mkkeys_common
     _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
                               "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
-
-    _mkkeys_common
-    _run_mkluks "${image_path}" "${keys_size}" "" \
-                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
-    _run_mkext4 "${keys_dir}" "$(_get_internal_size "${keys_size}")" \
-                "${keys_epoch}" "keys"
-    _run_mksquashfs "${keys_dir}.img" "${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${keys_dir}.img"
-}
-
-# Create a squashfs image containing the keys file system and saves it on the LUKS image.
-# Saves the LUKS image on the ISO 9660 file system.
-_mkkeys_squashfs+luks() {
-    _mkkeys_common
-    _run_mkluks "${image_path}" "${airootfs_size}" "" \
-                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
-    _run_mksquashfs "${keys_dir}" "${image_device}"
-    sync
-    _close_luks_device "${image_device}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkkeys_squashfs() {
-    _mkkeys_common
-    _run_mksquashfs "${keys_dir}" "${image_path}"
+    _mkimg_squashfs "${_name}" "${_dir}" "${_image_path}"
 }
 
 # Create an EROFS image containing the keys file system and saves it on the ISO 9660 file system.
 _mkkeys_erofs() {
-    _mkkeys_common
-    _run_mkerofs "${image_path}" "${keys_dir}" "${keys_epoch}"
-    _msg_info "Done!"
+    _mkimg_erofs "${_image_path}" "${_dir}" "${_epoch}"
 }
 
 # Create an EROFS image containing the keys file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
 _mkkeys_erofs+luks() {
-    _mkkeys_common
-    _run_mkluks "${image_path}" "${keys_size}" \
-                "${keys_epoch}" "${iso_label}_KEYS" "${writable}" "${grub}"
-    _run_mkerofs "${image_device}" "${keys_dir}" "${keys_epoch}"
-    sync
-    _close_luks_device "${image_device}"
+    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkpersistent+fs_type functions
 _mkpersistent_common() {
-    image_path="${persistentimg}"
-    image_label="${iso_label}_PERSISTENT"
-    rm -f -- "${image_path}"
-    persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
-    writable="true"
+    _name="persistent"
+    _dir="${persistent_dir}"
+    _image_path="${persistentimg}"
+    _encryption_key="${persistent_encryption_key}"
+    _size_kib="${persistent_size_kib}"
+    _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    _label="${iso_label}_PERSISTENT"
+    _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        grub="false"
+        _grub="false"
     else
-        grub="true"
+        _grub="true"
     fi
+    persistent_epoch="${_epoch}"
+    rm -f -- "${image_path}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkpersistent_ext4() {
-    _mkpersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
-    _run_mkext4 "${persistent_dir}" "${persistent_size_kib}" \
-                "${persistent_epoch}" "${image_label}" "${writable}"
-    mv "${persistent_dir}.img" "${image_path}"
-    sync
-    _msg_info "Done!"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}" "${_writable}"
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
-    _mkpersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
-    _run_mkluks "${image_path}" "${persistent_size_kib}" "${persistent_encryption_key}" \
-                "${persistent_epoch}" "${image_label}" "${writable}" "${grub}"
-    _run_mkext4 "${persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
-                "${persistent_epoch}" "persistent" "${writable}"
-    dd if="${persistent_dir}.img" of="${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${persistent_dir}.img"
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_encryption_key}" "${_epoch}" \
+                     "${_writable}" "${_grub}"
 }
 
 # Steps shared by _mkdonglepersistent+fs_type functions
 _mkdonglepersistent_common() {
-    image_path="${donglepersistentimg}"
-    image_label="${iso_label}_DONGLE_PERSISTENT"
+    _name="donglepersistent"
+    _dir="${dongle_persistent_dir}"
+    _image_path="${donglepersistentimg}"
+    _encryption_key=""
+    _size_kib="${persistent_size_kib}"
+    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    _label="${iso_label}_DONGLE_PERSISTENT"
+    _writable="true"
+    _grub="true"
     rm -f -- "${image_path}"
-    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
-    writable="true"
-    grub="true"
+    dongle_persistent_epoch="${_epoch}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4() {
-    _mkdonglepersistent_common
     persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
-    _run_mkext4 "${dongle_persistent_dir}" "${persistent_size_kib}" \
-                "${dongle_persistent_epoch}" "${image_label}" "${writable}"
-    mv "${persistent_dir}.img" "${image_path}"
-    sync
-    _msg_info "Done!"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}" "${_writable}"
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4+luks() {
-    _mkdonglepersistent_common
     persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
-    _run_mkluks "${image_path}" "${persistent_size_kib}" "" \
-                "${dongle_persistent_epoch}" "${image_label}" "${writable}" "${grub}"
-    _run_mkext4 "${dongle_persistent_dir}" "$(_get_internal_size "${persistent_size_kib}")" \
-                "${dongle_persistent_epoch}" "persistent" "${writable}"
-    dd if="${dongle_persistent_dir}.img" of="${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${dongle_persistent_dir}.img"
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_encryption_key}" "${_epoch}" \
+                     "${_writable}" "${_grub}"
 }
 
 # Create checksum for a given file.
@@ -1772,6 +1823,7 @@ _prepare_airootfs_image() {
     pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((pacstrap_size+200000))
 
+    _run_once "_mkairootfs_common"
     _run_once "_mkairootfs_${airootfs_image_type}"
     _mkchecksum "$(_get_airootfs_img)"
     if [[ -n "${gpg_key}" ]]; then
@@ -1789,6 +1841,7 @@ _prepare_airootfs_image() {
 # Build keys filesystem image
 _prepare_keys_image() {
     keys_size=25000
+    _run_once "_mkkeys_common"
     _run_once "_mkkeys_${keys_image_type}"
 
     _mkchecksum "${dongle_isofs_dir}/keys.$(_get_fs_ext "keys")"
@@ -1834,6 +1887,7 @@ _prepare_persistent_image() {
             sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once _make_boot_on_dongle
+        _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _run_once "_mkdonglepersistent_${persistent_image_type}"
