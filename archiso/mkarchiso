@@ -527,6 +527,7 @@ _mkairootfs_common() {
     _label="${iso_label}"
     _writable=false
     _grub=false
+    _auto_size=""
     rm -f -- "${_image_path}"
     [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_img_dir}"
@@ -588,6 +589,7 @@ _mkkeys_common() {
     _label="${iso_label}_KEYS"
     _writable="false"
     _grub="false"
+    _auto_size=""
     rm -f -- "${_image_path}"
 }
 
@@ -643,6 +645,7 @@ _mkpersistent_common() {
     else
         _grub="true"
     fi
+    _auto_size=""
     persistent_epoch="${_epoch}"
     rm -f -- "${_image_path}"
 }
