@@ -368,8 +368,7 @@ _mkluks_common() {
     if [ "${_key}" = "" ]; then
         while true; do
             printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
-            read -rs _password
-            echo
+            read -rs _passphrase
             echo "Confirm: "
             read -rs _confirm
             echo
