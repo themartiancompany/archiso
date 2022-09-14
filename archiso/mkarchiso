@@ -399,7 +399,7 @@ _mkimg_ext4+luks() {
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
                 "${_epoch}" "${_name}" "${_writable}"
-    dd if="${_dir}.img" of="${image_device}"
+    dd if="${_dir}.img" of="${image_device}"  > /dev/null 2>&1
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
