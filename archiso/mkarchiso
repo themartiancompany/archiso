@@ -657,7 +657,7 @@ _mkdonglepersistent_common() {
     _label="${iso_label}_DONGLE_PERSISTENT"
     _writable="true"
     _grub="true"
-    rm -f -- "${image_path}"
+    rm -f -- "${_image_path}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
