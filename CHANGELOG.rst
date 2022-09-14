@@ -7,7 +7,9 @@ Changelog
 
 Added
 -----
-- New ``mk<image_name>_<image_type>`` functions.
+- New ``run_<fs_type>`` file system handling functions.
+- New ``mk<image_name>_<image_type>`` image building functions.
+- New entry in schema for building new partitions or buildmodes (``_mk<image_name>_common``).
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
 - Insert known needed extra modules in ``mkinitcpio.conf`` if image configuration requires it.
@@ -16,8 +18,10 @@ Added
 - Add support for a new ISO partition intended to be "persistent"
   on both ``iso`` (``persistent``) and ``dongle`` (``donglepersistent``).
     - new ``validate_requirements_<buildmode>`` functions.
-- Add support for GRUB as MBR bootloader.
-- Add support for GRUB booting system from persistent partitions.
+    - new ``add_xorrisofs_<image_name>_partition``
+- Bootloaders
+  - Add support for GRUB as MBR bootloader.
+  - Add support for GRUB booting system from persistent partitions.
 - Added known vulnerabilities warnings.
 - Added functions to determine chosen file system image type.
 - Add preliminary support for systemd-homed.
@@ -27,14 +31,15 @@ Profiles:
 
 Changed
 -------
-- Upgraded storage handling function functions:
+- Upgraded image building functions:
   - Set overwrite flag in ``mtools`` commands.
   - Refactor ``run_<fs_type_or_container>`` functions.
-- Upgraded image building functions:
   - Abstract ``mkairootfs_<image_type>`` as ``mk<image_name>_<image_type>``.
+  - Upgraded ``add_xorrisofs_<bootmode>``
+- Bootloaders
+  - Grouped all bootloader seds in a single function.
+  - Grouped UEFI requirements.
 - Abstract signature and checksum functions.
-- Grouped all bootloader seds in a single function.
-- Grouped UEFI requirements.
 - Profiles:
   - Completely switch to GRUB.
   - Reduced bootloader configuration files complexity.

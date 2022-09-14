@@ -1275,6 +1275,19 @@ _build_bootloader_config() {
          s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g" "${_template}"
 }
 
+# Fill a templatized crypttab
+_build_crypttab() {
+    local _template="${1}"
+    local _out="${2}"
+    if [[ "${persistent_image_type}" == *"luks" ]]; then
+        if [[ "${persistent_image_type}" == *"luks" ]]; then
+            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
+        fi
+    else
+            sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
+    fi
+}
+
 # Prepare GRUB configuration files
 _make_common_bootmode_grub_cfg(){
     local _cfg
@@ -1868,9 +1881,10 @@ _prepare_persistent_image() {
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
     fi
 
+    _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
+
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         if [[ "${persistent_image_type}" == *"luks" ]]; then
-            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
             if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 _gen_key "${persistent_encryption_key}"
@@ -1887,8 +1901,6 @@ _prepare_persistent_image() {
                 _msg_warning "${_msg[*]}"
                 persistent_encryption_key=""
             fi
-        else
-            sed '/%PERSISTENT_UUID%/d' "${crypttab}" > "${pacstrap_dir}/etc/crypttab"
         fi
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
@@ -2210,8 +2222,7 @@ _add_xorrisofs_options_bios.grub.mbr() {
         # Move the first partition away from the start of the ISO to match the expectations of partition editors
         # May allow booting on some systems
         # https://dev.lovelyhq.com/libburnia/libisoburn/src/branch/master/doc/partition_offset.wiki
-        '-partition_offset' '16'
-    )
+        '-partition_offset' '16')
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -2381,13 +2392,12 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
     if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' || " ${bootmodes[*]} " =~ ' uefi-ia32.grub.esp ' ]]; then
         # systemd-boot in an attached EFI system partition via El Torito
         _xorrisofs_options+=(
-          # Start a new El Torito boot entry for UEFI
-          '-eltorito-alt-boot'
-          # Set the second partition as the El Torito UEFI boot image
-          '-e' '--interval:appended_partition_2:all::'
-          # Boot image is not emulating floppy or hard disk; required for all known boot loaders
-          '-no-emul-boot'
-    )
+            # Start a new El Torito boot entry for UEFI
+            '-eltorito-alt-boot'
+            # Set the second partition as the El Torito UEFI boot image
+            '-e' '--interval:appended_partition_2:all::'
+            # Boot image is not emulating floppy or hard disk; required for all known boot loaders
+            '-no-emul-boot')
     # A valid GPT prevents BIOS booting on some systems, use an invalid GPT instead.
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
         # If '-isohybrid-gpt-basdat' is specified before '-e', then the appended EFI system partition will have the
