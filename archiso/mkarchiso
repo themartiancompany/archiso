@@ -1349,12 +1349,6 @@ _make_bootmode_uefi-ia32.grub.esp() {
     _run_once _make_common_bootmode_grub_cfg
 
     # Create EFI binary
-    # Module list from https://bugs.archlinux.org/task/71382#comment202911
-    grubmodules=(all_video at_keyboard boot btrfs cat chain configfile echo efifwsetup efinet ext2 f2fs fat font \
-                 gfxmenu gfxterm gzio halt hfsplus iso9660 jpeg keylayouts linux loadenv loopback lsefi lsefimmap \
-                 minicmd normal part_apple part_gpt part_msdos png read reboot regexp search search_fs_file \
-                 search_fs_uuid search_label serial sleep tpm usb usbserial_common usbserial_ftdi usbserial_pl2303 \
-                 usbserial_usbdebug video xfs zstd)
     grub-mkstandalone -O i386-efi \
                       --modules="$(_get_grubmodules "efi")" \
                       --locales="en@quot" \
@@ -1410,9 +1404,6 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
 
-    # Prepare configuration files
-    _run_once _make_common_bootmode_grub_cfg
-
     # Additionally set up systemd-boot in ISO 9660. This allows creating a medium for the live environment by using
     # manual partitioning and simply copying the ISO 9660 file system contents.
     # This is not related to El Torito booting and no firmware uses these files.
@@ -1446,12 +1437,6 @@ _make_bootmode_uefi-x64.grub.esp() {
     _run_once _make_common_bootmode_grub_cfg
 
     # Create EFI binary
-    # Module list from https://bugs.archlinux.org/task/71382#comment202911
-    grubmodules=(all_video at_keyboard boot btrfs cat chain configfile echo efifwsetup efinet ext2 f2fs fat font \
-                 gfxmenu gfxterm gzio halt hfsplus iso9660 jpeg keylayouts linux loadenv loopback lsefi lsefimmap \
-                 minicmd normal part_apple part_gpt part_msdos png read reboot regexp search search_fs_file \
-                 search_fs_uuid search_label serial sleep tpm usb usbserial_common usbserial_ftdi usbserial_pl2303 \
-                 usbserial_usbdebug video xfs zstd)
     grub-mkstandalone -O x86_64-efi \
                       --modules="$(_get_grubmodules "efi")" \
                       --locales="en@quot" \
@@ -1498,9 +1483,6 @@ _make_bootmode_uefi-x64.grub.eltorito() {
     # El Torito UEFI boot requires an image containing the EFI system partition.
     # uefi-x64.grub.eltorito has the same requirements as uefi-x64.grub.esp
     _run_once "_make_bootmode_uefi-x64.grub.esp_${bootable}"
-
-    # Prepare configuration files
-    _run_once _make_common_bootmode_grub_cfg
 
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
