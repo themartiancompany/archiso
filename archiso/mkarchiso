@@ -630,7 +630,7 @@ _mkpersistent_common() {
         _grub="true"
     fi
     persistent_epoch="${_epoch}"
-    rm -f -- "${image_path}"
+    rm -f -- "${_image_path}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
@@ -658,7 +658,6 @@ _mkdonglepersistent_common() {
     _writable="true"
     _grub="true"
     rm -f -- "${image_path}"
-    dongle_persistent_epoch="${_epoch}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
