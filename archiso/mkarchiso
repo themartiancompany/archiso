@@ -1287,15 +1287,9 @@ _get_bootable_uuid() {
 _build_bootloader_config() {
     local _template="${1}"
     local _bootloader="${2}"
-    local _boot_disk
-    if [[ "${persistent_image_type}" == *luks ]] && [[ "${_bootloader}" = "grub" ]]; then
-        _boot_disk="(crypto0)"
-    else
-        _boot_disk=""
-    fi
     sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
          s|%ARCH%|${arch}|g;
-         s|%INSTALL_DIR%|${_boot_disk}/${install_dir}|g;
+         s|%INSTALL_DIR%|/${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
          s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g" "${_template}"
 }
@@ -1366,12 +1360,12 @@ _get_grubmodules(){
     local _mode="${1}"
     _modules=(afsplitter boot bufio chain configfile cryptodisk disk ext2 gcry_rijndael
               gcry_sha256 gcry_sha512 halt iso9660 linux loadenv loopback luks2 minicmd
-              normal ntfs part_apple part_gpt part_msdos password_pbkdf2 reboot search
+              normal part_apple part_gpt part_msdos password_pbkdf2 reboot search test
               search_fs_uuid usb)
     if [ "${_mode}" != "bios" ]; then
         _modules+=(at_keyboard all_video btrfs cat echo diskfilter echo efifwsetup f2fs
                    fat font gcry_crc gfxmenu gfxterm gzio hfsplus jpeg keylayouts ls
-                   lsefi lsefimmap lzopio png read regexp search_fs_file search_label
+                   lsefi lsefimmap lzopio ntfs png read regexp search_fs_file search_label
                    serial sleep tpm trig usbserial_common usbserial_ftdi usbserial_pl2303
                    usbserial_usbdebug video xfs zstd)
     elif [ "${_mode}" == "bios" ] ; then
