@@ -66,6 +66,7 @@ persistentimg=""
 swap_size_kib=""
 swap_image_type=""
 swap_encryption_key=""
+swapimg=""
 donglepersistentimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
