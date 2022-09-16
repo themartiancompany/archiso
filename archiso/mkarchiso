@@ -358,24 +358,30 @@ _close_luks_device() {
     sync
 }
 
+_get_passwd() {
+    local _name="${1}"
+    local _label="${2}"
+    local _confirm
+    while true; do
+        printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
+        read -rs _passphrase
+        printf "\n"
+        echo "Confirm: "
+        read -rs _confirm
+        printf "\n"
+        [[ "${_passphrase}" == "${_confirm}" ]] && break
+        echo "Passphrases mismatch"
+    done
+}
+
 # Ask the user for a passphrase if not specified
 _mkluks_common() {
     local _name="${1}"
     local _key="${2}"
     local _label="${3}"
     local _out="${work_dir}/${_label}.key"
-    local _confirm _passphrase
     if [ "${_key}" = "" ]; then
-        while true; do
-            printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
-            read -rs _passphrase
-	        printf "\n"
-            echo "Confirm: "
-            read -rs _confirm
-            printf "\n"
-            [[ "${_passphrase}" == "${_confirm}" ]] && break
-            echo "Passphrases mismatch"
-        done
+        _get_passwd
         echo "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     fi
