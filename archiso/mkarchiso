@@ -61,9 +61,11 @@ efiboot_files=()
 encryption_key=""
 persistent_size_kib=""
 persistent_image_type=""
+persistent_encryption_key=""
 persistentimg=""
 swap_size_kib=""
 swap_image_type=""
+swap_encryption_key=""
 donglepersistentimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
@@ -1967,8 +1969,26 @@ _prepare_keys_image() {
     fi
 }
 
-_prepare_swap() {
+_prepare_swap_image() {
     if [ "${swap_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        if [[ "${swap_image_type}" == *"luks" ]]; then
+            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+                swap_encryption_key="${work_dir}/swap.key"
+                _gen_key "${swap_encryption_key}"
+                install -d -m700 "${pacstrap_dir}/etc/keys"
+                install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+            elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+                swap_encryption_key="${work_dir}/swap.key"
+                _gen_key "${swap_encryption_key}"
+                install -d -m700 "${dongle_persistent_dir}/etc/keys"
+                install -D -m400 "${swap_encryption_key}" "${dongle_persistent_dir}/etc/keys"
+            else
+                _msg=("Rootfs encryption and dongle buildmode disabled."
+                      "You will be prompted to insert a password for the swap partition.")
+                _msg_warning "${_msg[*]}"
+                swap_encryption_key=""
+            fi
+        fi 
         _run_once "_mkswap_common"
         _run_once "_mkswap_${swap_image_type}"
     fi
@@ -3043,7 +3063,7 @@ _build_iso_base() {
     _run_once _make_customize_airootfs
     _run_once _make_pkglist
     _run_once _prepare_persistent_image
-    _run_once _prepare_swap
+    _run_once _prepare_swap_image
     if [[ "${buildmode}" == 'netboot' ]]; then
         _run_once _make_boot_on_iso9660
     else
