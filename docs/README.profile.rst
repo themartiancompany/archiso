@@ -39,12 +39,14 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
   understood:
 
   - ``bootstrap``: Build a compressed file containing a minimal system to bootstrap from
-  - ``keys``: Build a "keys" ISO that is able to boot encrypted bootable ISO images.
+  - ``dongle``: Build a "dongle" bootable ISO to enforce a chain of trust on systems vulnerable to evil maids.
   - ``iso``: Build a bootable ISO image (implicit default, if no ``buildmodes`` are set)
   - ``netboot``: Build artifacts required for netboot using iPXE
 * ``bootmodes``: A list of strings, that state the supported boot modes of the resulting image. Only the following are
   understood:
 
+  - ``bios.grub.mbr``: GRUBS for x86 BIOS booting from a disk
+  - ``bios.grub.eltorito``: GRUB for x86 BIOS booting from an optical disc
   - ``bios.syslinux.mbr``: Syslinux for x86 BIOS booting from a disk
   - ``bios.syslinux.eltorito``: Syslinux for x86 BIOS booting from an optical disc
   - ``uefi-ia32.grub.esp``: GRUB for IA32 UEFI booting from a disk
@@ -59,7 +61,6 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
 * ``pacman_conf``: The ``pacman.conf`` to use to install packages to the work directory when creating the image (defaults to
   the host's ``/etc/pacman.conf``)
 * ``airootfs_image_type``: The image type to create. The following options are understood (defaults to ``squashfs``):
-
   - ``squashfs``: Create a squashfs image directly from the airootfs work directory
   - ``squashfs+luks``: Create a LUKS image containing a squashfs generated directly from the airootfs work directory
   - ``ext4+squashfs``: Create an ext4 partition, copy the airootfs work directory to it and create a squashfs image from it
@@ -71,9 +72,13 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
 * ``encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key
   at build time; if empty, will prompt for password.
 * ``persistent_size_kib``: Size in KB of the persistent partition. 
-* ``persistent_image_type``: The type of the persistent portion of the ISO.
+* ``persistent_image_type``: The type of the persistent partition of the ISO.
   - ``ext4``: Create an ext4 partition.
   - ``ext4+luks``: Create a LUKS container with an ext4 partition inside.
+* ``swap_size_kib``: Size in KB of the swap partition. 
+* ``swap_image_type``: The type of the swap partition of the ISO.
+  - ``swap``: Create a normal swap partition.
+  - ``swap+luks``: Create a LUKS container with a swap partition inside.
 * ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
 * ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
 * ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
@@ -184,6 +189,8 @@ grub
 
 This directory is mandatory when any of the following bootmodes is used in ``profiledef.sh``:
 
+- ``bios.grub.mbr`` or
+- ``bios.grub.eltorito`` or
 - ``uefi-ia32.grub.esp`` or
 - ``uefi-ia32.grub.eltorito`` or
 - ``uefi-x64.grub.esp`` or
