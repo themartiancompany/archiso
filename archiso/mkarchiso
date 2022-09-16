@@ -1291,7 +1291,8 @@ _build_bootloader_config() {
          s|%ARCH%|${arch}|g;
          s|%INSTALL_DIR%|/${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
-         s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g" "${_template}"
+         s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
+         s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" "${_template}"
 }
 
 # Fill a templatized crypttab
