@@ -372,7 +372,7 @@ _mkluks_common() {
 	        printf "\n"
             echo "Confirm: "
             read -rs _confirm
-            printf "\n"
+            printf ""
             [[ "${_passphrase}" == "${_confirm}" ]] && break
             echo "Passphrases mismatch"
         done
