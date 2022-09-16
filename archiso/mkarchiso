@@ -369,10 +369,10 @@ _mkluks_common() {
         while true; do
             printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
             read -rs _passphrase
-	        printf ""
+	        printf "\n"
             echo "Confirm: "
             read -rs _confirm
-            printf ""
+            printf "\n"
             [[ "${_passphrase}" == "${_confirm}" ]] && break
             echo "Passphrases mismatch"
         done
