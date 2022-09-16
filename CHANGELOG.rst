@@ -12,6 +12,7 @@ Added
 - New entry in schema for building new partitions or buildmodes (``_mk<image_name>_common``).
 - Add support for LUKS2 image disks;
   - new ``+luks`` image types.
+- Add support for swap disks.
 - Insert known needed extra modules in ``mkinitcpio.conf`` if image configuration requires it.
 - Insert known needed keys in ``crypttab`` if image configuration requires it.
 - Add support for ``dongle`` buildmode to mitigate evil maids class of attacks.
