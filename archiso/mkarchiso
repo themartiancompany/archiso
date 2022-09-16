@@ -2699,15 +2699,6 @@ _build_dongle_image() {
         "_add_xorrisofs_options_${bootmode}_dongle" 
     done
 
-    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
-
-    if [[ "${quiet}" == "y" ]]; then
-        # The when xorriso is run in mkisofs compatibility mode (xorrisofs), the mkisofs option -quiet is interpreted
-        # too late (e.g. messages about SOURCE_DATE_EPOCH still get shown).
-        # Instead use native xorriso option to silence the output.
-        dongle_xorriso_options+=('-report_about' 'SORRY' "${dongle_xorriso_options[@]}")
-    fi
-
     if [ "${persistent_size_kib}" != "" ]; then
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_persistent "${dongle_xorrisofs_options[@]}")")
     fi
@@ -2716,6 +2707,14 @@ _build_dongle_image() {
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_swap "${dongle_xorrisofs_options[@]}")")
     fi
 
+    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
+
+    if [[ "${quiet}" == "y" ]]; then
+        # The when xorriso is run in mkisofs compatibility mode (xorrisofs), the mkisofs option -quiet is interpreted
+        # too late (e.g. messages about SOURCE_DATE_EPOCH still get shown).
+        # Instead use native xorriso option to silence the output.
+        dongle_xorriso_options+=('-report_about' 'SORRY' "${dongle_xorriso_options[@]}")
+    fi
 
     # Update SORCE_DATE_EPOCH for dongle ISO UUID
     SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + 69 * 42))
@@ -2761,14 +2760,18 @@ _build_iso_image() {
         xorriso_options+=('-report_about' 'SORRY' "${xorriso_options[@]}")
     fi
 
-    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        xorrisofs_options=("$(_add_xorrisofs_options_persistent "${xorrisofs_options[@]}")")
-    fi
-
     # Add required xorrisofs options for each boot mode
     for bootmode in "${bootmodes[@]}"; do
         "_add_xorrisofs_options_${bootmode}_iso" 
     done
+
+    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        xorrisofs_options=("$(_add_xorrisofs_options_persistent "${xorrisofs_options[@]}")")
+    fi
+
+    if [ "${swap_size_kib}" != "" ]; then
+        xorrisofs_options=("$(_add_xorrisofs_options_swap "${xorrisofs_options[@]}")")
+    fi
 
     rm -f -- "${out_dir}/${image_name}"
     # shellcheck disable=SC2116
