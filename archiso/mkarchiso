@@ -936,12 +936,8 @@ _make_boot_on_iso9660() {
 
 # Copy kernel and initramfs to dongle ISO 9660
 _make_boot_on_dongle() {
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        dongle_boot_dir="${work_dir}/dongle_persistent"
-    else
-        dongle_boot_dir="${work_dir}/dongle_iso"
-    fi
-    _make_boot_on_iso "${dongle_boot_dir}"
+    _make_boot_on_iso "${work_dir}/dongle_persistent"
+    _make_boot_on_iso "${work_dir}/dongle_iso"
 }
 
 # Copy kernel and initramfs to ISO 9660
