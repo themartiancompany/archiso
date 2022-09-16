@@ -1359,7 +1359,7 @@ _make_common_bootmode_grub_copy_to_isofs() {
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
 _get_grubmodules(){
     local _mode="${1}"
-    _modules=(afsplitter boot bufio chain configfile cryptodisk disk ext2 gcry_rijndael
+    _modules=(afsplitter boot bufio chain configfile cryptodisk disk echo ext2 gcry_rijndael
               gcry_sha256 gcry_sha512 halt iso9660 linux loadenv loopback luks2 minicmd
               normal part_apple part_gpt part_msdos password_pbkdf2 reboot search test
               search_fs_uuid usb)
