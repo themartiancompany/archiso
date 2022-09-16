@@ -931,18 +931,19 @@ _make_bootmodes_dongle() {
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso9660() {
     isofs_dir="${work_dir}/iso"
-    _make_boot_on_iso "${isofs_dir}"
+    _make_boot_on_iso "${isofs_dir}" "ISO 9660"
 }
 
 # Copy kernel and initramfs to dongle ISO 9660
 _make_boot_on_dongle() {
-    _make_boot_on_iso "${work_dir}/dongle_persistent"
-    _make_boot_on_iso "${work_dir}/dongle_iso"
+    _make_boot_on_iso "${work_dir}/dongle_iso" "dongle ISO 9660"
+    _make_boot_on_iso "${work_dir}/dongle_persistent" "dongle persistent"
 }
 
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso() {
     local bootable_dir="${1}"
+    local _fs_name="${2}"
     local _query _src ucode_image
     local _cp_opts=('-af' '--no-preserve=ownership,mode')
     local boot_dir="${bootable_dir}/${install_dir}/boot"
@@ -950,8 +951,7 @@ _make_boot_on_iso() {
     local licenses_src="${pacstrap_dir}/usr/share/licenses"
     local licenses_dest="${boot_dir}/licenses"
     local images=("initramfs-*.img" "vmlinuz-*")
-    _msg_info "Preparing kernel and initramfs for the ISO 9660 file system in ${bootable_dir}..."
-
+    _msg_info "Preparing kernel and initramfs for the ${_fs_name} file system in ${bootable_dir}..."
     install -d -m 0755 -- "${kernel_dir}"
     for _query in  "${images[@]}"; do
         find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \; -quit
