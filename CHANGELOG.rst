@@ -22,6 +22,7 @@ Added
 - Bootloaders
   - Add support for GRUB as MBR bootloader.
   - Add support for GRUB booting system from persistent partitions.
+  - Add evil-maid warnings when no dongle is used.
 - Added known vulnerabilities warnings.
 - Added functions to determine chosen file system image type.
 - Add preliminary support for systemd-homed.
