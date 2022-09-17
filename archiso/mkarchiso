@@ -2110,7 +2110,7 @@ _prepare_persistent_image() {
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
-    local dongle_persistent_uuid_resolver="${pacstrap_dir}/airootfs/usr/local/bin/resolve-dev-mapper-donglepersistent"
+    local dongle_persistent_uuid_resolver="${pacstrap_dir}/usr/local/bin/resolve-dev-mapper-donglepersistent"
     if [ -d "${profile}/persistent" ]; then
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
