@@ -1,5 +1,5 @@
 [Unit]
-Description=Swap unit
+Description=Persistent Swap unit
 
 [Mount]
 What=/dev/mapper/swap
