@@ -764,6 +764,7 @@ _mkdonglepersistent_ext4+luks() {
 _mkdongleswap_common() {
     _name="dongle_swap"
     _image_path="${dongleswapimg}"
+    # shellcheck disable=SC2154
     _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${swap_size_kib}"
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
@@ -782,7 +783,8 @@ _mkdongleswap_common() {
 _mkswap_common() {
     _name="swap"
     _image_path="${swapimg}"
-    _encryption_key="${dongle_swap_encryption_key}"
+    # shellcheck disable=SC2154
+    _encryption_key="${swap_encryption_key}"
     _size_kib="${swap_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
     if [[ "${swap_image_type}" == *"luks" ]]; then
