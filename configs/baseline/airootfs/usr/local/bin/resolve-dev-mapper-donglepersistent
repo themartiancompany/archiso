@@ -18,8 +18,8 @@ _detach_dev_mapper_donglepersistent() {
   _mapperdevice=$(/usr/bin/losetup --list | /usr/bin/grep "loop.p4" | /usr/bin/awk '{ print $1 }')
   if [ "${_mapperdevice}" == "" ]; then
       if [ "${_loopdevice}" != "" ]; then
-          /usr/bin/rm "${_mapper}"
-          /usr/bin/losetup -d "${_loopdevice}"
+          /usr/bin/rm "${_mapper}" || true
+          /usr/bin/losetup -d "${_loopdevice}" || true
       fi
   else
       echo "Unmount ${_mapperdevice} first!"
