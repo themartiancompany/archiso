@@ -6,7 +6,7 @@ After=systemd-homed.service
 Type=oneshot
 ExecStart=/usr/local/bin/resolve-dev-mapper-donglepersistent start
 ExecStop=/usr/local/bin/resolve-dev-mapper-donglepersistent stop
-RemainAfterExit=no
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
