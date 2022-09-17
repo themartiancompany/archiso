@@ -1,28 +1,33 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 
 _resolve_dev_mapper_donglepersistent() {
   local _mapper="/dev/disk/by-uuid/%DONGLE_PERSISTENT_UUID%"
-  local _loopdevice="/dev/loop$((3 * 1415))"
+  local _cdrom="/dev/sr0" _loopdevice
   if [ ! -e "${_mapper}" ]; then
-      losetup "${_loopdevice}" "/dev/sr0" > /dev/null 2>&1
-      ln -s "${_loopdevice}p3" "${_mapper}" > /dev/null 2>&1
+      _loopdevice=$(/usr/bin/kpartx -al "${_cdrom}" | /usr/bin/grep "loop.p3 :" | /usr/bin/awk '{ print $1 }')
+      /usr/bin/kpartx -a "${_cdrom}"
+      /usr/bin/ln -s "${_loopdevice}" "${_mapper}" > /dev/null 2>&1
   fi
 }
 
 _detach_dev_mapper_donglepersistent() {
   local _mapper="/dev/mapper/donglepersistent"
-  local _loopdevice="/dev/loop$((3 * 1415))"
-  rm "${_mapper}"
-  losetup -d "${_loopdevice}"
+  local _cdrom="/dev/sr0" _loopdevice=""
+  _loopdevice=$(/usr/bin/losetup --list | /usr/bin/grep "${_cdrom}" | /usr/bin/awk '{ print $1 }')
+  if [ "${_loopdevice}" != "" ]; then
+      /usr/bin/rm "${_mapper}"
+      /usr/bin/losetup -d "${_loopdevice}"
+  fi
 }
 
-start() {
-  _resolve_dev_mapper_donglepersistent
-}
-
-stop() {
-  _detach_dev_mapper_donglepersistent
+_main() {
+    local _command="${1}"
+    if [ "${_command}" == "start" ]; then
+        _resolve_dev_mapper_donglepersistent
+    elif [ "${_command}" == "stop" ]; then
+        _detach_dev_mapper_donglepersistent
+    fi
 }
 
 command="${1}"
-"${command}"
+_main "${command}"
