@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+_resolve_dev_mapper_donglepersistent() {
+  local _mapper="/dev/mapper/donglepersistent"
+  local _loopdevice="/dev/loop$((3 * 1415))"
+  if [ ! -e "${_mapper}" ]; then
+      _loopdevice="/dev/loop$((3 * 1415))"
+      losetup "${_loopdevice}" "/dev/sr0"
+      ln -s "${_loopdevice}p3" "${_mapper}"
+  fi
+}
+
+_detach_dev_mapper_donglepersistent() {
+  local _mapper="/dev/mapper/donglepersistent"
+  local _loopdevice="/dev/loop$((3 * 1415))"
+  rm "${_mapper}"
+  losetup -d "${_loopdevice}"
+}
+
+start() {
+  _resolve_dev_mapper_donglepersistent
+}
+
+stop() {
+  _detach_dev_mapper_donglepersistent
+}
+
+command="${1}"
+"${command}"
