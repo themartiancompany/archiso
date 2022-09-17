@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 _resolve_dev_mapper_donglepersistent() {
-  local _mapper="/dev/mapper/donglepersistent"
+  local _mapper="/dev/disk/by-uuid/%DONGLE_PERSISTENT_UUID%"
   local _loopdevice="/dev/loop$((3 * 1415))"
   if [ ! -e "${_mapper}" ]; then
       _loopdevice="/dev/loop$((3 * 1415))"
