@@ -5,6 +5,7 @@ hyperv
 linux
 mkinitcpio
 mkinitcpio-archiso
+multipath-tools
 open-vm-tools
 openssh
 pv
