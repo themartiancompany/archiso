@@ -3008,6 +3008,7 @@ _set_overrides() {
     [[ -n "$persistentimg" ]] || persistentimg="${work_dir}/persistent."$(_get_fs_ext "persistent")
     [[ -n "$donglepersistentimg" ]] || donglepersistentimg="${work_dir}/donglepersistent."$(_get_fs_ext "persistent")
     [[ -n "$swapimg" ]] || swapimg="${work_dir}/swap.img"
+    [[ -n "$dongleswapimg" ]] || dongleswapimg="${work_dir}/dongleswap.img"
 }
 
 _export_gpg_publickey() {
