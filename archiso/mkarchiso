@@ -2999,7 +2999,7 @@ _set_overrides() {
     [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
     [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
-    [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="swap+luks"
+    [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
     [[ -n "$airootfs_img_dir" ]] || airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
