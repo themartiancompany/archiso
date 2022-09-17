@@ -2,21 +2,25 @@
 
 _resolve_dev_mapper_donglepersistent() {
   local _mapper="/dev/disk/by-uuid/%DONGLE_PERSISTENT_UUID%"
-  local _cdrom="/dev/sr0" _loopdevice
+  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((3 * 1415))"
   if [ ! -e "${_mapper}" ]; then
-      _loopdevice=$(/usr/bin/kpartx -arl "${_cdrom}" | /usr/bin/grep "loop.p3 :" | /usr/bin/awk '{ print $1 }')
-      /usr/bin/kpartx -ar "${_cdrom}"
-      /usr/bin/ln -s "${_loopdevice}" "${_mapper}" > /dev/null 2>&1
+      losetup -rP "${_loop_device}" "${_cdrom}"
+      # _loopdevice=$(/usr/bin/kpartx -arl "${_cdrom}" | /usr/bin/grep "loop.p3 :" | /usr/bin/awk '{ print $1 }')
+      # /usr/bin/kpartx -ar "${_cdrom}"
+      /usr/bin/ln -s "${_loopdevice}p4" "${_mapper}" > /dev/null 2>&1
   fi
 }
 
 _detach_dev_mapper_donglepersistent() {
   local _mapper="/dev/mapper/donglepersistent"
-  local _cdrom="/dev/sr0" _loopdevice=""
+  local _cdrom="/dev/sr0" _loopdevice="" _mapperdevice=""
   _loopdevice=$(/usr/bin/losetup --list | /usr/bin/grep "${_cdrom}" | /usr/bin/awk '{ print $1 }')
-  if [ "${_loopdevice}" != "" ]; then
-      /usr/bin/rm "${_mapper}"
-      /usr/bin/losetup -d "${_loopdevice}"
+  _mapperdevice=$(/usr/bin/losetup --list | /usr/bin/grep "loop.p4" | /usr/bin/awk '{ print $1 }')
+  if [ "${_mapperdevice}" == "" ]; then
+      if [ "${_loopdevice}" != "" ]; then
+          /usr/bin/rm "${_mapper}"
+          /usr/bin/losetup -d "${_loopdevice}"
+      fi
   fi
 }
 
