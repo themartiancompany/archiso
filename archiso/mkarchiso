@@ -1991,7 +1991,7 @@ _prepare_swap_image() {
                 swap_encryption_key="${work_dir}/swap.key"
                 _gen_key "${swap_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
-                install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
+                install -D -m400 "${swap_encryption_key}" "${pacstrap_dir}/etc/keys"
             elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
                 swap_encryption_key="${work_dir}/swap.key"
                 _gen_key "${swap_encryption_key}"
