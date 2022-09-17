@@ -2030,7 +2030,7 @@ _prepare_persistent_image() {
 
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         if [[ "${persistent_image_type}" == *"luks" ]]; then
-            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            if [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
                 persistent_encryption_key="${work_dir}/persistent.key"
                 _gen_key "${persistent_encryption_key}"
                 install -d -m700 "${pacstrap_dir}/etc/keys"
