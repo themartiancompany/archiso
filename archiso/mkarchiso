@@ -283,16 +283,17 @@ _run_mkerofs() {
 
 # Creates a swap image
 _run_mkswap() {
-    _image_path="${1}"
-    _size="${2}"
-    _label="${3}"
-    _fsuuid="${4}"
+    local _image_path="${1}"
+    local _size="${2}"
+    local _epoch="${3}"
+    local _label="${4}"
+    local _fsuuid
+    _fsuuid="$(uuidgen --sha1 \
+	                   --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+		               --name "${_epoch}"
     dd if=/dev/zero of="${_image_path}" bs=1K count="${_size}" status=progress
     chmod 0600 "${_image_path}"
     sync
-    fsuuid="$(uuidgen --sha1 \
-	              --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-		          --name "$(date +%s)")"
     mkswap -L "${_label}" -U "${_fsuuid}" "${_image_path}"
 }
 
@@ -411,9 +412,9 @@ _mkluks_common() {
 _mkimg_swap() {
     local _image_path="${1}"
     local _size_kib="${2}"
-    local _label="${3}"
-    local _fsuuid="${4}"
-    _run_mkswap "${_image_path}" "${_size_kib}" "${_label}" "${_fsuuid}"
+    local _epoch="${3}"
+    local _label="${4}"
+    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}""${_label}"
 }
 
 # Create a swap partition inside a LUKS container image file.
@@ -429,7 +430,7 @@ _mkimg_swap+luks() {
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
     _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkswap "${image_device}" "$(_get_internal_size "${_size_kib}")" "${_name}"
+    _run_mkswap "${image_device}" "$(_get_internal_size "${_size_kib}")" "${_epoch}" "${_name}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -770,19 +771,12 @@ _mkswap_common() {
     _writable="true"
     _grub="false"
     _auto_size=""
-    persistent_epoch="${_epoch}"
-    swap_guid="$(uuidgen --sha1 \
-	              --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-		          --name "$(date +%s)")"
     rm -f -- "${_image_path}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkswap_swap() {
-    swap_guid="$(uuidgen --sha1 \
-	                     --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-		                 --name "$(date +%s)")"
-    _run_mkswap "${_image_path}" "${_size_kib}" "${_label}" "${swap_guid}"
+    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
 }
 
 _mkswap_swap+luks() {
@@ -1101,6 +1095,19 @@ _get_cryptomount_uuid() {
             --name "${_epoch}" | sed "s|-||g"
 }
 
+# Get UUID for the dongle GRUB plain mount
+_get_swap_uuid() {
+    if [[ " ${buildmode} " == 'dongle' ]]; then
+        _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+    else
+        _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
+    fi
+    uuidgen --sha1 \
+	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+            --name "${_epoch}"
+}
+
+
 # Produce kernel parameters.
 _get_kernel_params() {
     local _kparams=()
@@ -1387,11 +1394,14 @@ _build_crypttab() {
     local _template="${1}"
     local _out="${2}"
     if [[ "${persistent_image_type}" == *"luks" ]]; then
-        if [[ "${persistent_image_type}" == *"luks" ]]; then
-            sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
-        fi
+        sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
     else
-            sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
+        sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
+    fi
+    if [[ "${swap_image_type}" == *"luks" ]]; then
+        sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" "${_out}"
+    else
+        sed -i '/%SWAP_UUID%/d' "${_out}"
     fi
 }
 
@@ -2342,9 +2352,7 @@ _add_xorrisofs_options_persistent() {
 _add_xorrisofs_options_swap() {
     local _img _xorrisofs_options=("$@")
     if [[ "${swap_guid}" == "" ]]; then
-        swap_guid="$(uuidgen --sha1 \
-	              --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-		          --name "$(date +%s)")"
+        swap_guid="$(_get_swap_uuid)"
     fi
     if [[ "${swap_image_type}" == *"luks" ]]; then
         swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
@@ -3071,8 +3079,8 @@ _build_iso_base() {
     _run_once _make_version
     _run_once _make_customize_airootfs
     _run_once _make_pkglist
-    _run_once _prepare_persistent_image
     _run_once _prepare_swap_image
+    _run_once _prepare_persistent_image
     if [[ "${buildmode}" == 'netboot' ]]; then
         _run_once _make_boot_on_iso9660
     else
