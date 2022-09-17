@@ -290,7 +290,7 @@ _run_mkswap() {
     local _fsuuid
     _fsuuid="$(uuidgen --sha1 \
 	                   --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-		               --name "${_epoch}"
+                       --name "${_epoch}")"
     dd if=/dev/zero of="${_image_path}" bs=1K count="${_size}" status=progress
     chmod 0600 "${_image_path}"
     sync
