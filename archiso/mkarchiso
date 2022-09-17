@@ -741,7 +741,7 @@ _mkdonglepersistent_common() {
     _image_path="${donglepersistentimg}"
     _encryption_key="${dongle_persistent_encryption_key}"
     _size_kib="${persistent_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    _epoch="${dongle_persistent_epoch}"
     _label="${iso_label}_DONGLE_PERSISTENT"
     _writable="true"
     _grub="true"
@@ -1440,6 +1440,11 @@ _build_crypttab() {
     else
         sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
     fi
+    if [[ "${airootfs_image_type}" == *"luks" ]]; then
+        sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_out}"
+    else
+        sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
+    fi
     if [[ "${swap_image_type}" == *"luks" ]]; then
         sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" "${_out}"
     else
@@ -2095,6 +2100,7 @@ _prepare_persistent_image() {
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
