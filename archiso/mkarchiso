@@ -1130,6 +1130,13 @@ _get_cryptomount_uuid() {
             --name "${_epoch}" | sed "s|-||g"
 }
 
+_get_dongle_persistent_uuid() {
+    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    uuidgen --sha1 \
+	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+            --name "${_epoch}"
+}
+
 _get_dongle_swap_uuid() {
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
     uuidgen --sha1 \
@@ -2088,6 +2095,9 @@ _prepare_persistent_image() {
     persistent_uuid="$(uuidgen --sha1 \
                                --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
                                --name "${persistent_epoch}")"
+    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
+
     if [ -d "${profile}/persistent" ]; then
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
@@ -2100,7 +2110,6 @@ _prepare_persistent_image() {
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
