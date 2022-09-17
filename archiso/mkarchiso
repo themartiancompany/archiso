@@ -2349,15 +2349,15 @@ _add_xorrisofs_options_persistent() {
 }
 
 _add_xorrisofs_options_swap() {
-    local _img _xorrisofs_options=("$@")
-    if [[ "${swap_guid}" == "" ]]; then
-        swap_guid="$(_get_swap_uuid)"
+    local _img _swap_guid _xorrisofs_options=("$@")
+    if [[ "${_swap_guid}" == "" ]]; then
+        _swap_guid="$(_get_swap_uuid)"
     fi
     if [[ "${swap_image_type}" == *"luks" ]]; then
-        swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+        _swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
     fi
     _img="${swapimg}"
-    _xorrisofs_options+=('-append_partition' '4' "${swap_guid}" "${_img}")
+    _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
