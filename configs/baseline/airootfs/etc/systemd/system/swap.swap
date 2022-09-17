@@ -1,0 +1,10 @@
+[Unit]
+Description=Swap unit
+
+[Mount]
+What=/dev/mapper/swap
+Options=nofail
+TimeoutSec=5
+
+[Install]
+WantedBy=multi-user.target

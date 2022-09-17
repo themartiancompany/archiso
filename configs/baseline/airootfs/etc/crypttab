@@ -2,4 +2,4 @@
 # See crypttab(5) for details.
 
   persistent        /dev/disk/by-uuid/%PERSISTENT_UUID%          /etc/keys/persistent.key       x-systemd.device-timeout=3
-  swap              /dev/disk/by-uuid/%SWAP_UUID%                /dev/urandom                   swap,offset=2048,cipher=aes-xts-plain64,size=512,x-systemd.device-timeout=10
+  swap              /dev/disk/by-uuid/%SWAP_UUID%                /dev/urandom                   swap,cipher=aes-xts-plain64,size=512,x-systemd.device-timeout=10
