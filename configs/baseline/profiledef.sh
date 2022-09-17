@@ -32,5 +32,6 @@ file_permissions=(
   ["/run/archiso/keys"]="0:0:700"
   ["/run/archiso/persistent"]="0:0:711"
   ["/usr/local/bin/user-setup"]="0:0:755"
+  ["/usr/local/bin/resolve-dev-mapper-donglepersistent"]="0:0:755"
   ["/var/lib/bluetooth"]="0:0:755"
 )
