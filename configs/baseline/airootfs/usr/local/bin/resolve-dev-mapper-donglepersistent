@@ -4,7 +4,7 @@ _resolve_dev_mapper_donglepersistent() {
   local _mapper="/dev/disk/by-uuid/%DONGLE_PERSISTENT_UUID%"
   local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((3 * 1415))"
   if [ ! -e "${_mapper}" ]; then
-      /usr/bin/losetup -rP "${_loop_device}" "${_cdrom}"
+      /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
       # _loopdevice=$(/usr/bin/kpartx -arl "${_cdrom}" | /usr/bin/grep "loop.p3 :" | /usr/bin/awk '{ print $1 }')
       # /usr/bin/kpartx -ar "${_cdrom}"
       /usr/bin/ln -s "${_loopdevice}p4" "${_mapper}" > /dev/null 2>&1
@@ -21,6 +21,8 @@ _detach_dev_mapper_donglepersistent() {
           /usr/bin/rm "${_mapper}"
           /usr/bin/losetup -d "${_loopdevice}"
       fi
+  else
+      echo "Unmount ${_mapperdevice} first!"
   fi
 }
 
