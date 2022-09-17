@@ -66,6 +66,7 @@ persistentimg=""
 swap_size_kib=""
 swap_image_type=""
 swap_encryption_key=""
+dongle_swap_image_type=""
 swapimg=""
 dongleswapimg=""
 donglepersistentimg=""
@@ -768,7 +769,7 @@ _mkdongleswap_common() {
     _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${swap_size_kib}"
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
-    if [[ "${swap_image_type}" == *"luks" ]]; then
+    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_DONGLE_SWAP"
     else
         _label="${_name}"
@@ -2998,6 +2999,7 @@ _set_overrides() {
     [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
     [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
+    [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="swap+luks"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
     [[ -n "$airootfs_img_dir" ]] || airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
