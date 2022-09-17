@@ -273,7 +273,7 @@ _run_mkerofs() {
     local _dir="${2}"
     local _epoch="${3}"
     local fsuuid
-    fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
+    fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
     [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
     _msg_info "Creating EROFS image"
     _msg_info "Directory: ${_dir}"
@@ -292,9 +292,7 @@ _run_mkswap() {
     local _epoch="${3}"
     local _label="${4}"
     local _fsuuid
-    _fsuuid="$(uuidgen --sha1 \
-	                   --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-                       --name "${_epoch}")"
+    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
     dd if=/dev/zero of="${_image_path}" bs=1K count="${_size}" status=progress
     chmod 0600 "${_image_path}"
     sync
@@ -311,12 +309,13 @@ _run_mkluks() {
     local _label="${5}"
     local _writable="${6}"
     local _grub="${7}"
+    local _fsuuid
     local _activation_opts=() _format_opts=() _key_msg="" _mapper
     local _cryptsetup_opts=('--type' 'luks2')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
-    _fsuuid="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 --name "${_epoch}")"
+    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
         _key_opts=("--key-file=${_encryption_key}")
@@ -1107,6 +1106,13 @@ _build_archiso_mkinitcpio_conf() {
          s|%ARCHISO_MODULES%|${_modules[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
 }
 
+_get_epoch_fsuuid() {
+    local _epoch="${1}"
+    uuidgen --sha1 \
+	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+            --name "${_epoch}"
+}
+
 # Get UUID for the dongle GRUB plain mount
 _get_dongle_uuid() {
     #shellcheck disable=SC2005
@@ -1126,23 +1132,17 @@ _get_cryptomount_uuid() {
     else
         _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     fi
-    uuidgen --sha1 \
-            --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-            --name "${_epoch}" | sed "s|-||g"
+    _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
 _get_dongle_persistent_uuid() {
     _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
-    uuidgen --sha1 \
-	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-            --name "${_epoch}"
+    _get_epoch_fsuuid "${_epoch}"
 }
 
 _get_dongle_swap_uuid() {
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
-    uuidgen --sha1 \
-	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-            --name "${_epoch}"
+    _get_epoch_fsuuid "${_epoch}"
 }
 
 # Get UUID for the dongle GRUB plain mount
@@ -1152,9 +1152,7 @@ _get_swap_uuid() {
     else
         _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
     fi
-    uuidgen --sha1 \
-	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-            --name "${_epoch}"
+    _get_epoch_fsuuid "${_epoch}"
 }
 
 
@@ -2104,9 +2102,7 @@ _prepare_persistent_image() {
     local _msg persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
-    persistent_uuid="$(uuidgen --sha1 \
-                               --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
-                               --name "${persistent_epoch}")"
+    persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
