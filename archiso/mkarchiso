@@ -1097,7 +1097,7 @@ _get_cryptomount_uuid() {
 
 # Get UUID for the dongle GRUB plain mount
 _get_swap_uuid() {
-    if [[ " ${buildmode} " == 'dongle' ]]; then
+    if [[ "${buildmode}" == 'dongle' ]]; then
         _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
     else
         _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
