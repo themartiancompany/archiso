@@ -3,7 +3,7 @@ Description=Dongle persistent mount
 
 [Mount]
 What=/dev/mapper/donglepersistent
-Where=/run/archiso/persistent
+Where=/run/archiso/donglepersistent
 Type=ext4
 Options=rw,noatime,nofail
 TimeoutSec=5
