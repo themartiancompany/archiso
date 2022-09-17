@@ -67,6 +67,7 @@ swap_size_kib=""
 swap_image_type=""
 swap_encryption_key=""
 swapimg=""
+dongleswapimg=""
 donglepersistentimg=""
 dongle_persistent_encryption_key=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
@@ -760,10 +761,28 @@ _mkdonglepersistent_ext4+luks() {
 }
 
 # Steps shared by _mkswap+fs_type functions
+_mkdongleswap_common() {
+    _name="dongle_swap"
+    _image_path="${dongleswapimg}"
+    _encryption_key="${dongle_swap_encryption_key}"
+    _size_kib="${swap_size_kib}"
+    _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+    if [[ "${swap_image_type}" == *"luks" ]]; then
+        _label="${iso_label}_DONGLE_SWAP"
+    else
+        _label="${_name}"
+    fi
+    _writable="true"
+    _grub="false"
+    _auto_size=""
+    rm -f -- "${_image_path}"
+}
+
+# Steps shared by _mkswap+fs_type functions
 _mkswap_common() {
     _name="swap"
     _image_path="${swapimg}"
-    _encryption_key="${swap_encryption_key}"
+    _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${swap_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
     if [[ "${swap_image_type}" == *"luks" ]]; then
@@ -783,6 +802,16 @@ _mkswap_swap() {
 }
 
 _mkswap_swap+luks() {
+    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size_kib}" \
+                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
+} 
+
+# Create an ext4 image to be used as the persistent ISO partition.
+_mkdongleswap_swap() {
+    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+}
+
+_mkdongleswap_swap+luks() {
     _mkimg_swap+luks "${_name}" "${_image_path}" "${_size_kib}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 } 
@@ -1098,6 +1127,13 @@ _get_cryptomount_uuid() {
             --name "${_epoch}" | sed "s|-||g"
 }
 
+_get_dongle_swap_uuid() {
+    _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+    uuidgen --sha1 \
+	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+            --name "${_epoch}"
+}
+
 # Get UUID for the dongle GRUB plain mount
 _get_swap_uuid() {
     if [[ "${buildmode}" == 'dongle' ]]; then
@@ -1405,6 +1441,11 @@ _build_crypttab() {
         sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" "${_out}"
     else
         sed -i '/%SWAP_UUID%/d' "${_out}"
+    fi
+    if [[ "${swap_size_kib}" != "" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        sed -i "s|%DONGLE_SWAP_UUID%|$(_get_dongle_swap_uuid)|g" "${_out}"
+    else
+        sed -i '/%DONGLE_SWAP_UUID%/d' "${_out}"
     fi
 }
 
@@ -1945,6 +1986,34 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
+_resolve_binary_encryption_key() {
+    local _name="${1}"
+    local _encryption_key _image_type
+    _image_type=$(eval echo \$"{${_name}_image_type}")
+    if [[ "${_image_type}" == *"luks" ]]; then
+        if [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            _encryption_key="${work_dir}/${_name}.key"
+            _install_dir="${pacstrap_dir}/etc/keys"
+            eval "${_name}_encryption_key=\"${_encryption_key}\""
+            _gen_key "${_encryption_key}"
+            install -d -m700 "${_install_dir}"
+            install -D -m400 "${_encryption_key}" "${_install_dir}"
+        elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            _encryption_key="${work_dir}/${_name}.key"
+            _install_dir="${dongle_persistent_dir}/etc/keys"
+            eval "${_name}_encryption_key=\"${_encryption_key}\""
+            _gen_key "${_encryption_key}"
+            install -d -m700 "${_install_dir}"
+            install -D -m400 "${_encryption_key}" "${_install_dir}"
+        else
+            _msg=("Rootfs encryption and dongle buildmode disabled."
+                  "You will be prompted to insert a password for the ${_name} partition.")
+            _msg_warning "${_msg[*]}"
+            eval "${_name}_encryption_key="
+        fi
+    fi
+}
+
 _get_airootfs_path(){
     echo "${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
 }
@@ -1987,49 +2056,19 @@ _prepare_keys_image() {
     fi
 }
 
-_prepare_swap_image() {
-    if [ "${swap_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        if [[ "${swap_image_type}" == *"luks" ]]; then
-            if [[ "${airootfs_image_type}" == *"luks" ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-                swap_encryption_key="${work_dir}/swap.key"
-                _gen_key "${swap_encryption_key}"
-                install -d -m700 "${pacstrap_dir}/etc/keys"
-                install -D -m400 "${swap_encryption_key}" "${pacstrap_dir}/etc/keys"
-            elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-                swap_encryption_key="${work_dir}/swap.key"
-                _gen_key "${swap_encryption_key}"
-                install -d -m700 "${dongle_persistent_dir}/etc/keys"
-                install -D -m400 "${swap_encryption_key}" "${dongle_persistent_dir}/etc/keys"
-            else
-                _msg=("Rootfs encryption and dongle buildmode disabled."
-                      "You will be prompted to insert a password for the swap partition.")
-                _msg_warning "${_msg[*]}"
-                swap_encryption_key=""
-            fi
-        fi 
-        _run_once "_mkswap_common"
-        _run_once "_mkswap_${swap_image_type}"
+_prepare_dongle_swap_image() {
+    if [ "${swap_size_kib}" != "" ] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _resolve_binary_encryption_key "dongle_swap"
+        _run_once "_mkdongleswap_common"
+        _run_once "_mkdongleswap_${swap_image_type}"
     fi
 }
 
-_resolve_persistent_encryption_key() {
-    if [[ "${persistent_image_type}" == *"luks" ]]; then
-        if [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            persistent_encryption_key="${work_dir}/persistent.key"
-            _gen_key "${persistent_encryption_key}"
-            install -d -m700 "${pacstrap_dir}/etc/keys"
-            install -D -m400 "${persistent_encryption_key}" "${pacstrap_dir}/etc/keys"
-        elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            persistent_encryption_key="${work_dir}/persistent.key"
-            _gen_key "${persistent_encryption_key}"
-            install -d -m700 "${dongle_persistent_dir}/etc/keys"
-            install -D -m400 "${persistent_encryption_key}" "${dongle_persistent_dir}/etc/keys"
-        else
-            _msg=("Rootfs encryption and dongle buildmode disabled."
-                  "You will be prompted to insert a password for the boot partition.")
-            _msg_warning "${_msg[*]}"
-            persistent_encryption_key=""
-        fi
+_prepare_swap_image() {
+    if [ "${swap_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _resolve_binary_encryption_key "swap"
+        _run_once "_mkswap_common"
+        _run_once "_mkswap_${swap_image_type}"
     fi
 }
 
@@ -2046,11 +2085,9 @@ _prepare_persistent_image() {
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
     fi
-
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
-
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_persistent_encryption_key
+        _resolve_binary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
@@ -2356,10 +2393,27 @@ _add_xorrisofs_options_persistent() {
     echo "${_xorrisofs_options[@]}"
 }
 
+_add_xorrisofs_options_dongle_swap() {
+    local _img _swap_guid _xorrisofs_options=("$@")
+    _img="${dongleswapimg}"
+    if [[ "${swap_image_type}" == *"luks" ]]; then
+        _swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    else
+        _swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
+    fi
+    _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
+    echo "${_xorrisofs_options[@]}"
+}
+
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="${swapimg}"
-    _xorrisofs_options+=('-append_partition' '4' "0657fd6d-a4ab-43c4-84e5-0933c84b4f4f" "${_img}")
+    if [[ "${swap_image_type}" == *"luks" ]]; then
+        _swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    else
+        _swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
+    fi
+    _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -2713,7 +2767,7 @@ _build_dongle_image() {
     fi
 
     if [ "${swap_size_kib}" != "" ]; then
-        dongle_xorrisofs_options=("$(_add_xorrisofs_options_swap "${dongle_xorrisofs_options[@]}")")
+        dongle_xorrisofs_options=("$(_add_xorrisofs_options_dongle_swap "${dongle_xorrisofs_options[@]}")")
     fi
 
     [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
@@ -3081,6 +3135,7 @@ _build_iso_base() {
     _run_once _make_customize_airootfs
     _run_once _make_pkglist
     _run_once _prepare_swap_image
+    _run_once _prepare_dongle_swap_image
     _run_once _prepare_persistent_image
     if [[ "${buildmode}" == 'netboot' ]]; then
         _run_once _make_boot_on_iso9660
