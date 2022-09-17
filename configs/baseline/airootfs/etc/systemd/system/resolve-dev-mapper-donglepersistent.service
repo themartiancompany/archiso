@@ -1,6 +1,5 @@
 [Unit]
-Description=Set up an user if not found on the system
-After=systemd-homed.service
+Description=Resolve dongle persistent setup if placed on a write-once device.
 
 [Service]
 Type=oneshot
@@ -9,4 +8,4 @@ ExecStop=/usr/local/bin/resolve-dev-mapper-donglepersistent stop
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=cryptsetup.target
