@@ -68,6 +68,7 @@ swap_image_type=""
 swap_encryption_key=""
 swapimg=""
 donglepersistentimg=""
+dongle_persistent_encryption_key=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 
@@ -405,6 +406,9 @@ _mkluks_common() {
         _get_passwd "${_name}" "${_label}"
         echo "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
+    elif [ "${_key}" = "auto" ]; then
+        echo "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 13 ; echo '')" > "${_out}"
+        _encryption_key="${_out}"
     fi
 }
 
@@ -733,7 +737,7 @@ _mkdonglepersistent_common() {
     _name="donglepersistent"
     _dir="${dongle_persistent_dir}"
     _image_path="${donglepersistentimg}"
-    _encryption_key=""
+    _encryption_key="${dongle_persistent_encryption_key}"
     _size_kib="${persistent_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     _label="${iso_label}_DONGLE_PERSISTENT"
@@ -2933,6 +2937,7 @@ _set_overrides() {
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
     [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
     [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
+    [[ -n "$dongle_persistent_image_type" ]] || persistent_image_type="ext4+luks"
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"

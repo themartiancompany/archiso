@@ -21,6 +21,7 @@ airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 encryption_key="auto"
 persistent_size_kib=500000
 persistent_image_type="ext4+luks"
+dongle_persistent_encryption_key="auto"
 swap_size_kib=500000
 swap_image_type="swap+luks"
 keys_image_type="erofs"
