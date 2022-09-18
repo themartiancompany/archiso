@@ -1,6 +1,7 @@
 [Unit]
 Description=Set up an user if not found on the system
 After=systemd-homed.service
+RequiresMountsFor=/home
 
 [Service]
 Type=oneshot
