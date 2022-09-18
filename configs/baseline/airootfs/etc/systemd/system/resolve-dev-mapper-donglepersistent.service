@@ -8,4 +8,4 @@ ExecStop=/usr/local/bin/resolve-dev-mapper-donglepersistent stop
 RemainAfterExit=yes
 
 [Install]
-WantedBy=cryptsetup-pre.target
+WantedBy=blockdev@.target
