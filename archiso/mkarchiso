@@ -1446,7 +1446,7 @@ _build_crypttab() {
     else
         sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
     fi
-    if [[ "${airootfs_image_type}" == *"luks" ]]; then
+    if [[ "${dongle_persistent_image_type}" == *"luks" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_out}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
