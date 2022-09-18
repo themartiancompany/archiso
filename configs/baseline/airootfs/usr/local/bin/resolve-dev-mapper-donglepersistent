@@ -6,8 +6,8 @@ _resolve_dev_mapper_donglepersistent() {
   if [ ! -e "${_mapper}" ]; then
       /usr/bin/losetup -rPs "${_loopdevice}" "${_cdrom}"
       if [ ! -e "${_mapper}" ]; then 
-	  /usr/bin/mkdir "/dev/mapper"
-          /usr/bin/ln -s "${_loopdevice}p4" "${_mapper}"
+	  /usr/bin/mkdir -p "/dev/mapper"
+          /usr/bin/ln -s "${_loopdevice}p3" "${_mapper}"
       fi
   fi
 }
