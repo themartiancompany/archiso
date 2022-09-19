@@ -1467,12 +1467,12 @@ _build_crypttab() {
 _fill_persistent_ro_udev_rules() {
     local _template="${1}"
     # shellcheck disable=SC2154
-    if [[ "${persistent_size}" != "" ]]; then
+    if [[ "${persistent_size_kib}" != "" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_template}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_template}"
     fi
-    if [[ "${persistent_size}" != "" ]]; then
+    if [[ "${persistent_size_kib}" != "" ]]; then
         sed -i "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}"
     else
         sed -i '/%PERSISTENT_UUID%/d' "${_template}"
