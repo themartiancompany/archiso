@@ -1,14 +1,14 @@
 #!/usr/bin/bash
 
-_resolve_dev_mapper_donglepersistent() {
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((49 * 42 + 3 * 1415))"
+_resolve_dev_mapper_persistent() {
+  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((3 * 1415))"
   if [ ! -e "${_mapper}" ]; then
       /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
   fi
 }
 
-_detach_dev_mapper_donglepersistent() {
-  local _mapper="/dev/mapper/donglepersistent"
+_detach_dev_mapper_persistent() {
+  local _mapper="/dev/mapper/persistent"
   local _cdrom="/dev/sr0" _loopdevice="" _mapperdevice=""
   _loopdevice=$(/usr/bin/losetup --list | /usr/bin/grep "${_cdrom}" | /usr/bin/awk '{ print $1 }')
   _mapperdevice=$(/usr/bin/losetup --list | /usr/bin/grep "loop.p4" | /usr/bin/awk '{ print $1 }')
@@ -25,9 +25,9 @@ _detach_dev_mapper_donglepersistent() {
 _main() {
     local _command="${1}"
     if [ "${_command}" == "start" ]; then
-        _resolve_dev_mapper_donglepersistent
+        _resolve_dev_mapper_persistent
     elif [ "${_command}" == "stop" ]; then
-        _detach_dev_mapper_donglepersistent
+        _detach_dev_mapper_persistent
     fi
 }
 

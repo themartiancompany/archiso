@@ -1,0 +1,1 @@
+KERNEL=="loop7143p3", SYMLINK+="mapper/donglepersistent"

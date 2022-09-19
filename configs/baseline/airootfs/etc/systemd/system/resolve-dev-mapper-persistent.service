@@ -1,0 +1,11 @@
+[Unit]
+Description=Resolve persistent partition if placed on a write-once device.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/resolve-dev-mapper-persistent start
+ExecStop=/usr/local/bin/resolve-dev-mapper-persistent stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=blockdev@.target

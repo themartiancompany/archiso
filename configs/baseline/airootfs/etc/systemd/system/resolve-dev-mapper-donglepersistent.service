@@ -1,5 +1,5 @@
 [Unit]
-Description=Resolve dongle persistent setup if placed on a write-once device.
+Description=Resolve dongle persistent partition if placed on a write-once device.
 
 [Service]
 Type=oneshot
