@@ -1464,13 +1464,18 @@ _build_crypttab() {
 }
 
 # Fill a templatized crypttab
-_resolve_dongle_persistent_mapper() {
+_fill_persistent_ro_udev_rules() {
     local _template="${1}"
     # shellcheck disable=SC2154
-    if [[ "${dongle_persistent_image_type}" == *"luks" ]]; then
+    if [[ "${persistent_size}" != "" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_template}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_template}"
+    fi
+    if [[ "${persistent_size}" != "" ]]; then
+        sed -i "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}"
+    else
+        sed -i '/%PERSISTENT_UUID%/d' "${_template}"
     fi
 }
 
@@ -2106,14 +2111,16 @@ _prepare_persistent_image() {
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
-    local dongle_persistent_uuid_resolver="${pacstrap_dir}/usr/local/bin/resolve-dev-mapper-donglepersistent"
+    local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
+    local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
     if [ -d "${profile}/persistent" ]; then
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
     fi
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
-    _resolve_dongle_persistent_mapper "${dongle_persistent_uuid_resolver}"
+    _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
+    _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_binary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
