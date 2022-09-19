@@ -1,0 +1,10 @@
+[Unit]
+Description=Dongle persistent swap unit
+
+[Mount]
+What=/dev/mapper/dongleswap
+Options=nofail
+TimeoutSec=5
+
+[Install]
+WantedBy=multi-user.target
