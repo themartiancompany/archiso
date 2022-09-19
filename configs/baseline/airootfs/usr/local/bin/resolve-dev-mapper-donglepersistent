@@ -4,6 +4,8 @@ _resolve_dev_mapper_donglepersistent() {
   local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((69 * 42 + 3 * 1415))"
   if [ ! -e "${_mapper}" ]; then
       /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
+      /usr/bin/udevadm control --reload-rules
+      /usr/bin/udevadm trigger
   fi
 }
 
@@ -17,6 +19,8 @@ _detach_dev_mapper_donglepersistent() {
           /usr/bin/rm "${_mapper}" || true
           /usr/bin/losetup -d "${_loopdevice}" || true
       fi
+      udevadm control --reload-rules
+      udevadm trigger
   else
       echo "Unmount ${_mapperdevice} first!"
   fi
