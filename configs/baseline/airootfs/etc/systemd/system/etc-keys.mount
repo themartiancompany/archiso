@@ -11,4 +11,4 @@ DirectoryMode=0700
 TimeoutSec=5
 
 [Install]
-WantedBy=blockdev@.target
+WantedBy=multi-user.target
