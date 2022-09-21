@@ -232,21 +232,26 @@ create_ephemeral_codesigning_key() {
 }
 
 run_mkarchiso() {
+  local _archiso_options=()
+  _archiso_options=('-D' "${install_dir}" 
+                    '-c' "${codesigning_cert} ${codesigning_key}"
+                    '-g' "${pgp_key_id}"
+                    '-G' "${pgp_sender}"
+                    '-o' "${output}/"
+                    '-w' "${tmpdir}/"
+                    '-v')
   # run mkarchiso
   create_ephemeral_pgp_key
   create_ephemeral_codesigning_key
 
+  if [ "${buildmode}" != "iso" ]; then
+    _archiso_options+=('-m' "${buildmode}")
+  fi
+
   print_section_start "mkarchiso" "Running mkarchiso"
   mkdir -p "${output}/" "${tmpdir}/"
-  GNUPGHOME="${gnupg_homedir}" ./archiso/mkarchiso \
-      -D "${install_dir}" \
-      -c "${codesigning_cert} ${codesigning_key}" \
-      -g "${pgp_key_id}" \
-      -G "${pgp_sender}" \
-      -o "${output}/" \
-      -w "${tmpdir}/" \
-      -m "${buildmode}" \
-      -v "configs/${profile}"
+  GNUPGHOME="${gnupg_homedir}" ./archiso/mkarchiso "${_archiso_options[@]}" \
+	                                           "configs/${profile}"
 
   print_section_end "mkarchiso"
 
