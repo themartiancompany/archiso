@@ -406,7 +406,7 @@ _mkluks_common() {
     local _out="${work_dir}/${_label}.key"
     if [ "${_key}" = "" ]; then
         _get_passwd "${_name}" "${_label}"
-        echo "${_passphrase}" > "${_out}"
+        printf "%s" "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     elif [ "${_key}" = "auto" ]; then
         echo "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 13 ; echo '')" > "${_out}"
