@@ -787,7 +787,7 @@ _mkswap_common() {
     _name="swap"
     _image_path="${swapimg}"
     # shellcheck disable=SC2154
-    _encryption_key="${swap_encryption_key}"
+    _encryption_key="auto"
     _size_kib="${swap_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
     if [[ "${swap_image_type}" == *"luks" ]]; then
@@ -2042,6 +2042,14 @@ _resolve_secondary_encryption_key() {
             _gen_key "${_encryption_key}"
             install -d -m700 "${_install_dir}"
             install -D -m400 "${_encryption_key}" "${_install_dir}"
+        elif [[ "${airootfs_image_type}" != *"luks" ]] && ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && [[ "${_name}" != "persistent" ]]; then
+            _encryption_key="${work_dir}/${_name}.key"
+            _install_dir="${persistent_dir}/etc/keys"
+            # _install_dir="${persistent_dir}/etc/cryptsetup-keys.d/${_name}.keys"
+            eval "${_name}_encryption_key=\"${_encryption_key}\""
+            _gen_key "${_encryption_key}"
+            install -d -m700 "${_install_dir}"
+            install -D -m400 "${_encryption_key}" "${_install_dir}"
         else
             _msg=("Rootfs encryption and dongle buildmode disabled."
                   "You will be prompted to insert a password for the ${_name} partition.")
@@ -2134,7 +2142,6 @@ _prepare_persistent_image() {
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            _resolve_secondary_encryption_key "dongle_persistent"
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
