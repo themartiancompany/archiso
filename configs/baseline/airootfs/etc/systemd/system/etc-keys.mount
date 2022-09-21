@@ -1,0 +1,14 @@
+[Unit]
+Description=Keys bind mount
+RequiresMountsFor=/run/archiso/donglepersistent
+
+[Mount]
+What=/run/archiso/donglepersistent/etc/keys
+Where=/etc/keys
+Type=None
+Options=bind,nofail
+DirectoryMode=0700
+TimeoutSec=5
+
+[Install]
+WantedBy=blockdev@.target
