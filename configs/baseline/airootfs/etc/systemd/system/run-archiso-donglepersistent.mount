@@ -1,6 +1,5 @@
 [Unit]
 Description=Dongle persistent mount
-# After=resolve-dev-mapper-donglepersistent.service
 
 [Mount]
 What=/dev/mapper/donglepersistent
