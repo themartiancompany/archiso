@@ -787,7 +787,7 @@ _mkswap_common() {
     _name="swap"
     _image_path="${swapimg}"
     # shellcheck disable=SC2154
-    _encryption_key="auto"
+    _encryption_key="${swap_encryption_key}"
     _size_kib="${swap_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
     if [[ "${swap_image_type}" == *"luks" ]]; then
