@@ -409,7 +409,7 @@ _mkluks_common() {
         printf "%s" "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     elif [ "${_key}" = "auto" ]; then
-        echo "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 13 ; echo '')" > "${_out}"
+        echo "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
         _encryption_key="${_out}"
     fi
 }
@@ -2020,8 +2020,11 @@ _resolve_secondary_encryption_key() {
     local _name="${1}"
     local _encryption_key _image_type
     _image_type=$(eval echo \$"{${_name}_image_type}")
+    _encryption_key=$(eval echo \$"{${_name}_encryption_key}")
     if [[ "${_image_type}" == *"luks" ]]; then
-        if [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        if [[ "${_encryption_key}" == "auto" ]]; then
+            _msg_info "Random plaintext password for ${_name}"
+        elif [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _encryption_key="${work_dir}/${_name}.key"
             _install_dir="${pacstrap_dir}/etc/keys"
             #_install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
@@ -3036,6 +3039,7 @@ _set_overrides() {
     [[ -n "$dongle_persistent_image_type" ]] || dongle_persistent_image_type="${persistent_image_type}"
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
     [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
+    [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
     [[ -n "$airootfs_img_dir" ]] || airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
