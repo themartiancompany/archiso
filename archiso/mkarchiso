@@ -2016,7 +2016,7 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
-_resolve_binary_encryption_key() {
+_resolve_secondary_encryption_key() {
     local _name="${1}"
     local _encryption_key _image_type
     _image_type=$(eval echo \$"{${_name}_image_type}")
@@ -2090,7 +2090,7 @@ _prepare_keys_image() {
 
 _prepare_dongle_swap_image() {
     if [ "${swap_size_kib}" != "" ] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_binary_encryption_key "dongle_swap"
+        _resolve_secondary_encryption_key "dongle_swap"
         _run_once "_mkdongleswap_common"
         _run_once "_mkdongleswap_${swap_image_type}"
     fi
@@ -2098,7 +2098,7 @@ _prepare_dongle_swap_image() {
 
 _prepare_swap_image() {
     if [ "${swap_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_binary_encryption_key "swap"
+        _resolve_secondary_encryption_key "swap"
         _run_once "_mkswap_common"
         _run_once "_mkswap_${swap_image_type}"
     fi
@@ -2124,11 +2124,12 @@ _prepare_persistent_image() {
     _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_binary_encryption_key "persistent"
+        _resolve_secondary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            _resolve_secondary_encryption_key "dongle_persistent"
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${persistent_image_type}"
         fi
