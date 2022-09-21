@@ -1453,6 +1453,11 @@ _build_crypttab() {
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
     fi
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        sed -i "s|%SECURE_MOUNT%|/run/archiso/donglepersistent|g" "${_out}"
+    else
+        sed -i "s|%SECURE_MOUNT%||g" "${_out}"
+    fi
     if [[ "${swap_image_type}" == *"luks" ]]; then
         sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" "${_out}"
     else
