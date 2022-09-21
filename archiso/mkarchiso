@@ -2865,7 +2865,7 @@ _build_iso_image() {
         "_add_xorrisofs_options_${bootmode}_iso" 
     done
 
-    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${persistent_size_kib}" != "" ]; then
         xorrisofs_options=("$(_add_xorrisofs_options_persistent "${xorrisofs_options[@]}")")
     fi
 
