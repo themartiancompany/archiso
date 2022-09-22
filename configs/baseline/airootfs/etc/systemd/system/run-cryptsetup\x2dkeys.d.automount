@@ -2,7 +2,7 @@
 Description=Keys directory bind automount
 
 [Automount]
-Where=/etc/keys
+Where=/run/cryptsetup-keys.d
 TimeoutIdleSec=3min
 
 [Install]

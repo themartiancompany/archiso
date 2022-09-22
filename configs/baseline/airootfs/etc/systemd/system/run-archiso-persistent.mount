@@ -1,6 +1,5 @@
 [Unit]
 Description=Persistent mount
-RequiresMountFor=/etc/keys
 
 [Mount]
 What=/dev/mapper/persistent
