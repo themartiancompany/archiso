@@ -2239,9 +2239,9 @@ _validate_requirements_persistent_image_type_ext4+luks() {
 _gen_key() {
     local _out="${1}"
     local _mode="${2}"
-    if [ "${_mode}" == "binary" ]
+    if [ "${_mode}" == "binary" ]; then
         dd if=/dev/random bs=512 count=1 of="${_out}" > /dev/null 2>&1
-    elif ["${_mode}" == "plain" ]
+    elif ["${_mode}" == "plain" ]; then
         printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
     fi
 }
