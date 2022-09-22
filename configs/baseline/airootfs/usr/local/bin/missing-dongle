@@ -13,7 +13,7 @@ _missing_dongle() {
           /usr/bin/systemctl stop "${_keys_automount_unit}"
 	  /usr/bin/mkdir -p "/${_keys_path}"
 	  /usr/bin/systemd-ask-password -n "${_msg}" > "${_key}"
-	  _attach_options=("$(grep "\bpersistent\b" < /etc/crypttab)")
+	  read -r -a _attach_options <<< "$(/usr/bin/grep "\bpersistent\b" < /etc/crypttab)"
 	  /usr/lib/systemd/systemd-cryptsetup attach "${_attach_options[@]}"
       fi
   fi
