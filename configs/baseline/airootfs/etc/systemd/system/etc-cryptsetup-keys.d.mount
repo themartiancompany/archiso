@@ -4,7 +4,7 @@ RequiresMountsFor=/run/archiso/persistent
 
 [Mount]
 What=/run/archiso/persistent/etc/cryptsetup-keys.d
-Where=/run/archiso/persistent/etc/cryptsetup-keys.d
+Where=/etc/cryptsetup-keys.d
 Type=None
 Options=bind,nofail
 DirectoryMode=0700
