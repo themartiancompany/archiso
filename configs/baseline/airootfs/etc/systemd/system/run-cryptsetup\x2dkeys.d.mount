@@ -1,6 +1,6 @@
 [Unit]
 Description=Keys bind mount
-RequiresMountsFor=/run/archiso/donglepersistent
+# RequiresMountsFor=/run/archiso/donglepersistent
 
 [Mount]
 What=/run/archiso/donglepersistent/etc/cryptsetup-keys.d
