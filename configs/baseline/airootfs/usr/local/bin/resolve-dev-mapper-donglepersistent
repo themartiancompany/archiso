@@ -9,7 +9,7 @@ _to_epoch() {
     _hour="$(echo "${_uuid}" | awk -F "-" '/1/ {print $4}')"
     _minute="$(echo "${_uuid}" | awk -F "-" '/1/ {print $5}')"
     _second="$(echo "${_uuid}" | awk -F "-" '/1/ {print $6}')"
-    echo "$(date "${_year}-${_month}-${_day} ${_hour}:${_minute}:${_second}" +%s)"
+    date "${_year}-${_month}-${_day} ${_hour}:${_minute}:${_second}" +%s
 }
 
 _resolve_dev_mapper_donglepersistent() {
