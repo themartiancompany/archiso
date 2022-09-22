@@ -1,11 +1,32 @@
 #!/usr/bin/bash
 
+_to_epoch() {
+    local _uuid="${1}"
+    local _year _month _day _hour _minute _second
+    local _year="$(echo $_uuid | awk -F "-" '/1/ {print $1}')"
+    local _month="$(echo $_uuid | awk -F "-" '/1/ {print $2}')"
+    local _day="$(echo $_uuid | awk -F "-" '/1/ {print $3}')"
+    local _hour="$(echo $_uuid | awk -F "-" '/1/ {print $4}')"
+    local _minute="$(echo $_uuid | awk -F "-" '/1/ {print $5}')"
+    local _second="$(echo $_uuid | awk -F "-" '/1/ {print $6}')"
+    echo "$(date "${_year}-${_month}-${_day} ${_hour}:${_minute}:${_second}" +%s)"
+}
+
 _resolve_dev_mapper_donglepersistent() {
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((69 * 42 + 3 * 1415))"
-  if [ ! -e "${_mapper}" ]; then
-      /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
-      /usr/bin/udevadm control --reload-rules
-      /usr/bin/udevadm trigger
+  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
+  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_dongle + _persistent))"
+  local _dongle_epoch _dongle_uuid _candidate_uuid _iso_device _iso_epoch _iso_uuid UUID
+  _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
+  _iso_uuid=$(/usr/bin/basename "${_iso_device}")
+  _iso_epoch"$(_to_epoch "${_iso_uuid}")"
+  _dongle_epoch="$((_iso_epoch + _dongle))"
+  TZ=UTC printf -v _dongle_uuid '%(%F-%H-%M-%S-00)T' "${_dongle_epoch}"
+  eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '${print $3}')"
+  _candidate_uuid="${UUID}"
+  if [ ! -e "${_mapper}" ] && [[ "${_candidate_uuid}" == "${_dongle_uuid}" ]]; then
+          /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
+          /usr/bin/udevadm control --reload-rules
+          /usr/bin/udevadm trigger
   fi
 }
 
