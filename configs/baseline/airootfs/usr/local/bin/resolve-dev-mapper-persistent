@@ -1,10 +1,11 @@
 #!/usr/bin/bash
 
 _resolve_dev_mapper_persistent() {
+  local _cdrom="${1}"
   local _candidate_uuid _iso_device _iso_uuid UUID
   local _persistent=$((3 * 1415))
   local _mapper="/dev/mapper/persistent"
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_persistent))"
+  local _loopdevice="/dev/loop$((_persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
   eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '{print $3}')"
@@ -35,8 +36,11 @@ _detach_dev_mapper_persistent() {
 
 _main() {
     local _command="${1}"
+    local _cdrom
     if [ "${_command}" == "start" ]; then
-        _resolve_dev_mapper_persistent
+        for _cdrom in "/dev/sr"*; do
+            _resolve_dev_mapper_persistent
+        done
     elif [ "${_command}" == "stop" ]; then
         _detach_dev_mapper_persistent
     fi

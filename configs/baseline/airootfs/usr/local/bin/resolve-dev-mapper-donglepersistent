@@ -13,11 +13,12 @@ _to_epoch() {
 }
 
 _resolve_dev_mapper_donglepersistent() {
+  local _cdrom="${1}"
   local _dongle_epoch _dongle_uuid _candidate_uuid _iso_device _iso_epoch _iso_uuid UUID
   local _dongle=$((42 * 69))
   local _persistent=$((3 * 1415))
   local _mapper="/dev/mapper/donglepersistent"
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_dongle + _persistent))"
+  local _loopdevice="/dev/loop$((_dongle + _persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   eval "$(/usr/bin/blkid "${_iso_device}" | /usr/bin/awk '{print $3}')"
   _iso_uuid="${UUID}"
@@ -52,8 +53,11 @@ _detach_dev_mapper_donglepersistent() {
 
 _main() {
     local _command="${1}"
+    local _cdrom
     if [ "${_command}" == "start" ]; then
-        _resolve_dev_mapper_donglepersistent
+        for _cdrom in "/dev/sr"*; do
+            _resolve_dev_mapper_donglepersistent "${_cdrom}"
+        done
     elif [ "${_command}" == "stop" ]; then
         _detach_dev_mapper_donglepersistent
     fi
