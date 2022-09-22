@@ -3,12 +3,12 @@
 _to_epoch() {
     local _uuid="${1}"
     local _year _month _day _hour _minute _second
-    local _year="$(echo $_uuid | awk -F "-" '/1/ {print $1}')"
-    local _month="$(echo $_uuid | awk -F "-" '/1/ {print $2}')"
-    local _day="$(echo $_uuid | awk -F "-" '/1/ {print $3}')"
-    local _hour="$(echo $_uuid | awk -F "-" '/1/ {print $4}')"
-    local _minute="$(echo $_uuid | awk -F "-" '/1/ {print $5}')"
-    local _second="$(echo $_uuid | awk -F "-" '/1/ {print $6}')"
+    _year="$(echo "${_uuid}" | awk -F "-" '/1/ {print $1}')"
+    _month="$(echo "${_uuid}" | awk -F "-" '/1/ {print $2}')"
+    _day="$(echo "${_uuid}" | awk -F "-" '/1/ {print $3}')"
+    _hour="$(echo "${_uuid}" | awk -F "-" '/1/ {print $4}')"
+    _minute="$(echo "${_uuid}" | awk -F "-" '/1/ {print $5}')"
+    _second="$(echo "${_uuid}" | awk -F "-" '/1/ {print $6}')"
     echo "$(date "${_year}-${_month}-${_day} ${_hour}:${_minute}:${_second}" +%s)"
 }
 
