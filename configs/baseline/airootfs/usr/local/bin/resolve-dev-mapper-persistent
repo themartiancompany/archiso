@@ -39,7 +39,7 @@ _main() {
     local _cdrom
     if [ "${_command}" == "start" ]; then
         for _cdrom in "/dev/sr"*; do
-            _resolve_dev_mapper_persistent
+            _resolve_dev_mapper_persistent "${_cdrom}"
         done
     elif [ "${_command}" == "stop" ]; then
         _detach_dev_mapper_persistent
