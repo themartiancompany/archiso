@@ -13,9 +13,10 @@ _to_epoch() {
 }
 
 _resolve_dev_mapper_donglepersistent() {
-  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_dongle + _persistent))"
   local _dongle_epoch _dongle_uuid _candidate_uuid _iso_device _iso_epoch _iso_uuid UUID
+  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
+  local _mapper="/dev/mapper/donglepersistent"
+  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_dongle + _persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
   _iso_epoch"$(_to_epoch "${_iso_uuid}")"

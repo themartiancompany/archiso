@@ -1,9 +1,10 @@
 #!/usr/bin/bash
 
 _resolve_dev_mapper_persistent() {
-  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
-  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_persistent))"
   local _candidate_uuid _iso_device _iso_uuid UUID
+  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
+  local _mapper="/dev/mapper/persistent"
+  local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
   eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '${print $3}')"
