@@ -1,6 +1,8 @@
 [Unit]
 Description=Restart handler for dongle persistent service
 Requires=systemd-cryptsetup@donglepersistent.service
+StartLimitInterval=200
+StartLimitBurst=5
 
 [Service]
 Type=oneshot
