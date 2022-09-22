@@ -2,12 +2,12 @@
 
 _resolve_dev_mapper_persistent() {
   local _candidate_uuid _iso_device _iso_uuid UUID
-  local _dongle=$((42 * 69)) _persistent=$((3 * 1415))
+  local _persistent=$((3 * 1415))
   local _mapper="/dev/mapper/persistent"
   local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
-  eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '${print $3}')"
+  eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '{print $3}')"
   _candidate_uuid="${UUID}"
   if [ ! -e "${_mapper}" ] && [[ "${_candidate_uuid}" == "${_iso_uuid}" ]]; then
           /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
@@ -19,8 +19,8 @@ _resolve_dev_mapper_persistent() {
 _detach_dev_mapper_persistent() {
   local _mapper="/dev/mapper/persistent"
   local _cdrom="/dev/sr0" _loopdevice="" _mapperdevice=""
-  _loopdevice=$(/usr/bin/losetup --list | /usr/bin/grep "${_cdrom}" | /usr/bin/awk '{ print $1 }')
-  _mapperdevice=$(/usr/bin/losetup --list | /usr/bin/grep "loop.p4" | /usr/bin/awk '{ print $1 }')
+  _loopdevice=$(/usr/bin/losetup --list | /usr/bin/grep "${_cdrom}" | /usr/bin/awk '{print $1}')
+  _mapperdevice=$(/usr/bin/losetup --list | /usr/bin/grep "loop.p4" | /usr/bin/awk '{print $1}')
   if [ "${_mapperdevice}" == "" ]; then
       if [ "${_loopdevice}" != "" ]; then
           /usr/bin/rm "${_mapper}" || true
