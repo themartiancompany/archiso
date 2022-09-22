@@ -768,7 +768,7 @@ _mkdongleswap_common() {
     # shellcheck disable=SC2154
     _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${swap_size_kib}"
-    if [[ "${_size_kib}" == ""]]; then
+    if [[ "${_size_kib}" == "" ]]; then
         _size_kib="${swap_size_kib}"
     fi
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
