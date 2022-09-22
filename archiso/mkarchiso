@@ -654,7 +654,7 @@ _mkkeys_common() {
     _dir="${keys_dir}"
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
     _encryption_key=""
-    _size_kib="${keys_size}"
+    _size_kib="${keys_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     _label="${iso_label}_KEYS"
     _writable="false"
@@ -2107,7 +2107,7 @@ _prepare_airootfs_image() {
 
 # Build keys filesystem image
 _prepare_keys_image() {
-    keys_size=25000
+    keys_size_kib=25000
     _run_once "_mkkeys_common"
     _run_once "_mkkeys_${keys_image_type}"
 
