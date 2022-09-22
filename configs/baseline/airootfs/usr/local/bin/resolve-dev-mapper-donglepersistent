@@ -19,7 +19,7 @@ _resolve_dev_mapper_donglepersistent() {
   local _cdrom="/dev/sr0" _loopdevice="/dev/loop$((_dongle + _persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
-  _iso_epoch"$(_to_epoch "${_iso_uuid}")"
+  _iso_epoch="$(_to_epoch "${_iso_uuid}")"
   _dongle_epoch="$((_iso_epoch + _dongle))"
   TZ=UTC printf -v _dongle_uuid '%(%F-%H-%M-%S-00)T' "${_dongle_epoch}"
   eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '${print $3}')"
