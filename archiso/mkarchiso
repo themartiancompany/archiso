@@ -389,12 +389,9 @@ _get_passwd() {
     local _label="${2}"
     local _confirm
     while true; do
-        printf "Insert new passphrase for %s (%s): " "${_name}" "${_label}"
-        read -rs _passphrase
-        printf "\n"
+        _passphrase=$(systemd-ask-password "Insert new passphrase for ${_name} (${_label})")
         echo "Confirm: "
-        read -rs _confirm
-        printf "\n"
+        _confirm=$(systemd-ask-password "Confirm")
         [[ "${_passphrase}" == "${_confirm}" ]] && break
         echo "Passphrases mismatch"
     done
@@ -411,7 +408,7 @@ _mkluks_common() {
         printf "%s" "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     elif [ "${_key}" = "auto" ]; then
-        echo "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
+        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
         _encryption_key="${_out}"
     fi
 }
