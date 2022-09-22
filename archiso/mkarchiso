@@ -2028,28 +2028,42 @@ _resolve_secondary_encryption_key() {
     if [[ "${_image_type}" == *"luks" ]]; then
         if [[ "${_encryption_key}" == "auto" ]]; then
             _msg_info "Random plaintext password for ${_name}"
-        elif [[ "${airootfs_image_type}" == *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            if [[ "${airootfs_image_type}" != *"luks" ]] && \
+               [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+                _encryption_key="${work_dir}/${_name}.key"
+                _install_dir="${dongle_persistent_dir}/etc/keys"
+                # _install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.key"
+                eval "${_name}_encryption_key=\"${_encryption_key}\""
+                _gen_key "${_encryption_key}" "plain"
+                install -d -m700 "${_install_dir}"
+                install -D -m400 "${_encryption_key}" "${_install_dir}"
+            fi
+        elif [[ "${airootfs_image_type}" == *"luks" ]] && \
+             [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _encryption_key="${work_dir}/${_name}.key"
             _install_dir="${pacstrap_dir}/etc/keys"
             #_install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
             eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}"
+            _gen_key "${_encryption_key}" "binary"
             install -d -m700 "${_install_dir}"
             install -D -m400 "${_encryption_key}" "${_install_dir}"
-        elif [[ "${airootfs_image_type}" != *"luks" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        elif [[ "${airootfs_image_type}" != *"luks" ]] && \
+             [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _encryption_key="${work_dir}/${_name}.key"
             _install_dir="${dongle_persistent_dir}/etc/keys"
             # _install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
             eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}"
+            _gen_key "${_encryption_key}" "binary"
             install -d -m700 "${_install_dir}"
             install -D -m400 "${_encryption_key}" "${_install_dir}"
-        elif [[ "${airootfs_image_type}" != *"luks" ]] && ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && [[ "${_name}" != "persistent" ]]; then
+        elif [[ "${airootfs_image_type}" != *"luks" ]] && \
+             [[ "${_name}" != "persistent" ]] && \
+             ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _encryption_key="${work_dir}/${_name}.key"
             _install_dir="${persistent_dir}/etc/keys"
             # _install_dir="${persistent_dir}/etc/cryptsetup-keys.d/${_name}.keys"
             eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}"
+            _gen_key "${_encryption_key}" "binary"
             install -d -m700 "${_install_dir}"
             install -D -m400 "${_encryption_key}" "${_install_dir}"
         else
@@ -2224,7 +2238,12 @@ _validate_requirements_persistent_image_type_ext4+luks() {
 
 _gen_key() {
     local _out="${1}"
-    dd if=/dev/random bs=512 count=1 of="${_out}" > /dev/null 2>&1
+    local _mode="${2}"
+    if [ "${_mode}" == "binary" ]
+        dd if=/dev/random bs=512 count=1 of="${_out}" > /dev/null 2>&1
+    elif ["${_mode}" == "plain" ]
+        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
+    fi
 }
 
 _resolve_encryption_key(){
@@ -2232,7 +2251,7 @@ _resolve_encryption_key(){
         if [ "${encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            _gen_key "${encryption_key}"
+            _gen_key "${encryption_key}" "binary"
         elif [ "${encryption_key}" != 'auto' ]; then
             _msg_error "File '${encryption_key}' does not exist." 0
         fi
