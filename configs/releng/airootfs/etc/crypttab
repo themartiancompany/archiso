@@ -1,0 +1,7 @@
+# Configuration for encrypted block devices.
+# See crypttab(5) for details.
+
+  persistent        /dev/disk/by-uuid/%PERSISTENT_UUID%          %SECURE_MOUNT%/etc/keys/persistent.key         x-systemd.device-timeout=3
+  donglepersistent  /dev/disk/by-uuid/%DONGLE_PERSISTENT_UUID%                                                  x-systemd.device-timeout=3
+  swap              /dev/disk/by-uuid/%SWAP_UUID%                /dev/urandom                                   swap,cipher=aes-xts-plain64,size=512,x-systemd.device-timeout=10
+  dongleswap        /dev/disk/by-uuid/%DONGLE_SWAP_UUID%         /dev/urandom                                   swap,cipher=aes-xts-plain64,size=512,x-systemd.device-timeout=10
