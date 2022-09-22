@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+
+_missing_dongle() {
+  local _dongle_detected
+  if ! /usr/bin/systemctl -q is-active systemd-cryptsetup@persistent.service; then
+      if ! systemctl -q is-active "run-cryptsetup\x2dkeys.mount"; then
+          /usr/bin/systemctl stop "run-cryptsetup\x2dkeys.automount"
+	  /usr/bin/mkdir -p "/run/cryptsetup-keys.d"
+	  /usr/bin/systemd-ask-password -n "Insert ISO persistent passphrase" > "/run/cryptsetup-keys.d"
+      fi
+  fi
+}
+
+_missing_dongle

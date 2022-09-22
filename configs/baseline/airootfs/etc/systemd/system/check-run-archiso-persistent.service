@@ -6,7 +6,7 @@ StartLimitBurst=5
 
 [Service]
 Type=oneshot
-ExecStart=sh -x -c "/usr/bin/systemctl -q is-active systemd-cryptsetup@persistent.service || /usr/bin/systemctl restart systemd-cryptsetup@persistent.service"
+ExecStart=/usr/local/bin/missing-dongle
 RemainAfterExit=yes
 Restart=on-failure
 RestartSec=30
