@@ -68,6 +68,7 @@ swap_image_type=""
 swap_encryption_key=""
 dongle_swap_image_type=""
 dongle_swap_encryption_key=""
+dongle_swap_size_kib=""
 dongle_persistent_image_type=""
 dongle_persistent_encryption_key=""
 swapimg=""
@@ -767,6 +768,9 @@ _mkdongleswap_common() {
     # shellcheck disable=SC2154
     _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${swap_size_kib}"
+    if [[ "${_size_kib}" == ""]]; then
+        _size_kib="${swap_size_kib}"
+    fi
     _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
     if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_DONGLE_SWAP"
@@ -776,6 +780,7 @@ _mkdongleswap_common() {
     _writable="true"
     _grub="false"
     _auto_size=""
+    dongle_swap_size_kib="${_size_kib}"
     rm -f -- "${_image_path}"
 }
 
