@@ -1,0 +1,9 @@
+[Unit]
+Description=Cryptsetup autodetect keys directory bind automount from ISO persistent partition
+
+[Automount]
+Where=/etc/cryptsetup-keys.d
+TimeoutIdleSec=3min
+
+[Install]
+WantedBy=multi-user.target

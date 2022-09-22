@@ -2931,6 +2931,7 @@ _build_iso_image() {
 
     if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         cp "${encryption_key}" "${out_dir}"
+        cp "${persistent_encryption_key}" "${out_dir}"
     fi
 }
 
