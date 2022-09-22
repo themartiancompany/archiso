@@ -6,7 +6,8 @@ StartLimitBurst=5
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/missing-dongle
+ExecStart=/usr/local/bin/missing-dongle start
+ExecStop=/usr/local/bin/missing-dongle stop
 RemainAfterExit=yes
 Restart=on-failure
 RestartSec=30
