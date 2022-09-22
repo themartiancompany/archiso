@@ -1,5 +1,6 @@
 [Unit]
 Description=Dongle persistent mount
+JobTimeoutSec=30
 
 [Mount]
 What=/dev/mapper/donglepersistent
