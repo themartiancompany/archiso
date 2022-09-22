@@ -26,6 +26,7 @@ swap_image_type="swap"
 keys_image_type="erofs"
 keys_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 file_permissions=(
+  ["/etc/crypttab"]="0:0:400"
   ["/etc/shadow"]="0:0:400"
   ["/home"]="0:0:711"
   ["/root"]="0:0:700"
