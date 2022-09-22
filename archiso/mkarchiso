@@ -2032,8 +2032,7 @@ _resolve_secondary_encryption_key() {
             if [[ "${airootfs_image_type}" != *"luks" ]] && \
                [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
                 _encryption_key="${work_dir}/${_name}.key"
-                _install_dir="${dongle_persistent_dir}/etc/keys"
-                # _install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.key"
+                _install_dir="${dongle_persistent_dir}/etc/cryptsetup-keys.d"
                 eval "${_name}_encryption_key=\"${_encryption_key}\""
                 _gen_key "${_encryption_key}" "plain"
                 install -d -m700 "${_install_dir}"

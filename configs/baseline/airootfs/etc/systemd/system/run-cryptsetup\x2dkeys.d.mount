@@ -3,7 +3,7 @@ Description=Keys bind mount
 RequiresMountsFor=/run/archiso/donglepersistent
 
 [Mount]
-What=/run/archiso/donglepersistent/etc/keys
+What=/run/archiso/donglepersistent/etc/cryptsetup-keys.d
 Where=/run/cryptsetup-keys.d
 Type=None
 Options=bind,nofail
