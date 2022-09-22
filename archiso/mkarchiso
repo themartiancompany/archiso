@@ -2060,8 +2060,7 @@ _resolve_secondary_encryption_key() {
              [[ "${_name}" != "persistent" ]] && \
              ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _encryption_key="${work_dir}/${_name}.key"
-            _install_dir="${persistent_dir}/etc/keys"
-            # _install_dir="${persistent_dir}/etc/cryptsetup-keys.d/${_name}.keys"
+            _install_dir="${persistent_dir}/etc/cryptsetup-keys.d"
             eval "${_name}_encryption_key=\"${_encryption_key}\""
             _gen_key "${_encryption_key}" "binary"
             install -d -m700 "${_install_dir}"
