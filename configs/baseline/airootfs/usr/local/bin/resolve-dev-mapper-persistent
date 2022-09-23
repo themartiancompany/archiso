@@ -10,6 +10,8 @@ _resolve_dev_mapper_persistent() {
   _iso_uuid=$(/usr/bin/basename "${_iso_device}")
   eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '{print $3}')"
   _candidate_uuid="${UUID}"
+  echo "ISO UUID: ${_iso_uuid}"
+  echo "${_cdrom} UUID: ${_candidate_uuid}"
   if [ ! -e "${_mapper}" ] && [[ "${_candidate_uuid}" == "${_iso_uuid}" ]]; then
           /usr/bin/losetup -rP "${_loopdevice}" "${_cdrom}"
           /usr/bin/udevadm control --reload-rules
