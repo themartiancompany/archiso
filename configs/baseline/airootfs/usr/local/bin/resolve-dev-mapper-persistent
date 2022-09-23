@@ -7,7 +7,8 @@ _resolve_dev_mapper_persistent() {
   local _mapper="/dev/mapper/persistent"
   local _loopdevice="/dev/loop$((_persistent))"
   _iso_device=$(mount | grep "\bbootmnt\b" | /usr/bin/awk '{print $1}')
-  _iso_uuid=$(/usr/bin/basename "${_iso_device}")
+  eval "$(/usr/bin/blkid "${_iso_device}" | /usr/bin/awk '{print $3}')"
+  _iso_uuid="${UUID}"
   eval "$(/usr/bin/blkid "${_cdrom}" | /usr/bin/awk '{print $3}')"
   _candidate_uuid="${UUID}"
   echo "ISO UUID: ${_iso_uuid}"
