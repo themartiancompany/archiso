@@ -1,0 +1,1 @@
+KERNEL=="loop4245p3", SYMLINK+="disk/by-uuid/%PERSISTENT_UUID%"
