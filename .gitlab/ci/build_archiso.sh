@@ -32,6 +32,17 @@ codesigning_cert=""
 codesigning_key=""
 pgp_key_id=""
 
+signature_info() {
+  sig_country="DE"
+  sig_state="Berlin"
+  sig_city="Berlin"
+  sig_org="Arch Linux"
+  sig_unit="Release Engineering"
+  sig_domain="archlinux.org"
+  sig_email="arch-releng@lists.${sig_domain}"
+  sig_comment="Ephemeral Signing Key"
+}
+
 print_section_start() {
   # gitlab collapsible sections start: https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
   local _section _title
@@ -159,84 +170,38 @@ create_metrics() {
   print_section_end "metrics"
 }
 
-create_ephemeral_pgp_key() {
-  # create an ephemeral PGP key for signing the rootfs image
+create_ephemeral_keys() {
+  local _gen_key
+  local _gen_key_options=('ephemeral') _gpg_options=() _openssl_options=()
+  _gen_key="$(pwd)/.gitlab/ci/gen_key.sh"
+  [ -e "${_gen_key}"] || _gen_key="mkarchisogenkey"
   print_section_start "ephemeral_pgp_key" "Creating ephemeral PGP key"
-
-  gnupg_homedir="$tmpdir/.gnupg"
-  mkdir -p "${gnupg_homedir}"
-  chmod 700 "${gnupg_homedir}"
-
-  cat << __EOF__ > "${gnupg_homedir}"/gpg.conf
-quiet
-batch
-no-tty
-no-permission-warning
-export-options no-export-attributes,export-clean
-list-options no-show-keyring
-armor
-no-emit-version
-__EOF__
-
-  gpg --homedir "${gnupg_homedir}" --gen-key <<EOF
-%echo Generating ephemeral Arch Linux release engineering key pair...
-Key-Type: default
-Key-Length: 3072
-Key-Usage: sign
-Name-Real: Arch Linux Release Engineering
-Name-Comment: Ephemeral Signing Key
-Name-Email: arch-releng@lists.archlinux.org
-Expire-Date: 0
-%no-protection
-%commit
-%echo Done
-EOF
-
-  pgp_key_id="$(
-    gpg --homedir "${gnupg_homedir}" \
-        --list-secret-keys \
-        --with-colons \
-        | awk -F':' '{if($1 ~ /sec/){ print $5 }}'
-  )"
-
-  pgp_sender="Arch Linux Release Engineering (Ephemeral Signing Key) <arch-releng@lists.archlinux.org>"
-
+  local gnupg_homedir="${tmpdir}/.gnupg"
+  signature_info
+  _gpg_options=("${gnupg_homedir}"
+                "${sig_email}"
+                "${sig_unit}"
+                "${sig_comment}")
+  "${_gen_key}" "${_gen_key_options[@]}" 'gpg' "${_gpg_options[@]}"
+  create_ephemeral_pgp_key
   print_section_end "ephemeral_pgp_key"
-}
-
-create_ephemeral_codesigning_key() {
-  # create ephemeral certificates used for codesigning
   print_section_start "ephemeral_codesigning_key" "Creating ephemeral codesigning key"
-
   codesigning_dir="${tmpdir}/.codesigning/"
-  local codesigning_conf="${codesigning_dir}/openssl.cnf"
-  local codesigning_subj="/C=DE/ST=Berlin/L=Berlin/O=Arch Linux/OU=Release Engineering/CN=archlinux.org"
-  codesigning_cert="${codesigning_dir}/codesign.crt"
-  codesigning_key="${codesigning_dir}/codesign.key"
-  mkdir -p "${codesigning_dir}"
-  cp -- /etc/ssl/openssl.cnf "${codesigning_conf}"
-  printf "\n[codesigning]\nkeyUsage=digitalSignature\nextendedKeyUsage=codeSigning\n" >> "${codesigning_conf}"
-  openssl req \
-      -newkey rsa:4096 \
-      -keyout "${codesigning_key}" \
-      -nodes \
-      -sha256 \
-      -x509 \
-      -days 365 \
-      -out "${codesigning_cert}" \
-      -config "${codesigning_conf}" \
-      -subj "${codesigning_subj}" \
-      -extensions codesigning
-
+  _openssl_options=("${codesigning_dir}"
+                    "${sig_country}"
+                    "${sig_state}"
+                    "${sig_city}"
+                    "${sig_org}"
+                    "${sig_unit}"
+                    "${sig_domain}")
+  "${_gen_key}" "${_gen_key_options[@]} 'openssl' "${_openssl_options[@]}"
   print_section_end "ephemeral_codesigning_key"
 }
 
 run_mkarchiso() {
   local _archiso_options=()
-
-  # run mkarchiso
-  create_ephemeral_pgp_key
-  create_ephemeral_codesigning_key
+  mkdir -p "${output}/" "${tmpdir}/"
+  create_ephemeral_keys
 
   _archiso_options+=('-D' "${install_dir}" 
                      '-c' "${codesigning_cert} ${codesigning_key}"
@@ -245,15 +210,14 @@ run_mkarchiso() {
                      '-o' "${output}/"
                      '-w' "${tmpdir}/"
                      '-v')
- 
+
   if [ "${buildmode}" != "iso" ]; then
     _archiso_options+=('-m' "${buildmode}")
   fi
 
   print_section_start "mkarchiso" "Running mkarchiso"
-  mkdir -p "${output}/" "${tmpdir}/"
   GNUPGHOME="${gnupg_homedir}" ./archiso/mkarchiso "${_archiso_options[@]}" \
-	                                           "configs/${profile}"
+                                                   "configs/${profile}"
 
   print_section_end "mkarchiso"
 

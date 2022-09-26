@@ -22,6 +22,7 @@ install: install-scripts install-profiles install-doc
 install-scripts:
 	install -vDm 755 archiso/mkarchiso -t "$(BIN_DIR)/"
 	install -vDm 755 scripts/run_archiso.sh "$(BIN_DIR)/run_archiso"
+	install -vDm 755 .gitlab/ci/gen_key.sh "$(BIN_DIR)/mkarchisogenkey"
 
 install-profiles:
 	install -d -m 755 $(PROFILE_DIR)
