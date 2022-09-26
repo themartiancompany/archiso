@@ -174,7 +174,7 @@ create_ephemeral_keys() {
   local _gen_key
   local _gen_key_options=('ephemeral') _gpg_options=() _openssl_options=()
   _gen_key="$(pwd)/.gitlab/ci/gen_key.sh"
-  [ -e "${_gen_key}"] || _gen_key="mkarchisogenkey"
+  [ -e "${_gen_key}" ] || _gen_key="mkarchisogenkey"
   print_section_start "ephemeral_pgp_key" "Creating ephemeral PGP key"
   local gnupg_homedir="${tmpdir}/.gnupg"
   signature_info
