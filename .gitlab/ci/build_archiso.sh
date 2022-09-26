@@ -194,7 +194,7 @@ create_ephemeral_keys() {
                      "${sig_org}"
                      "${sig_unit}"
                      "${sig_domain}")
-  "${_gen_key}" "${_gen_key_options[@]} 'openssl' "${_openssl_options[@]}"
+  "${_gen_key}" "${_gen_key_options[@]}" 'openssl' "${_openssl_options[@]}"
   print_section_end "ephemeral_codesigning_key"
 }
 
