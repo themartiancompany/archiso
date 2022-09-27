@@ -198,10 +198,43 @@ create_ephemeral_keys() {
   print_section_end "ephemeral_codesigning_key"
 }
 
+setup_repo() {
+  local _build_repo _build_repo_options=() _packages _repo _server _setup_user
+  local _server="/tmp/archiso-profiles/${profile}"
+  local _build_repo_options=('src'
+                             'packages.extra'
+			     "${_server}")
+  _build_repo="$(pwd)/.gitlab/ci/build_repo.sh"
+  _setup_user="$(pwd)/.gitlab/ci/setup_user.sh"
+  [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
+  print_section_start "setup_repo" "Setup ${profile} ${buildmode} additional packages"
+  "${_setup_user}"
+  source "${profile}/packages.extra"
+  if [[ "${_packages[*]}" != "" ]] ; then
+      cp -r "${profile}" /home/user
+      chown -R user "/home/user/${profile}"
+      su user -c "cd ${profile} && ${_build_repo} ${_build_repo_options[@]}"
+      #shellcheck disable=SC1091
+      source "${profile}/packages.extra"
+      _repo=("[${profile}]"
+              "SigLevel = Optional TrustAll"
+              "Server = file://${_server}")
+      if ! grep -q "\[${profile}\]" "${profile}/pacman.conf"; then
+          for _line in "${_repo[@]}"; do
+              sed -i "/\[core\]/i ${_line}" pacman.conf
+          done
+      fi
+      pacman --config "${profile}/pacman.conf" -Sy "${_packages[@]}"
+      fi
+  print_section_end "setup_repo"
+}
+
 run_mkarchiso() {
+  local _mkarchiso="./config/mkarchiso"
   local _archiso_options=()
   mkdir -p "${output}/" "${tmpdir}/"
   create_ephemeral_keys
+  setup_repo
 
   _archiso_options+=('-D' "${install_dir}" 
                      '-c' "${codesigning_cert} ${codesigning_key}"
@@ -216,8 +249,9 @@ run_mkarchiso() {
   fi
 
   print_section_start "mkarchiso" "Running mkarchiso"
-  GNUPGHOME="${gnupg_homedir}" ./archiso/mkarchiso "${_archiso_options[@]}" \
-                                                   "configs/${profile}"
+  [ -e "${_mkarchiso}" ] || _mkarchiso="mkarchiso"
+  GNUPGHOME="${gnupg_homedir}" "${mkarchiso}" "${_archiso_options[@]}" \
+                                              "configs/${profile}"
 
   print_section_end "mkarchiso"
 
