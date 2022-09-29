@@ -206,7 +206,9 @@ setup_repo() {
 			     "${_server}")
   _build_repo="$(pwd)/.gitlab/ci/build_repo.sh"
   _setup_user="$(pwd)/.gitlab/ci/setup_user.sh"
+  _gen_pacman_conf="$(pwd)/.gitlab/ci/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
+  [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   print_section_start "setup_repo" "Setup ${profile} ${buildmode} additional packages"
   "${_setup_user}"
   # shellcheck disable=SC1091
@@ -217,14 +219,10 @@ setup_repo() {
       su user -c "cd ${profile} && ${_build_repo} ${_build_repo_options[*]}"
       #shellcheck disable=SC1091
       source "${profile}/packages.extra"
-      _repo=("[${profile}]"
-              "SigLevel = Optional TrustAll"
-              "Server = file://${_server}")
-      if ! grep -q "\[${profile}\]" "${profile}/pacman.conf"; then
-          for _line in "${_repo[@]}"; do
-              sed -i "/\[core\]/i ${_line}" pacman.conf
-          done
-      fi
+      "${_gen_pacman_conf}" "${profile}" \
+	                    "${_server}" \
+			    "${profile}/pacman.conf" \
+			    "${profile}/pacman.conf"
       pacman --config "${profile}/pacman.conf" -Sy "${_packages[@]}"
       fi
   print_section_end "setup_repo"
