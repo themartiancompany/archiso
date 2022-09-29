@@ -953,6 +953,8 @@ _make_custom_airootfs() {
             # Prevent file path traversal outside of $pacstrap_dir
             if [[ "$(realpath -q -- "${pacstrap_dir}${filename}")" != "${pacstrap_dir}"* ]]; then
                 _msg_error "Failed to set permissions on '${pacstrap_dir}${filename}'. Outside of valid path." 1
+            elif [[ "$(realpath -q -- "${persistent_dir}${filename}")" != "${persistent_dir}"* ]]; then
+                _msg_error "Failed to set permissions on '${persistent_dir}${filename}'. Outside of valid path." 1
             # Warn if the file does not exist
             elif [[ ! -e "${pacstrap_dir}${filename}" ]]; then
                 _msg_warning "Cannot change permissions of '${pacstrap_dir}${filename}'. The file or directory does not exist."
