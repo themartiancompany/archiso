@@ -8,7 +8,7 @@ _set_custom_repo() {
   _repo=("[${profile}]"
          "SigLevel = Optional TrustAll"
          "Server = file://${_server}")
-  if ! grep -q "\[${profile}\]" "${profile}/pacman.conf"; then
+  if ! grep -q "\[${profile}\]" "${_pacman_conf}"; then
     cp -a "${_pacman_conf}" "${_out_conf}"
     for _line in "${_repo[@]}"; do
         sed -i "/\[core\]/i ${_line}" "${_out_conf}"
