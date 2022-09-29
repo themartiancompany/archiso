@@ -209,11 +209,12 @@ setup_repo() {
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   print_section_start "setup_repo" "Setup ${profile} ${buildmode} additional packages"
   "${_setup_user}"
+  # shellcheck disable=SC1091
   source "${profile}/packages.extra"
   if [[ "${_packages[*]}" != "" ]] ; then
       cp -r "${profile}" /home/user
       chown -R user "/home/user/${profile}"
-      su user -c "cd ${profile} && ${_build_repo} ${_build_repo_options[@]}"
+      su user -c "cd ${profile} && ${_build_repo} ${_build_repo_options[*]}"
       #shellcheck disable=SC1091
       source "${profile}/packages.extra"
       _repo=("[${profile}]"
@@ -250,8 +251,8 @@ run_mkarchiso() {
 
   print_section_start "mkarchiso" "Running mkarchiso"
   [ -e "${_mkarchiso}" ] || _mkarchiso="mkarchiso"
-  GNUPGHOME="${gnupg_homedir}" "${mkarchiso}" "${_archiso_options[@]}" \
-                                              "configs/${profile}"
+  GNUPGHOME="${gnupg_homedir}" "${_mkarchiso}" "${_archiso_options[@]}" \
+                                               "configs/${profile}"
 
   print_section_end "mkarchiso"
 
