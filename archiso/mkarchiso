@@ -951,14 +951,7 @@ _make_custom_airootfs() {
         for filename in "${!file_permissions[@]}"; do
             IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
             # Prevent file path traversal outside of $pacstrap_dir
-            if [[ "$(realpath -q -- "${pacstrap_dir}${filename}")" != "${pacstrap_dir}"* ]]; then
-                _msg_error "Failed to set permissions on '${pacstrap_dir}${filename}'. Outside of valid path." 1
-            elif [[ "$(realpath -q -- "${persistent_dir}${filename}")" != "${persistent_dir}"* ]]; then
-                _msg_error "Failed to set permissions on '${persistent_dir}${filename}'. Outside of valid path." 1
-            # Warn if the file does not exist
-            elif [[ ! -e "${pacstrap_dir}${filename}" ]]; then
-                _msg_warning "Cannot change permissions of '${pacstrap_dir}${filename}'. The file or directory does not exist."
-            else
+            if [[ "$(_validate_file "${filename}")" == "true" ]]; then
                 if [[ "${filename: -1}" == "/" ]]; then
                     chown -fhR -- "${permissions[0]}:${permissions[1]}" "${pacstrap_dir}${filename}"
                     chmod -fR -- "${permissions[2]}" "${pacstrap_dir}${filename}"
@@ -2137,6 +2130,25 @@ _prepare_swap_image() {
     fi
 }
 
+_validate_file() {
+    local __filename="${1}"
+    local pacstrap_dir="${work_dir}/${arch}/airootfs"
+    local persistent_dir="${work_dir}/persistent"
+    local _dirs=("${pacstrap_dir}" "${persistent_dir}")
+    local _pass="false"
+    for _dir in "${_dirs[@]}"; do
+        if [[ "$(realpath -q -- "${_dir}${_filename}")" != "${_dir}"* ]]; then
+            _msg_error "Failed to set permissions on '${_dir}${_filename}'. Outside of valid path." 1
+            # Warn if the file does not exist
+        elif [[ ! -e "${_dir}${_filename}" ]]; then
+            _msg_warning "Cannot change permissions of '${_dir}${_filename}'. The file or directory does not exist."
+        else
+            _pass="true"
+        fi
+    echo "${_pass}"
+    done
+}
+
 # Build persistent filesystem image
 _prepare_persistent_image() {
     local _msg persistent_dir_size persistent_epoch persistent_uuid
@@ -2149,9 +2161,24 @@ _prepare_persistent_image() {
     local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
     local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
     if [ -d "${profile}/persistent" ]; then
+        _msg_info "Copying custom persistent files..."
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
+        for filename in "${!file_permissions[@]}"; do
+            IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
+            if [[ "$(_validate_file "${filename}")" == "true" ]]; then
+                if [[ "${filename: -1}" == "/" ]]; then
+                    chown -fhR -- "${permissions[0]}:${permissions[1]}" "${persistent_dir}${filename}"
+                    chmod -fR -- "${permissions[2]}" "${persistent_dir}${filename}"
+                else
+                    chown -fh -- "${permissions[0]}:${permissions[1]}" "${persistent_dir}${filename}"
+                    chmod -f -- "${permissions[2]}" "${persistent_dir}${filename}"
+                fi
+            fi
+        done
+
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
+        _msg_info "Done!"
     fi
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
     _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
