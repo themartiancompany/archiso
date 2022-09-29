@@ -63,5 +63,7 @@ _build_repo() {
     rm -rf repo
 }
 
-# mode, packages.extra
-_build_repo "${1}" "${2}" "${3}"
+mode="${1}"
+packages_file="${2}"
+server="${3}"
+_build_repo "${mode}" "${packages_file}" "${server}"
