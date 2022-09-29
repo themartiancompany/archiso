@@ -938,6 +938,7 @@ _make_pacman_conf() {
 
 # Prepare working directory and copy custom root file system files.
 _make_custom_airootfs() {
+    local _validate_file_err _validate_file_err
     local passwd=()
     local filename permissions
 
@@ -2140,8 +2141,6 @@ _validate_file() {
     local _dirs=("${pacstrap_dir}"
                  "${persistent_dir}")
     local _pass="false"
-    _validate_file_err=""
-    _validate_file_warn=""
     for _dir in "${_dirs[@]}"; do
         if [[ "$(realpath -q -- "${_dir}${_filename}")" != "${_dir}"* ]]; then
             _validate_file_err="Failed to set permissions on '${_dir}${_filename}'. Outside of valid path."
@@ -2158,7 +2157,8 @@ _validate_file() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _msg persistent_dir_size persistent_epoch persistent_uuid
+    local _validate_file_err _validate_file_err
+    local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
