@@ -32,6 +32,9 @@ Added
 * Profiles:
   * Add systemd automounts for persistent partition.
   * Add templatized ``mkinitcpio.conf`` and ``crypttab``.
+* Continuous integration:
+  * Moved ephemeral gpg and openssl key creation functions into separate scripts ('mkarchisogenkey'); 
+  * Add new scripts to easily test new packages: `mkarchisorepo`, 'mkarchisosetrepo', `mkarchiso`).
 
 Changed
 -------
@@ -48,6 +51,22 @@ Changed
   * Completely switch to GRUB.
   * Reduced bootloader configuration files complexity.
   * Reduced mkinitcpio.conf complexity.
+
+[67] - 2022-09-25
+=================
+
+Added
+-----
+
+- The ability to generate rootfs signatures using openssl CMS module if ``-c`` is given.
+
+Changed
+-------
+
+- Order ``pacman-init.service`` before ``archlinux-keyring-wkd-sync.service`` since
+  ``archlinux-keyring-wkd-sync.service`` needs an initialized pacman keyring.
+- Order ``pacman-init.service`` after ``time-sync.target`` since ``pacman-init.service`` may otherwise create local
+  signatures that are not valid on target systems after installation.
 
 Removed
 -------
@@ -68,19 +87,6 @@ Changed
 
 - Disable GRUB's shim_lock verifier and preload more modules. This allows reusing the GRUB EFI binaries when repacking
   the ISO to support Secure Boot with custom signatures.
-
-[65] - 2022-06-30
-=================
-
-Added
------
-
-Changed
--------
-
-Removed
--------
-
 [66] - 2022-08-28
 =================
 
