@@ -2131,7 +2131,7 @@ _prepare_swap_image() {
 }
 
 _validate_file() {
-    local __filename="${1}"
+    local _filename="${1}"
     local pacstrap_dir="${work_dir}/${arch}/airootfs"
     local persistent_dir="${work_dir}/persistent"
     local _dirs=("${pacstrap_dir}" "${persistent_dir}")
