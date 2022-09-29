@@ -209,6 +209,7 @@ setup_repo() {
   _gen_pacman_conf="$(pwd)/.gitlab/ci/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
+  [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
   print_section_start "setup_repo" "Setup ${profile} ${buildmode} additional packages"
   "${_setup_user}"
   # shellcheck disable=SC1091
