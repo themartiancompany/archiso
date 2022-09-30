@@ -2260,11 +2260,21 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 
 _validate_requirements_persistent_image_type_ext4() {
     local _msg
+    local persistent_ro_udev_rule="${profile}/airootfs/etc/udev/rules.d/98_persistent.rules"
+    local dongle_persistent_ro_udev_rule="${profile}/airootfs/etc/udev/rules.d/99_donglepersistent.rules"
     _validate_requirements_airootfs_image_type_ext4
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
         _msg_warning "${_msg[*]}"
+    fi
+     if [ ! -e "${persistent_ro_udev_rule}" ]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${persistent_image_type}' for persistent partition: udev rule not found!" 0
+    fi
+    if [ ! -e "${dongle_persistent_ro_udev_rule}" ]; then
+        (( validation_error=validation_error+1 ))
+        _msg_error "Validating '${dongle_persistent_image_type}' for dongle persistent partition: udev rule not found!" 0
     fi
 }
 
