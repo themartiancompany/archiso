@@ -2172,6 +2172,8 @@ _prepare_persistent_image() {
         cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
         for filename in "${!file_permissions[@]}"; do
             IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
+            echo "${filename}"
+            echo "$(_validate_file "${filename}")"
             if [[ "$(_validate_file "${filename}")" == "" ]]; then
                 if [[ "${filename: -1}" == "/" ]]; then
                     chown -fhR -- "${permissions[0]}:${permissions[1]}" "${persistent_dir}${filename}"
