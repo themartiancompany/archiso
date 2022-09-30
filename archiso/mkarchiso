@@ -2157,7 +2157,7 @@ _validate_file() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _validate_file_err _validate_file_warn
+    local _validate_file_err="" _validate_file_warn=""
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
