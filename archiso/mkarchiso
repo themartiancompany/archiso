@@ -952,7 +952,7 @@ _make_custom_airootfs() {
         for filename in "${!file_permissions[@]}"; do
             IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
             # Prevent file path traversal outside of $pacstrap_dir
-            if [[ "$(_validate_file "${filename}")" == "" ]]; then
+            if [[ "$(_validate_file "${filename}" "${pacstrap_dir}")" == "" ]]; then
                 if [[ "${filename: -1}" == "/" ]]; then
                     chown -fhR -- "${permissions[0]}:${permissions[1]}" "${pacstrap_dir}${filename}"
                     chmod -fR -- "${permissions[2]}" "${pacstrap_dir}${filename}"
@@ -2136,22 +2136,21 @@ _prepare_swap_image() {
 
 _validate_file() {
     local _filename="${1}"
+    local _storage="${2}"
     local pacstrap_dir="${work_dir}/${arch}/airootfs"
     local persistent_dir="${work_dir}/persistent"
     local _dirs=("${pacstrap_dir}"
                  "${persistent_dir}")
     local _pass="false"
-    for _dir in "${_dirs[@]}"; do
-        if [[ "$(realpath -q -- "${_dir}${_filename}")" != "${_dir}"* ]]; then
-            _validate_file_err="Failed to set permissions on '${_dir}${_filename}'. Outside of valid path."
-            # Warn if the file does not exist
-        elif [[ ! -e "${_dir}${_filename}" ]]; then
-            _validate_file_warn="Cannot change permissions of '${_dir}${_filename}'. The file or directory does not exist."
-        else
-            _pass=""
-            break
-        fi
-    done
+    if [[ "$(realpath -q -- "${_storage}${_filename}")" != "${_storage}"* ]]; then
+        _validate_file_err="Failed to set permissions on '${_storage}${_filename}'. Outside of valid path."
+        # Warn if the file does not exist
+    elif [[ ! -e "${_storage}${_filename}" ]]; then
+        _validate_file_warn="Cannot change permissions of '${_storage}${_filename}'. The file or directory does not exist."
+    else
+        _pass=""
+        break
+    fi
     echo "${_pass}"
 }
 
@@ -2173,8 +2172,8 @@ _prepare_persistent_image() {
         for filename in "${!file_permissions[@]}"; do
             IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
             echo "${filename}"
-            _validate_file "${filename}"
-            if [[ "$(_validate_file "${filename}")" == "" ]]; then
+            _validate_file "${filename}" "${persistent_dir}"
+            if [[ "$(_validate_file "${filename}" "${persistent_dir}")" == "" ]]; then
                 _msg_info "Setting permission for ${filename}"
                 if [[ "${filename: -1}" == "/" ]]; then
                     chown -fhR -- "${permissions[0]}:${permissions[1]}" "${persistent_dir}${filename}"
