@@ -2155,7 +2155,7 @@ _validate_file() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _msg_type="info" _validate_file_err="" _validate_file_warn=""
+    local _error_code="" _msg_type="info" _validate_file_err="" _validate_file_warn=""
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
@@ -2185,9 +2185,8 @@ _prepare_persistent_image() {
 		    _msg_type="error"
 		    _error_code=1
 		fi
-                [[ "${_validate_file_err}" != "" ]] && "_msg_warning" "${_validate_file_err}"
-                [[ "${_validate_file_warn}" != "" ]] && _msg_warning "${_validate_file_warn}"
-                "_msg_${_msg_type}" "Error or warning" "${_error_code}"
+                [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}", "${_error_code}"
+                [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
             fi
         done
 
