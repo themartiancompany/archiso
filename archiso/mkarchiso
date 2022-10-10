@@ -570,6 +570,7 @@ _mkimg_erofs+luks() {
     local _writable="false"
     local _tmp_img="${work_dir}/tmp.erofs" _tmp_img_size
     if [[ "${_size_kib}" == "" ]]; then
+	_msg_info "Running mkerofs in advance to determine LUKS partition size"
         _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
         _tmp_img_size=$(du -s "${_tmp_img}" | cut -f 1)
         _size_kib="${_tmp_img_size}"
@@ -578,7 +579,12 @@ _mkimg_erofs+luks() {
     _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     if [[ "${_tmp_img_size}" != "" ]]; then
-        dd if="${_tmp_img}" of="${image_device}" > /dev/null 2>&1
+        _msg_info "Copying erofs image"
+	if [[ "${quiet}" == "y" ]]; then
+            dd if="${_tmp_img}" of="${image_device}" > /dev/null 2>&1
+	else
+            dd if="${_tmp_img}" of="${image_device}"
+	fi
     else
         _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
     fi 
