@@ -573,7 +573,7 @@ _mkimg_erofs+luks() {
 	_msg_info "Running mkerofs in advance to determine LUKS partition size"
         _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
         _tmp_img_size=$(du -s "${_tmp_img}" | cut -f 1)
-        _size_kib="${_tmp_img_size}"
+        _size_kib=$((${_tmp_img_size}* 12 / 10))
     fi
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
     _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
@@ -586,6 +586,7 @@ _mkimg_erofs+luks() {
             dd if="${_tmp_img}" of="${image_device}"
 	fi
     else
+	msg_info "Writing erofs image"
         _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
     fi 
     sync
