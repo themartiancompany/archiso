@@ -1076,7 +1076,7 @@ _make_boot_on_iso() {
     local kernel_dir="${bootable_dir}/${install_dir}/boot/${arch}"
     local licenses_src="${pacstrap_dir}/usr/share/licenses"
     local licenses_dest="${boot_dir}/licenses"
-    local images=("initramfs-*.img" "vmlinuz-*")
+    local images=("initramfs-*" "vmlinuz-*")
     _msg_info "Preparing kernel and initramfs for the ${_fs_name} file system in ${bootable_dir}..."
     install -d -m 0755 -- "${kernel_dir}"
     for _query in  "${images[@]}"; do
