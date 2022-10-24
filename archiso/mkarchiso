@@ -1058,6 +1058,7 @@ _make_bootmodes_dongle() {
 _make_boot_on_iso9660() {
     isofs_dir="${work_dir}/iso"
     _make_boot_on_iso "${isofs_dir}" "ISO 9660"
+    _make_boot_on_iso "${persistent_dir}" "ISO 9660"
 }
 
 # Copy kernel and initramfs to dongle ISO 9660
@@ -2206,7 +2207,6 @@ _prepare_persistent_image() {
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "persistent"
-        _run_once _make_boot_on_persistent
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
