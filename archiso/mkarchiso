@@ -178,7 +178,7 @@ _show_config() {
 
 # Cleanup airootfs
 _cleanup_pacstrap_dir() {
-    local _images=("initramfs-*img" "vmlinuz-*" "${ucodes[@]}")
+    local _images=("/initramfs-*" "vmlinuz-*" "${ucodes[@]}")
     local _root="${pacstrap_dir}"
     local _boot="${_root}/boot"
     local _log="${pacstrap_dir}/var/log"
@@ -1076,7 +1076,7 @@ _make_boot_on_iso() {
     local kernel_dir="${bootable_dir}/${install_dir}/boot/${arch}"
     local licenses_src="${pacstrap_dir}/usr/share/licenses"
     local licenses_dest="${boot_dir}/licenses"
-    local images=("initramfs-*" "vmlinuz-*")
+    local images=("/initramfs-*" "vmlinuz-*")
     _msg_info "Preparing kernel and initramfs for the ${_fs_name} file system in ${bootable_dir}..."
     install -d -m 0755 -- "${kernel_dir}"
     for _query in  "${images[@]}"; do
@@ -1348,7 +1348,7 @@ _make_bootmode_bios.syslinux.eltorito_dongle() {
 _make_boot_on_fat() {
     local _images _ucode_image
     _msg_info "Preparing kernel and initramfs for the FAT file system..."
-    _images=("initramfs-*.img" "vmlinuz-*")
+    _images=("/initramfs-*" "vmlinuz-*")
     mmd -D o -i "${efibootimg}" \
         "::/${install_dir}" "::/${install_dir}/boot" "::/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
@@ -1747,7 +1747,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
                     "${profile}/efiboot/"
                     "${_available_ucodes[@]}")
-    _images=("initramfs-*.img" "vmlinuz-*")
+    _images=("/initramfs-*" "vmlinuz-*")
     for _query in "${_images[@]}"; do
         mapfile -t efiboot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
     done
@@ -2206,6 +2206,7 @@ _prepare_persistent_image() {
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
     if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "persistent"
+        _run_once _make_boot_on_persistent
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
