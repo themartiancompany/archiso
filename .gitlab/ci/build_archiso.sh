@@ -183,7 +183,6 @@ create_ephemeral_keys() {
                  "${sig_unit}"
                  "${sig_comment}")
   "${_gen_key}" "${_gen_key_options[@]}" 'pgp' "${_gpg_options[@]}"
-  create_ephemeral_pgp_key
   print_section_end "ephemeral_pgp_key"
   print_section_start "ephemeral_codesigning_key" "Creating ephemeral codesigning key"
   codesigning_dir="${tmpdir}/.codesigning/"
