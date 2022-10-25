@@ -1,8 +1,8 @@
 [Unit]
-Description=systemd-homed credentials automount
+Description=users option automount
 
 [Automount]
-Where=/var/lib/systemd/home
+Where=/var/lib/AccountService/users
 TimeoutIdleSec=3min
 
 [Install]
