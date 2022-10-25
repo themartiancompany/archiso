@@ -1,0 +1,14 @@
+[Unit]
+Description=Users options bind mount
+RequiresMountsFor=/var/lib/AccountService/users
+
+[Mount]
+What=/run/archiso/persistent/var/lib/AccountService/users
+Where=/var/lib/AccountService/users
+Type=None
+Options=bind,nofail
+DirectoryMode=0755
+TimeoutSec=5
+
+[Install]
+WantedBy=multi-user.target
