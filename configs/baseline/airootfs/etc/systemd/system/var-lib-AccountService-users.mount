@@ -1,6 +1,6 @@
 [Unit]
 Description=Users options bind mount
-RequiresMountsFor=/var/lib/AccountService/users
+RequiresMountsFor=/run/archiso/persistent
 
 [Mount]
 What=/run/archiso/persistent/var/lib/AccountService/users
