@@ -2,7 +2,7 @@
 Description=users option automount
 
 [Automount]
-Where=/var/lib/AccountService/users
+Where=/var/lib/AccountsService/users
 TimeoutIdleSec=3min
 
 [Install]

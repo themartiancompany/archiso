@@ -3,8 +3,8 @@ Description=Users options bind mount
 RequiresMountsFor=/run/archiso/persistent
 
 [Mount]
-What=/run/archiso/persistent/var/lib/AccountService/users
-Where=/var/lib/AccountService/users
+What=/run/archiso/persistent/var/lib/AccountsService/users
+Where=/var/lib/AccountsService/users
 Type=None
 Options=bind,nofail
 DirectoryMode=0755
