@@ -314,7 +314,8 @@ _run_mkluks() {
     local _grub="${7}"
     local _fsuuid
     local _activation_opts=() _format_opts=() _key_msg="" _mapper
-    local _cryptsetup_opts=('--type' 'luks2')
+    local _cryptsetup_opts=('--type' 'luks2'
+                            '--timeout=42069')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
