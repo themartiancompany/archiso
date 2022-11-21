@@ -398,7 +398,7 @@ _ask_passwd() {
     if command -v zenity &> /dev/null && [ -n "${DISPLAY}" ]; then
         _command=$(which zenity)
         _command_mismatch="${_command}"
-        _ask_passwd_opts=("--password")
+        _ask_passwd_opts+=("--password")
         _mismatch_opts+=("--info" "--icon" "dialog-password" "--text")
     else
         _command=$(which systemd-ask-password)
