@@ -35,6 +35,8 @@ Added
 * Continuous integration:
   * Moved ephemeral gpg and openssl key creation functions into separate scripts ('mkarchisogenkey'); 
   * Add new scripts to easily test new packages: `mkarchisorepo`, 'mkarchisosetrepo', `mkarchiso`).
+* Usability:
+  * Add Zenity support for password prompts.
 
 Changed
 -------
