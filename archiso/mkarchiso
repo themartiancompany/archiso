@@ -2185,8 +2185,8 @@ _copy_custom_files() {
                 _msg+=("recursively")
             fi
             _msg_info "${_msg[*]}"
-            _chown_opts=(${_opts[@]} ${_recur[@]})
-            _chmod_opts=(${_opts[@]} '-h' ${_recur[@]})
+            _chown_opts=("${_opts[@]}" "${_recur[@]}")
+            _chmod_opts=("${_opts[@]}" '-h' "${_recur[@]}")
             chown "${_chown_opts[@]}" -- "${_user}:${_group}" "${_dir}${filename}"
             chmod "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
          else
