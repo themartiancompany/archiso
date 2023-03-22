@@ -2212,8 +2212,8 @@ _prepare_persistent_image() {
                 if [[ "${filename: -1}" == "/" ]]; then
                     _chmod_opts+=('-R')
                 fi
-                chown -fh ${_chmod_opts[@]} -- "${_user}:${_group}" "${persistent_dir}${filename}"
-                chmod -f ${_chmod_opts[@]} -- "${_perm}" "${persistent_dir}${filename}"
+                chown -fh "${_chmod_opts[@]}" -- "${_user}:${_group}" "${persistent_dir}${filename}"
+                chmod -f "${_chmod_opts[@]}" -- "${_perm}" "${persistent_dir}${filename}"
              else
 		         _validate_file "${filename}" "${pacstrap_dir}"
 		         if [ "$(_validate_file "${filename}" "${pacstrap_dir}")" != "" ]; then
