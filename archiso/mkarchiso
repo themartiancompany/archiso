@@ -2148,11 +2148,10 @@ _prepare_swap_image() {
 _is_file_in_work_paths() {
     local _filename="${1}"
     local _dir
-    local _dirs=("${pacstrap_dir}"
-                 "${persistent_dir}")
+    local _dirs=("${profile}/airootfs"
+                 "${profile}/persistent")
     _pass="false"
     for _dir in "${_dirs[@]}"; do
-        echo "${_dir}${_filename}"
         if [ -e "${_dir}${_filename}" ]; then
             _pass=""
         fi
@@ -2167,15 +2166,14 @@ _validate_file() {
     _validate_file_result="false"
     _validate_file_err="" _validate_file_warn=""
     _is_file_in_work_paths "${_filename}"
-    if [[ ! "${_pass}" == "" ]]; then
-        _validate_file_err="Cannot change permissions of '${_filename}'. The file or directory does not exist anywhere."
+    if [[ "${_pass}" != "" ]]; then
+        _validate_file_err="Cannot change permissions of '${_filename}'. The file or directory does not exist."
         return
     fi
     if [[ ! -e "${_storage}${_filename}" ]]; then
-        _validate_file_warn="Cannot change permissions of '${_storage}${_filename}'. The file or directory does not exist."
+        _validate_file_warn="Cannot change permissions of '${_storage}${_filename}'. The file or directory does not exist on this storage."
     elif [[ "$(realpath -q -- "${_storage}${_filename}")" != "${_storage}"* ]]; then
         _validate_file_err="Failed to set permissions on '${_storage}${_filename}'. Outside of valid path."
-        # Warn if the file does not exist
     else
         _validate_file_result=""
     fi
@@ -2184,7 +2182,7 @@ _validate_file() {
 _copy_custom_files() {
     local _dest="${1}"
     local _dir="${2}"
-    local _msg=()
+    local _error_code _msg=()
     local _opts=('-f') _chmod_opts=() _recur=()
     _msg_info "Copying custom ${_dest} files..."
     cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_dir}"
@@ -2202,31 +2200,27 @@ _copy_custom_files() {
                 _recur+=('-R')
                 _msg+=("recursively")
             fi
-            _msg_info "${_msg[*]}"
+            [[ "${quiet}" != "y" ]] && _msg_info "${_msg[*]}"
             _chown_opts=("${_opts[@]}" '-h' "${_recur[@]}")
             _chmod_opts=("${_opts[@]}" "${_recur[@]}")
             chown "${_chown_opts[@]}" -- "${_user}:${_group}" "${_dir}${filename}"
             chmod "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
          else
-             _msg=("${_dir}${filename}:"
-                   "${_validate_file_err} ${_validate_file_warn}")
-             _msg_info "${_msg[*]}"
              _msg_type="warning"
-	         if [ "${_validate_file_err}" != "" ]; then
-	             _msg_type="error"
-	             _error_code=1
-	         fi
+	     if [ "${_validate_file_err}" != "" ]; then
+	         _msg_type="error"
+	         _error_code=1
+	     fi
              [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
-             [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
+             [[ "${quiet}" != "y" ]] && [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
          fi
     done
 }
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _error_code="" _msg_type="info"
-    local _chmod_opts=()
-    local _user _group _perm
+    local pacstrap_dir="${work_dir}/${arch}/airootfs"
+    local persistent_dir="${work_dir}/persistent"
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
