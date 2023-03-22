@@ -2147,15 +2147,16 @@ _prepare_swap_image() {
 
 _is_file_in_work_paths() {
     local _filename="${1}"
-    local _dir _pass="false"
+    local _dir
     local _dirs=("${pacstrap_dir}"
                  "${persistent_dir}")
+    _pass="false"
     for _dir in "${_dirs[@]}"; do
+        echo "${_dir}${_filename}"
         if [ -e "${_dir}${_filename}" ]; then
             _pass=""
         fi
     done
-    echo "${_pass}"
 }
 
 _validate_file() {
@@ -2165,7 +2166,8 @@ _validate_file() {
     local persistent_dir="${work_dir}/persistent"
     _validate_file_result="false"
     _validate_file_err="" _validate_file_warn=""
-    if [[ ! "$(_is_file_in_work_paths "${_filename}")" == "" ]]; then
+    _is_file_in_work_paths "${_filename}"
+    if [[ ! "${_pass}" == "" ]]; then
         _validate_file_err="Cannot change permissions of '${_filename}'. The file or directory does not exist anywhere."
         return
     fi
