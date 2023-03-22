@@ -2152,7 +2152,7 @@ _validate_file() {
     local persistent_dir="${work_dir}/persistent"
     local _dirs=("${pacstrap_dir}"
                  "${persistent_dir}")
-    local _pass="false"
+    _validate_file="false"
     _validate_file_err="" _validate_file_warn=""
     if [[ "$(realpath -q -- "${_storage}${_filename}")" != "${_storage}"* ]]; then
         _validate_file_err="Failed to set permissions on '${_storage}${_filename}'. Outside of valid path."
@@ -2160,7 +2160,7 @@ _validate_file() {
     elif [[ ! -e "${_storage}${_filename}" ]]; then
         _validate_file_warn="Cannot change permissions of '${_storage}${_filename}'. The file or directory does not exist."
     else
-        _pass=""
+        _validate_file=""
     fi
     echo "${_pass}"
 }
@@ -2178,8 +2178,9 @@ _copy_custom_files() {
         _group="${permissions[1]}"
         _perm="${permissions[2]}"
         _recur=()
-        _validate_file_err="" _validate_file_warn=""
-        if [[ "$(_validate_file "${filename}" "${_dir}")" == "" ]]; then
+        _validate_file_err="" _validate_file_warn="" _validate_file=""
+        _validate_file "${filename}" "${_dir}"
+        if [[ "${_validate_file}" == "" ]]; then
             _msg=("Setting" "${_perm} permissions for ${_user}:${_group} on ${filename}")
             if [[ "${filename: -1}" == "/" ]]; then
                 _recur+=('-R')
@@ -2206,7 +2207,7 @@ _copy_custom_files() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _error_code="" _msg_type="info" _validate_file_err="" _validate_file_warn=""
+    local _error_code="" _msg_type="info"
     local _chmod_opts=()
     local _user _group _perm
     local persistent_dir_size persistent_epoch persistent_uuid
