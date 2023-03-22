@@ -2162,7 +2162,6 @@ _validate_file() {
     else
         _validate_file=""
     fi
-    echo "${_pass}"
 }
 
 _copy_custom_files() {
