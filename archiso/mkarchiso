@@ -2168,6 +2168,7 @@ _validate_file() {
 _copy_custom_files() {
     local _dest="${1}"
     local _dir="${2}"
+    local _msg=""
     _msg_info "Copying custom ${_dest} files..."
     cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_dir}"
     for filename in "${!file_permissions[@]}"; do
