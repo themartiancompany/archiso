@@ -2178,6 +2178,7 @@ _copy_custom_files() {
         _group="${permissions[1]}"
         _perm="${permissions[2]}"
         _recur=()
+        _validate_file_err="" _validate_file_warn=""
         if [[ "$(_validate_file "${filename}" "${_dir}")" == "" ]]; then
             _msg=("Setting" "${_perm} permissions for ${_user}:${_group} on ${filename}")
             if [[ "${filename: -1}" == "/" ]]; then
