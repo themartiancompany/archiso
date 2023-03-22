@@ -969,26 +969,7 @@ _make_custom_airootfs() {
 
     if [[ -d "${profile}/airootfs" ]]; then
         _build_archiso_mkinitcpio_conf
-        _msg_info "Copying custom airootfs files..."
-        cp -af --no-preserve=ownership,mode -- "${profile}/airootfs/." "${pacstrap_dir}"
-        # Set ownership and mode for files and directories
-        for filename in "${!file_permissions[@]}"; do
-            IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
-            # Prevent file path traversal outside of $pacstrap_dir
-            if [[ "$(_validate_file "${filename}" "${pacstrap_dir}")" == "" ]]; then
-                if [[ "${filename: -1}" == "/" ]]; then
-                    chown -fhR -- "${permissions[0]}:${permissions[1]}" "${pacstrap_dir}${filename}"
-                    chmod -fR -- "${permissions[2]}" "${pacstrap_dir}${filename}"
-                else
-                    chown -fh -- "${permissions[0]}:${permissions[1]}" "${pacstrap_dir}${filename}"
-                    chmod -f -- "${permissions[2]}" "${pacstrap_dir}${filename}"
-                fi
-            else
-                [[ "${_validate_file_err}" != "" ]] && _msg_error "${_validate_file_err}" 1
-                [[ "${_validate_file_warn}" != "" ]] && _msg_warning "${_validate_file_warn}"
-            fi
-        done
-        _msg_info "Done!"
+        _copy_custom_files "airootfs" "${pacstrap_dir}"
     fi
 }
 
@@ -2184,6 +2165,38 @@ _validate_file() {
     echo "${_pass}"
 }
 
+_copy_custom_files() {
+    local _dest="${1}"
+    local _dir="${2}"
+    _msg_info "Copying custom ${_dest} files..."
+    cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_dir}"
+    for filename in "${!file_permissions[@]}"; do
+        IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
+        _user="${permissions[0]}"
+        _group="${permissions[1]}"
+        _perm="${permissions[2]}"
+        _chmod_opts=()
+        if [[ "$(_validate_file "${filename}" "${_dir}")" == "" ]]; then
+            _msg="Setting ${_perm} permissions for ${_user}:${_group} on ${filename}"
+            if [[ "${filename: -1}" == "/" ]]; then
+                _chmod_opts+=('-R')
+                _msg+=" (recursively)"
+            fi
+            _msg_info "${_msg}"
+            chown -fh "${_chmod_opts[@]}" -- "${_user}:${_group}" "${_dir}${filename}"
+            chmod -f "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
+         else
+             _msg_info "${_dir}${filename}: ${_validate_file_err} ${_validate_file_warn}"
+	         if [ "$(_validate_file "${filename}" "${_dir}")" != "" ]; then
+	             _msg_type="error"
+	             _error_code=1
+	          fi
+              [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
+              [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
+          fi
+    done
+}
+
 # Build persistent filesystem image
 _prepare_persistent_image() {
     local _error_code="" _msg_type="info" _validate_file_err="" _validate_file_warn=""
@@ -2199,32 +2212,7 @@ _prepare_persistent_image() {
     local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
     local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
     if [ -d "${profile}/persistent" ]; then
-        _msg_info "Copying custom persistent files..."
-        cp -af --no-preserve=ownership,mode -- "${profile}/persistent/." "${persistent_dir}"
-        for filename in "${!file_permissions[@]}"; do
-            IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
-            _user="${permissions[0]}"
-            _group="${permissions[1]}"
-            _perm="${permissions[2]}"
-            _chmod_opts=()
-            if [[ "$(_validate_file "${filename}" "${persistent_dir}")" == "" ]]; then
-                _msg_info "Setting ${_perm} permissions for ${_user}:${_group} on ${filename}"
-                if [[ "${filename: -1}" == "/" ]]; then
-                    _chmod_opts+=('-R')
-                fi
-                chown -fh "${_chmod_opts[@]}" -- "${_user}:${_group}" "${persistent_dir}${filename}"
-                chmod -f "${_chmod_opts[@]}" -- "${_perm}" "${persistent_dir}${filename}"
-             else
-		         _validate_file "${filename}" "${pacstrap_dir}"
-		         if [ "$(_validate_file "${filename}" "${pacstrap_dir}")" != "" ]; then
-		             _msg_type="error"
-		             _error_code=1
-		          fi
-                  [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
-                  [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
-              fi
-        done
-
+        _copy_custom_files "persistent" "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
         persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
         _msg_info "Done!"
