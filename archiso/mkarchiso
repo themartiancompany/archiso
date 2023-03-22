@@ -2168,7 +2168,7 @@ _validate_file() {
 _copy_custom_files() {
     local _dest="${1}"
     local _dir="${2}"
-    local _msg=""
+    local _msg=()
     _msg_info "Copying custom ${_dest} files..."
     cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_dir}"
     for filename in "${!file_permissions[@]}"; do
@@ -2178,12 +2178,12 @@ _copy_custom_files() {
         _perm="${permissions[2]}"
         _chmod_opts=()
         if [[ "$(_validate_file "${filename}" "${_dir}")" == "" ]]; then
-            _msg="Setting ${_perm} permissions for ${_user}:${_group} on ${filename}"
+            _msg=("Setting" "${_perm} permissions for ${_user}:${_group} on ${filename}")
             if [[ "${filename: -1}" == "/" ]]; then
                 _chmod_opts+=('-R')
-                _msg+=" (recursively)"
+                _msg+=("recursively")
             fi
-            _msg_info "${_msg}"
+            _msg_info "${_msg[*]}"
             chown -fh "${_chmod_opts[@]}" -- "${_user}:${_group}" "${_dir}${filename}"
             chmod -f "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
          else
