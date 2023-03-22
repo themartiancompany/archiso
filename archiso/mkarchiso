@@ -2150,8 +2150,8 @@ _is_file_in_work_paths() {
     local _dir _pass="false"
     local _dirs=("${pacstrap_dir}"
                  "${persistent_dir}")
-    for _dir in _dirs; do
-        if [ -e "${_dir}${_filename}" ];
+    for _dir in "${_dirs[@]}"; do
+        if [ -e "${_dir}${_filename}" ]; then
             _pass=""
         fi
     done
