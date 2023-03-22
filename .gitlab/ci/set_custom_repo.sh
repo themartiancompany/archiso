@@ -21,4 +21,9 @@ server="${2}"
 pacman_conf="${3}"
 out_conf="${4}"
 
+if [[ $# -eq 0 ]]; then
+  echo "args: <profile name> <server> <pacman.conf> <out file>"
+  exit 0
+fi
+
 _set_custom_repo "${profile}" "${server}" "${pacman_conf}" "${out_conf}"
