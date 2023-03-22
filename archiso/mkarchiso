@@ -2270,8 +2270,8 @@ _sign_netboot_artifacts() {
 _validate_requirements_airootfs_image_type_squashfs() {
     if ! command -v mksquashfs &> /dev/null; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '${airootfs_image_type}': mksquashfs is not available on this host. "
-              "Install 'squashfs-tools'!")
+        local _msg=("Validating '${airootfs_image_type}': mksquashfs is not available on this host. "
+                    "Install 'squashfs-tools'!")
         _msg_error "${_msg[*]}" 0
     fi
 }
@@ -2279,8 +2279,8 @@ _validate_requirements_airootfs_image_type_squashfs() {
 _validate_requirements_airootfs_image_type_ext4() {
     if ! { command -v mkfs.ext4 &> /dev/null && command -v tune2fs &> /dev/null; }; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '${airootfs_image_type}': mkfs.ext4 and/or tune2fs is not available on this host. "
-              "Install 'e2fsprogs'!")
+        local _msg=("Validating '${airootfs_image_type}': mkfs.ext4 and/or tune2fs is not available on this host. "
+                    "Install 'e2fsprogs'!")
         _msg_error "${_msg[*]}" 0
     fi
 }
@@ -2297,7 +2297,7 @@ _validate_requirements_persistent_image_type_ext4() {
     _validate_requirements_airootfs_image_type_ext4
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
-              "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
+                    "Be sure not to put sensitive data on it and write the resulting image on a write-once device.")
         _msg_warning "${_msg[*]}"
     fi
      if [ ! -e "${persistent_ro_udev_rule}" ]; then
@@ -2355,8 +2355,8 @@ _validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
 _validate_requirements_airootfs_image_type_erofs() {
     if ! command -v mkfs.erofs &> /dev/null; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '${airootfs_image_type}': mkfs.erofs is not available on this host."
-              " Install 'erofs-utils'!")
+        local _msg=("Validating '${airootfs_image_type}': mkfs.erofs is not available on this host."
+                    " Install 'erofs-utils'!")
         _msg_error "${_msg[*]}" 0
     fi
 }
@@ -2364,8 +2364,8 @@ _validate_requirements_airootfs_image_type_erofs() {
 _validate_requirements_airootfs_image_type_luks() {
     if ! command -v cryptsetup &> /dev/null; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '${airootfs_image_type}': cryptsetup is not available on this host."
-              "Install 'cryptsetup'!")
+        local _msg=("Validating '${airootfs_image_type}': cryptsetup is not available on this host."
+                    "Install 'cryptsetup'!")
         _msg_error "${_msg[*]}" 0
     fi
     [[ -n "$encryption_key" ]] && _resolve_encryption_key 
