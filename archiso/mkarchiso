@@ -2192,13 +2192,15 @@ _copy_custom_files() {
             chmod "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
          else
              _msg_info "${_dir}${filename}: ${_validate_file_err} ${_validate_file_warn}"
+             echo "${_validate_file_err}"
+             echo "${_validate_file_warn}"
 	         if [ "$(_validate_file "${filename}" "${_dir}")" != "" ]; then
 	             _msg_type="error"
 	             _error_code=1
-	          fi
-              [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
-              [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
-          fi
+	         fi
+             [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
+             [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
+         fi
     done
 }
 
