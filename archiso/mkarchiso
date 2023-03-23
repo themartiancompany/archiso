@@ -908,11 +908,11 @@ _get_fs_type() {
 _get_internal_size() {
     local _size="${1}"
     if [[ "${_size}" -lt 50000 ]]; then
-        ratio=70
+        ratio=60
     elif [[ "${_size}" -gt 50000 ]] && [[ "${_size}" -lt 200000 ]]; then
-        ratio=75
+        ratio=70
     elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
-        ratio=80
+        ratio=75
     elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 5000000 ]]; then
         ratio=80
     else
