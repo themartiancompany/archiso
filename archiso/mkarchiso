@@ -302,9 +302,16 @@ _run_mkswap() {
     mkswap -L "${_label}" -U "${_fsuuid}" "${_image_path}"
 }
 
+# Create and open a RAID device
+_run_mkraid() {
+    local _image_path="${1}"
+    local _size="${2}"
+    local _type="${3}"
+    fallocate -l "${_size}K" "${_image_path}" 
+}
+
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
 _run_mkluks() {
-    local _encryption_key
     local _image_path="${1}"
     local _size="${2}"
     local _encryption_key="${3}"
@@ -460,11 +467,11 @@ _mkimg_swap+luks() {
 
 # Create an ext4 fs inside a LUKS container image file.
 _mkimg_ext4() {
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size_kib="${4}"
-    local _epoch="${6}"
-    local _label="${7}"
+    local _dir="${1}"
+    local _image_path="${2}"
+    local _size_kib="${3}"
+    local _epoch="${4}"
+    local _label="${5}"
     local _writable="true"
     _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
                 "${_epoch}" "${_label}" "${_writable}"
