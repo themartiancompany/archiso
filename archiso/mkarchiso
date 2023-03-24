@@ -307,6 +307,7 @@ _run_mkraid() {
     local _image_path="${1}"
     local _size="${2}"
     local _type="${3}"
+    
     fallocate -l "${_size}K" "${_image_path}" 
     mdadm --misc --zero-superblock "${_image_path}"
 }
@@ -520,7 +521,7 @@ _mkimg+ext4+raid() {
   local _name="${1}"
   local _dir="${2}"
   shift 2
-  local _array="${@}"
+  local _array=("${@}")
   echo "${_array[@]}"
 }
 
