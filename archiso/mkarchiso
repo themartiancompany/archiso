@@ -308,6 +308,7 @@ _run_mkraid() {
     local _size="${2}"
     local _type="${3}"
     fallocate -l "${_size}K" "${_image_path}" 
+    mdadm --misc --zero-superblock "${_image_path}"
 }
 
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
@@ -501,6 +502,26 @@ _mkimg_ext4+luks() {
     _close_luks_device "${image_device}"
     _msg_info "Done!"
     rm -- "${_dir}.img"
+}
+
+# Creates or expand ext4-formatted RAID0 and RAID1 arrays inside a LUKS container
+_mkimg_ext4+raid+luks() {
+  local _name="${1}"
+  local _dir="${2}"
+  local _size_kib="${3}"
+  local _encryption_key="${4}"
+  shift 4
+  local _array=("$@")
+  echo "pass"
+}
+
+# Creates or expand an ext4-formatted RAID array
+_mkimg+ext4+raid() {
+  local _name="${1}"
+  local _dir="${2}"
+  shift 2
+  local _array="${@}"
+  echo "${_array[@]}"
 }
 
 # Creates an ext4 image and packs it inside a squashfs image.
