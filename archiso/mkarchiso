@@ -304,12 +304,17 @@ _run_mkswap() {
 
 # Create and open a RAID device
 _run_mkraid() {
-    local _image_path="${1}"
-    local _size="${2}"
+    # local _image_path="${1}"
+    # local _dev_path="${1}"
+    local _name="${1}"
+    # local _size="${2}"
     local _type="${3}"
-    
-    fallocate -l "${_size}K" "${_image_path}" 
-    mdadm --misc --zero-superblock "${_image_path}"
+    shift 3
+    local _devices=($@)
+    mdadm --create "/dev/md${_name}.map" \
+          --level="${_type}" \
+          --run \
+          ${_devices[@]}
 }
 
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
@@ -509,11 +514,26 @@ _mkimg_ext4+luks() {
 _mkimg_ext4+raid+luks() {
   local _name="${1}"
   local _dir="${2}"
-  local _size_kib="${3}"
-  local _encryption_key="${4}"
-  shift 4
-  local _array=("$@")
-  echo "pass"
+  # local _image_path="${3}"
+  local _size_kib="${4}"
+  local _encryption_key="${5}"
+  local _epoch="${6}"
+  local _label="${7}"
+  local _grub="${8}"
+  local _writable="true"
+  shift 8
+  local _images=("$@")
+  local _image
+  for _image in "${_images[@]}"; do
+      echo "${_device}"
+      _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
+      _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+                  "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+  done
+
+  for _device in "${_devices[@]}"; do
+    _close_luks_device "${image_device}"
+  done
 }
 
 # Creates or expand an ext4-formatted RAID array
@@ -522,6 +542,7 @@ _mkimg+ext4+raid() {
   local _dir="${2}"
   shift 2
   local _array=("${@}")
+  _run_mkraid "${_name}"
   echo "${_array[@]}"
 }
 

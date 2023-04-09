@@ -8,6 +8,10 @@ iso_application="Arch Linux Live/Rescue CD"
 iso_version="$(date +%Y.%m.%d)"
 install_dir="arch"
 buildmodes=('iso' 'dongle')
+images=(["cdr"]="700000:iso:1"
+	["dvd"]="4200000:iso:1"
+	["ssd"]="120000000:iso:1"
+	["usb"]="64000000:dongle:1")
 bootmodes=('bios.grub.mbr'
            'bios.grub.eltorito'
 	   'uefi-ia32.grub.esp'
