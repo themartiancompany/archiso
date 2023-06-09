@@ -328,7 +328,9 @@ _run_mkluks() {
     local _writable="${6}"
     local _grub="${7}"
     local _fsuuid
-    local _activation_opts=() _format_opts=() _key_msg="" _mapper
+    local _fallocate_opts=('--length' "${_size}K")
+    local _activation_opts=() _format_opts=() _fallocate_msg="" _key_msg="" _mapper
+    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
     local _cryptsetup_opts=('--type' 'luks2'
                             '--timeout=42069')
     _mapper=$(basename "${_image_path}")".map"
@@ -364,7 +366,8 @@ _run_mkluks() {
     fi
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
-    fallocate -l "${_size}K" "${_image_path}" 
+    _fallocate_opts+="$(_validate_fallocate_opts "${_image_path}")"
+    fallocate "${_fallocate_opts[@]}" "${_image_path}"
     while ! eval "cryptsetup -q -y luksFormat ${_format_opts[*]} ${_image_path}"; do
         sleep 1
     done
@@ -386,6 +389,18 @@ _run_mkluks() {
         _close_luks_device "${image_device}"
     done
     _msg_info "Done!"
+}
+
+_validate_fallocate_opts() {
+    local _image_path="${1}"
+    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
+    local _fallocate_msg="$(fallocate -l "100K" "${_image_path}.test" 2>&1)" 
+    if [ "${_fallocate_msg}" == "${_fallocate_posix_error}" ]; then
+        rm "${_image_path}.test"
+        echo '--posix' 
+    elif [ "${_fallocate_msg}" != "" ]; then
+        _msg_error "${_fallocate_msg}" 1
+    fi
 }
 
 # Close a LUKS device mapper
