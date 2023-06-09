@@ -311,11 +311,11 @@ _run_mkraid() {
     # local _size="${2}"
     local _type="${3}"
     shift 3
-    local _devices=($@)
+    local _devices=("$@")
     mdadm --create "/dev/md${_name}.map" \
           --level="${_type}" \
           --run \
-          ${_devices[@]}
+          "${_devices[@]}"
 }
 
 # Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
