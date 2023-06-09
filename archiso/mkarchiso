@@ -366,7 +366,7 @@ _run_mkluks() {
     fi
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
-    _fallocate_opts+="$(_validate_fallocate_opts "${_image_path}")"
+    _fallocate_opts+=("$(_validate_fallocate_opts "${_image_path}")")
     fallocate "${_fallocate_opts[@]}" "${_image_path}"
     while ! eval "cryptsetup -q -y luksFormat ${_format_opts[*]} ${_image_path}"; do
         sleep 1
