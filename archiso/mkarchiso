@@ -69,6 +69,7 @@ swap_encryption_key=""
 dongle_swap_image_type=""
 dongle_swap_encryption_key=""
 dongle_swap_size_kib=""
+dongle_persistent_size_kib=""
 dongle_persistent_image_type=""
 dongle_persistent_encryption_key=""
 swapimg=""
@@ -813,7 +814,7 @@ _mkdonglepersistent_common() {
     _dir="${dongle_persistent_dir}"
     _image_path="${donglepersistentimg}"
     _encryption_key="${dongle_persistent_encryption_key}"
-    _size_kib="${persistent_size_kib}"
+    _size_kib="${dongle_persistent_size_kib}"
     _epoch="${dongle_persistent_epoch}"
     _label="${iso_label}_DONGLE_PERSISTENT"
     _writable="true"
@@ -2295,8 +2296,9 @@ _prepare_persistent_image() {
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+            [ "${dongle_persistent_size_kib}" = "" ] && dongle_persistent_size_kib="${persistent_size_kib}"
             _run_once "_mkdonglepersistent_common"
-            _run_once "_mkdonglepersistent_${persistent_image_type}"
+            _run_once "_mkdonglepersistent_${dongle_persistent_image_type}"
         fi
     fi
 }
