@@ -393,8 +393,9 @@ _run_mkluks() {
 
 _validate_fallocate_opts() {
     local _image_path="${1}"
-    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
-    local _fallocate_msg="$(fallocate -l "100K" "${_image_path}.test" 2>&1)" 
+    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported"
+    local _fallocate_msg
+    _fallocate_msg="$(fallocate -l "100K" "${_image_path}.test" 2>&1)" 
     if [ "${_fallocate_msg}" == "${_fallocate_posix_error}" ]; then
         rm "${_image_path}.test"
         echo '--posix' 
