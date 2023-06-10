@@ -78,7 +78,9 @@ donglepersistentimg=""
 dongle_persistent_encryption_key=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
-
+luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
 
 # Show an INFO message
 # $1: message string
@@ -813,18 +815,39 @@ _mkpersistent_common() {
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkpersistent_ext4() {
-    persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+    persistent_guid="${linux_guid}"
     _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
-    persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    persistent_guid="${luks_guid}"
     _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkdonglepersistent+fs_type functions
+_mkdongleboot_common() {
+    _name="dongleboot"
+    _dir="${dongle_boot_dir}"
+    _image_path="${donglebootimg}"
+    _encryption_key="${dongle_boot_encryption_key}"
+    _size_kib="${dongle_boot_size_kib}"
+    _epoch="${dongle_boot_epoch}"
+    _label="${iso_label}_DONGLE_BOOT"
+    _writable="false"
+    _grub="true"
+    rm -f -- "${_image_path}"
+}
+
+# Create an ext4 fs inside a LUKS container to be used as the boot ISO partition.
+_mkdongleboot_ext4+luks() {
+    boot_guid="${luks_guid}"
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
+}
+
+# Steps shared by _mkdongleboot+fs_type functions
 _mkdonglepersistent_common() {
     _name="donglepersistent"
     _dir="${dongle_persistent_dir}"
@@ -834,19 +857,19 @@ _mkdonglepersistent_common() {
     _epoch="${dongle_persistent_epoch}"
     _label="${iso_label}_DONGLE_PERSISTENT"
     _writable="true"
-    _grub="true"
+    _grub="false"
     rm -f -- "${_image_path}"
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4() {
-    persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+    persistent_guid="${linux_guid}"
     _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkdonglepersistent_ext4+luks() {
-    persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+    persistent_guid="${luks_guid}"
     _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
@@ -1035,7 +1058,8 @@ _make_custom_airootfs() {
     install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
 
     if [[ -d "${profile}/airootfs" ]]; then
-        _build_archiso_mkinitcpio_conf
+        _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.conf" 
+        _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.recovery.conf" 
         _copy_custom_files "airootfs" "${pacstrap_dir}"
     fi
 }
@@ -1162,7 +1186,8 @@ _make_boot_on_iso() {
 
 # Add archiso modules to profile's mkinitcpio.conf
 _build_archiso_mkinitcpio_conf() {
-    local _hooks=() _mkinitcpio_conf="${profile}/airootfs/etc/mkinitcpio.conf" _modules=()
+    local _mkinitcpio_conf="${1}"
+    local _hooks=() _modules=()
     if [[ "${airootfs_image_type}" == *luks ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _hooks+=("encrypt") 
     fi
@@ -2641,9 +2666,9 @@ _add_xorrisofs_options_dongle_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="${dongleswapimg}"
     if [[ "${swap_image_type}" == *"luks" ]]; then
-        _swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+        _swap_guid="${luks_guid}"
     else
-        _swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
+        _swap_guid="${swap_guid}"
     fi
     _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
@@ -2653,9 +2678,9 @@ _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="${swapimg}"
     if [[ "${swap_image_type}" == *"luks" ]]; then
-        _swap_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+        _swap_guid="${luks_guid}"
     else
-        _swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
+        _swap_guid="${swap_guid}"
     fi
     _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
