@@ -82,6 +82,7 @@ dongle_swap_size_kib=""
 dongleswapimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
+_epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
 luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
@@ -255,7 +256,7 @@ _run_mkext4() {
     _msg_info "Label: ${_label}"
     _msg_info "this may take a while..."
 
-    ext4_hash_seed="$(uuidgen --sha1 --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+    ext4_hash_seed="$(uuidgen --sha1 --namespace ${_epoch_namespace} \
         --name "${_epoch} ext4 hash seed")"
     mkfs_ext4_options=('-d' "${_dir}"
                        '-O' '^has_journal,^resize_inode'
@@ -1212,7 +1213,7 @@ _build_archiso_mkinitcpio_conf() {
 _get_epoch_fsuuid() {
     local _epoch="${1}"
     uuidgen --sha1 \
-	        --namespace 93a870ff-8565-4cf3-a67b-f47299271a96 \
+	        --namespace "${_epoch_namespace}" \
             --name "${_epoch}"
 }
 
