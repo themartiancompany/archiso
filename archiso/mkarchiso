@@ -50,6 +50,7 @@ xorriso_options=()
 xorrisofs_options=()
 keys_image_type=""
 keys_image_tool_options=()
+keys_encryption_key=""
 dongle_isofs_dir=""
 dongle_xorriso_options=()
 dongle_xorrisofs_options=()
@@ -746,7 +747,7 @@ _mkkeys_common() {
     _name="keys"
     _dir="${keys_dir}"
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
-    _encryption_key=""
+    _encryption_key="${keys_encryption_key}"
     _size_kib="${keys_size_kib}"
     _epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
     _label="${iso_label}_KEYS"
@@ -826,7 +827,7 @@ _mkpersistent_ext4+luks() {
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
-# Steps shared by _mkdonglepersistent+fs_type functions
+# Steps shared by _mkdongleboot+fs_type functions
 _mkdongleboot_common() {
     _name="dongleboot"
     _dir="${dongle_boot_dir}"
@@ -1153,6 +1154,7 @@ _make_boot_on_iso9660() {
 _make_boot_on_dongle() {
     _make_boot_on_iso "${work_dir}/dongle_iso" "dongle ISO 9660"
     _make_boot_on_iso "${work_dir}/dongle_persistent" "dongle persistent"
+    _make_boot_on_iso "${work_dir}/dongle_boot" "dongle boot"
 }
 
 # Copy kernel and initramfs to ISO 9660
@@ -3359,6 +3361,7 @@ _build_dongle_base() {
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${dongle_isofs_dir}" ]] || install -d -- "${dongle_isofs_dir}"
     [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
+    [[ -d "${dongle_boot_dir}" ]] || install -d -- "${dongle_boot_dir}"
 
     if [ "${encryption_key}" != "" ]; then
         cp "${encryption_key}" "${keys_dir}/airootfs.key"
@@ -3386,6 +3389,7 @@ _build_iso_base() {
     airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
     persistent_dir="${work_dir}/persistent"
     dongle_persistent_dir="${work_dir}/dongle_persistent"
+    dongle_boot_dir="${work_dir}/dongle_boot"
 
     # Create working directory
     [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
