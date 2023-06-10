@@ -67,22 +67,27 @@ persistentimg=""
 swap_size_kib=""
 swap_image_type=""
 swap_encryption_key=""
-dongle_swap_image_type=""
-dongle_swap_encryption_key=""
-dongle_swap_size_kib=""
+swapimg=""
+dongle_boot_size_kib=""
+dongle_boot_image_type=""
+dongle_boot_encryption_key=""
+donglebootimg=""
 dongle_persistent_size_kib=""
 dongle_persistent_image_type=""
 dongle_persistent_encryption_key=""
-swapimg=""
-dongleswapimg=""
 donglepersistentimg=""
-dongle_persistent_encryption_key=""
+dongle_swap_image_type=""
+dongle_swap_encryption_key=""
+dongle_swap_size_kib=""
+dongleswapimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
 luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
-
+_PI=$((3 * 1415))
+_E=$(( 2 * 71828))
+_EL=$(( 42 * 69))
 # Show an INFO message
 # $1: message string
 _msg_info() {
@@ -801,7 +806,7 @@ _mkpersistent_common() {
     _image_path="${persistentimg}"
     _encryption_key="${persistent_encryption_key}"
     _size_kib="${persistent_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    _epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
     _label="${iso_label}_PERSISTENT"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -1226,20 +1231,20 @@ _get_archiso_uuid() {
 # Get UUID for the GRUB cryptomount
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))"
+        _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+        _epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
     fi
     _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
 _get_dongle_persistent_uuid() {
-    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    _epoch=$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))
     _get_epoch_fsuuid "${_epoch}"
 }
 
 _get_dongle_swap_uuid() {
-    _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+    _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
     _get_epoch_fsuuid "${_epoch}"
 }
 
@@ -2201,6 +2206,7 @@ _prepare_airootfs_image() {
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             dongle_isofs_dir="${work_dir}/dongle_iso"
             dongle_persistent_dir="${work_dir}/dongle_persistent"
+            dongle_boot_dir="${work_dir}/dongle_boot"
             _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}"
             install -d -m711 "${_sig_dir}"
             cp "$(_get_airootfs_img).sig" "${_sig_dir}"
@@ -2322,6 +2328,7 @@ _prepare_persistent_image() {
     dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
+
     local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
     local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
     if [ -d "${profile}/persistent" ]; then
@@ -2342,6 +2349,8 @@ _prepare_persistent_image() {
             [ "${dongle_persistent_size_kib}" = "" ] && dongle_persistent_size_kib="${persistent_size_kib}"
             _run_once "_mkdonglepersistent_common"
             _run_once "_mkdonglepersistent_${dongle_persistent_image_type}"
+            _run_once "_mkdongleboot_common"
+            _run_once "_mkdongleboot_${dongle_boot_image_type}"
         fi
     fi
 }
@@ -3277,7 +3286,8 @@ _set_overrides() {
     [[ -n "$dongle_isofs_dir" ]] || dongle_isofs_dir="${work_dir}/dongle_iso"
     [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
     [[ -n "$persistentimg" ]] || persistentimg="${work_dir}/persistent."$(_get_fs_ext "persistent")
-    [[ -n "$donglepersistentimg" ]] || donglepersistentimg="${work_dir}/donglepersistent."$(_get_fs_ext "persistent")
+    [[ -n "$donglepersistentimg" ]] || donglepersistentimg="${work_dir}/donglepersistent."$(_get_fs_ext "dongle_persistent")
+    [[ -n "$donglebootimg" ]] || donglebootimg="${work_dir}/dongleboot."$(_get_fs_ext "dongle_boot")
     [[ -n "$swapimg" ]] || swapimg="${work_dir}/swap.img"
     [[ -n "$dongleswapimg" ]] || dongleswapimg="${work_dir}/dongleswap.img"
 }
