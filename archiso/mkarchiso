@@ -86,8 +86,8 @@ luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
 _PI=$((3 * 1415))
-_E=$(( 2 * 71828))
-_EL=$(( 42 * 69))
+_E=$((2 * 71828))
+_EL=$((42 * 69))
 # Show an INFO message
 # $1: message string
 _msg_info() {
@@ -340,7 +340,7 @@ _run_mkluks() {
     local _activation_opts=() _format_opts=() _fallocate_msg="" _key_msg="" _mapper
     local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
     local _cryptsetup_opts=('--type' 'luks2'
-                            '--timeout=42069')
+                            '--timeout=69042')
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
     _key_opts=()
@@ -429,7 +429,7 @@ _ask_passwd() {
     local _name="${1}"
     local _label="${2}"
     local _command _command_mismatch="echo"
-    local _ask_passwd_opts=("--timeout=42069")
+    local _ask_passwd_opts=("--timeout=69042")
     local _ask_passwd_msg="" _ask_passwd_confirm_msg=""
     local _mismatch_opts=()
     local _mismatch_msg="Passwords mismatch."
@@ -754,7 +754,7 @@ _mkkeys_common() {
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
     _encryption_key="${keys_encryption_key}"
     _size_kib="${keys_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + 42 * 69))
+    _epoch=$((SOURCE_DATE_EPOCH + ${_EL}))
     _label="${iso_label}_KEYS"
     _writable="false"
     _grub="false"
@@ -887,7 +887,7 @@ _mkdongleswap_common() {
     # shellcheck disable=SC2154
     _encryption_key="${dongle_swap_encryption_key}"
     _size_kib="${dongle_swap_size_kib}"
-    _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+    _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
     if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_DONGLE_SWAP"
     else
@@ -906,7 +906,7 @@ _mkswap_common() {
     # shellcheck disable=SC2154
     _encryption_key="${swap_encryption_key}"
     _size_kib="${swap_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
+    _epoch=$((SOURCE_DATE_EPOCH + ${_E}))
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_SWAP"
     else
@@ -1219,7 +1219,7 @@ _get_epoch_fsuuid() {
 # Get UUID for the dongle GRUB plain mount
 _get_dongle_uuid() {
     #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + 42 * 69)))"
+    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + ${_EL})))"
 }
 
 # Get UUID for the GRUB plain mount
@@ -1251,9 +1251,9 @@ _get_dongle_swap_uuid() {
 # Get UUID for the dongle GRUB plain mount
 _get_swap_uuid() {
     if [[ "${buildmode}" == 'dongle' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + 42 * 69 + 2 * 71828))"
+        _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + 2 * 71828))
+        _epoch=$((SOURCE_DATE_EPOCH + ${_E}))
     fi
     _get_epoch_fsuuid "${_epoch}"
 }
@@ -2323,9 +2323,9 @@ _prepare_persistent_image() {
     local persistent_dir="${work_dir}/persistent"
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
-    persistent_epoch=$((SOURCE_DATE_EPOCH + 3 * 1415))
+    persistent_epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
-    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + 42 * 69 + 3 * 1415))
+    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
 
@@ -2660,9 +2660,9 @@ _validate_requirements_buildmode_netboot() {
 _add_xorrisofs_options_persistent() {
     local _img _xorrisofs_options=("$@")
     if [[ "${persistent_image_type}" == *"luks" ]]; then
-        persistent_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
+        persistent_guid="${luks_guid}"
     else
-        persistent_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+        persistent_guid="${linux_guid}"
     fi
     if [[ "${buildmode}" == "dongle" ]]; then
         _img="${donglepersistentimg}"
@@ -3060,7 +3060,7 @@ _build_dongle_image() {
     fi
 
     # Update SORCE_DATE_EPOCH for dongle ISO UUID
-    SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + 69 * 42))
+    SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + ${_EL}))
 
     rm -f -- "${out_dir}/${image_name}"
     _msg_info "Creating ISO image..."
