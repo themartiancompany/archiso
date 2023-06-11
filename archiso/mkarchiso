@@ -43,52 +43,61 @@ pacstrap_dir=""
 keys_dir=""
 buildmodes=()
 bootmodes=()
-airootfs_image_type=""
-airootfs_image_tool_options=()
-airootfs_img_dir=""
+_img=""
+fs_images=(
+    'airootfs'
+    'persistent'
+    'keys'
+    'swap'
+    'dongle_boot'
+    'dongle_persistent'
+    'dongle_swap'
+    'dongle_recovery'
+    'efi_boot')
+fs_images_str_vars=(
+    'dir'
+    'image_type'
+    'image_tool_options'
+    'img'
+    'size' # All sizes are in kib
+    'encryption_key')
+fs_images_arr_vars=('files'
+                    'image_tool_options')
+for _img in "${fs_images[@]}"; do
+    for _var in "${fs_images_str_vars[@]}"; do
+        eval "${_img}_${_var}=''"
+    done
+    for _var in "${fs_images_arr_vars[@]}"; do
+        eval "${_img}_${_var}=()"
+    done
+done
 xorriso_options=()
 xorrisofs_options=()
-keys_image_type=""
-keys_image_tool_options=()
-keys_encryption_key=""
 dongle_isofs_dir=""
 dongle_xorriso_options=()
 dongle_xorrisofs_options=()
 cert_list=()
 sign_netboot_artifacts=""
 declare -A file_permissions=()
-efibootimg=""
-efiboot_files=()
-encryption_key=""
-persistent_size_kib=""
-persistent_image_type=""
-persistent_encryption_key=""
-persistentimg=""
-swap_size_kib=""
-swap_image_type=""
-swap_encryption_key=""
-swapimg=""
-dongle_boot_size_kib=""
-dongle_boot_image_type=""
-dongle_boot_encryption_key=""
-donglebootimg=""
-dongle_persistent_size_kib=""
-dongle_persistent_image_type=""
-dongle_persistent_encryption_key=""
-donglepersistentimg=""
-dongle_swap_image_type=""
-dongle_swap_encryption_key=""
-dongle_swap_size_kib=""
-dongleswapimg=""
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
-_epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
+epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
 luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
 _PI=$((3 * 1415))
 _E=$((2 * 71828))
 _EL=$((42 * 69))
+_RO=$((16 * 1803))
+_airootfs_const=0
+_dongle_const="${_EL}"
+_boot_const="${_RO}"
+_persistent_const="${_PI}"
+_swap_const="${_E}"
+_keys_const=$((_dongle_const + _boot_const + _persistent_const))
+_dongle_boot_const=$((_dongle_const + _boot_const))
+_dongle_persistent_const=$((_dongle_const + _persistent_const))
+_dongle_swap_const=$((_dongle_const + _persistent_const))
 # Show an INFO message
 # $1: message string
 _msg_info() {
@@ -217,7 +226,7 @@ _cleanup_pacstrap_dir() {
     [[ -d "${_tmp}" ]] && find "${_tmp}" -mindepth 1 -delete
     # Delete package pacman related files.
     find "${work_dir}" \( -name '*.pacnew' -o -name '*.pacsave' -o -name '*.pacorig' \) -delete
-    if [[ "${persistent_size_kib}" != "" ]]; then
+    if [[ "${persistent_size}" != "" ]]; then
         dbus-uuidgen --ensure="${_machine_id}"
     else
         # Create an empty /etc/machine-id
@@ -227,7 +236,9 @@ _cleanup_pacstrap_dir() {
     _msg_info "Done!"
 }
 
-# Create a squashfs image from a file system image or directory.
+# Creates a squashfs image from a file system image or directory.
+# $1: directory or a file system image
+# $2: path of the result image
 _run_mksquashfs() {
     local _directory_or_fs="${1}"
     local _image_path="${2}"
@@ -237,7 +248,12 @@ _run_mksquashfs() {
     mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${mksquashfs_options[@]}"
 }
 
-# Create an ext4 image of given size (in KB) from a directory.
+# Creates an ext4 image of given size from a directory with the same name in the same path.
+# $1: directory to put into the image
+# $2: size of the resulting image
+# $3: UNIX time (to generate a date-based uuid)
+# $4: partition label
+# $5: if true the file system image will be writable
 _run_mkext4() {
     local _dir="${1}"
     local _image_path="${1}.img"
@@ -256,8 +272,9 @@ _run_mkext4() {
     _msg_info "Label: ${_label}"
     _msg_info "this may take a while..."
 
-    ext4_hash_seed="$(uuidgen --sha1 --namespace ${_epoch_namespace} \
-        --name "${_epoch} ext4 hash seed")"
+    ext4_hash_seed="$(uuidgen --sha1 \
+                              --namespace ${epoch_namespace} \
+                              --name "${_epoch} ext4 hash seed")"
     mkfs_ext4_options=('-d' "${_dir}"
                        '-O' '^has_journal,^resize_inode'
                        '-E' "lazy_itable_init=0,root_owner=0:0,hash_seed=${ext4_hash_seed}"
@@ -280,7 +297,10 @@ _run_mkext4() {
     _msg_info "Done!"
 }
 
-# Create an EROFS image given a directory.
+# Creates an EROFS image given a directory.
+# $1: resulting image
+# $2: input directory
+# $3: UNIX time (to generate a date-based uuid)
 _run_mkerofs() {
     local _image_path="${1}"
     local _dir="${2}"
@@ -299,6 +319,10 @@ _run_mkerofs() {
 }
 
 # Creates a swap image
+# $1: resulting image
+# $2: image size
+# $3: UNIX time (to generate a date-based uuid)
+# $4: partition label
 _run_mkswap() {
     local _image_path="${1}"
     local _size="${2}"
@@ -312,13 +336,15 @@ _run_mkswap() {
     mkswap -L "${_label}" -U "${_fsuuid}" "${_image_path}"
 }
 
-# Create and open a RAID device
+# Creates and opens a RAID device
+# $1: RAID name
+# $2: RAID type (only '1' for now)
 _run_mkraid() {
     # local _image_path="${1}"
     # local _dev_path="${1}"
     local _name="${1}"
-    # local _size="${2}"
-    local _type="${3}"
+    # local _size="${2}" # should go into the array
+    local _type="${2}"
     shift 3
     local _devices=("$@")
     mdadm --create "/dev/md${_name}.map" \
@@ -327,7 +353,14 @@ _run_mkraid() {
           "${_devices[@]}"
 }
 
-# Create and open a LUKS image of the size of the pacstrap directory plus 200MB.
+# Creates and opens a LUKS image of the size of the pacstrap directory plus 200MB.
+# $1: image to write on
+# $2: partition size
+# $3: encryption key
+# $4: UNIX time (to generate a date-based uuid)
+# $5: partition label
+# $6: if true, the partition will be writable
+# $7: if true, dm-verity layer will be disabled to be able to be opened by GRUB
 _run_mkluks() {
     local _image_path="${1}"
     local _size="${2}"
@@ -340,6 +373,9 @@ _run_mkluks() {
     local _fallocate_opts=('--length' "${_size}K")
     local _activation_opts=() _format_opts=() _fallocate_msg="" _key_msg="" _mapper
     local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
+    local _key_size='512'
+    local _sector_size='4096'
+    local _pbkdf_memory='256'
     local _cryptsetup_opts=('--type' 'luks2'
                             '--timeout=69042')
     _mapper=$(basename "${_image_path}")".map"
@@ -355,15 +391,15 @@ _run_mkluks() {
 
     _activation_opts+=("${_cryptsetup_opts[@]}")
     _format_opts+=("${_cryptsetup_opts[@]}" \
-        '--sector-size' '4096' \
-        '--key-size' '512')
+        '--sector-size' "${_sector_size}" \
+        '--key-size' "${_key_size}")
 
     # Remove as soon as gcrypt adds support for argon2i
     # and GRUB for the dm-integrity layer
     if [ "${_grub}" == "true" ]; then
         _format_opts+=('--pbkdf' 'pbkdf2')
     else
-        _format_opts+=('--pbkdf-memory' 256
+        _format_opts+=('--pbkdf-memory' "${_pbkdf_memory}"
                        '--integrity' 'hmac-sha512')
     fi
 
@@ -371,7 +407,7 @@ _run_mkluks() {
         _msg_info "Integrity journal disabled"
         _activation_opts+=('--persistent' \
                            '--integrity-no-journal' \
-                           '--key-size' '512')
+                           '--key-size' "${_key_size}")
     fi
 
     _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
@@ -400,6 +436,8 @@ _run_mkluks() {
     _msg_info "Done!"
 }
 
+# Determines correct fallocate options for an image at a chosen path
+# $1: path of the fallocate resulting image to verify options for
 _validate_fallocate_opts() {
     local _image_path="${1}"
     local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported"
@@ -413,7 +451,8 @@ _validate_fallocate_opts() {
     fi
 }
 
-# Close a LUKS device mapper
+# Closes a LUKS device mapper
+# $1: device mapper to close
 _close_luks_device() {
     local _device="${1}"
     local _mapper
@@ -426,35 +465,42 @@ _close_luks_device() {
     sync
 }
 
+# Prompts a passphrase to be used as key for a partition
+# $1: partition name
+# $2: partition label
 _ask_passwd() {
     local _name="${1}"
     local _label="${2}"
-    local _command _command_mismatch="echo"
+    local _prompt_cmd _mismatch_cmd="echo"
     local _ask_passwd_opts=("--timeout=69042")
-    local _ask_passwd_msg="" _ask_passwd_confirm_msg=""
+    local _ask_passwd_msg="Insert new passphrase for ${_name} (${_label}): "
+    local _ask_passwd_confirm_msg="Confirm: "
     local _mismatch_opts=()
     local _mismatch_msg="Passwords mismatch."
     local _confirm
     if command -v zenity &> /dev/null && [ -n "${DISPLAY}" ]; then
-        _command=$(which zenity)
-        _command_mismatch="${_command}"
+        _prompt_cmd=$(which zenity)
+        _mismatch_cmd="${_prompt_cmd}"
         _ask_passwd_opts+=("--password")
         _mismatch_opts+=("--info" "--icon" "dialog-password" "--text")
     else
-        _command=$(which systemd-ask-password)
-        _ask_passwd_msg="Insert new passphrase for ${_name} (${_label}): "
-        _ask_passwd_confirm_msg="Confirm: "
+        _prompt_cmd=$(which systemd-ask-password)
     fi
+    local _prompt=("${_prompt_cmd}" "${_ask_passwd_opts[@]}")
+    local _mismatch=("${_mismatch_cmd}" "${_mismatch_opts[@]}" "${_mismatch_msg}")
     while true; do
-        _passphrase=$("${_command}" "${_ask_passwd_opts[@]}" "${_ask_passwd_msg}")
+        _passphrase=$("${_prompt[@]}" "${_ask_passwd_msg}")
         echo "${_ask_passwd_confirm_msg}"
-        _confirm=$("${_command}" "${_ask_passwd_opts[@]}" "${_ask_passwd_confirm_msg}")
+        _confirm=$("${_prompt[@]}" "${_ask_passwd_confirm_msg}")
         [[ "${_passphrase}" == "${_confirm}" ]] && break
-        "${_command_mismatch}" "${_mismatch_opts[@]}" "${_mismatch_msg}"
+        "${_mismatch[@]}"
     done
 }
 
-# Ask the user for a passphrase if not specified
+# Steps shared by the mkimg+<fs_image_type> functions
+# $1: name for the device mapper
+# $2: an encryption key (prompts for one if empty)
+# $3: partition label
 _mkluks_common() {
     local _name="${1}"
     local _key="${2}"
@@ -471,42 +517,53 @@ _mkluks_common() {
 }
 
 # Creates a squash fs image.
+# $1: path of the resulting image
+# $2: partition size
+# $3: UNIX time (for a date-based uuid)
+# $4: partition label
 _mkimg_swap() {
     local _image_path="${1}"
-    local _size_kib="${2}"
+    local _size="${2}"
     local _epoch="${3}"
     local _label="${4}"
-    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}""${_label}"
+    _run_mkswap "${_image_path}" "${_size}" "${_epoch}""${_label}"
 }
 
-# Create a swap partition inside a LUKS container image file.
+# Creates a swap partition inside a LUKS container image file.
+# $1: device mapper name
+# $2: LUKS image path
+# $3: image size
+# $4: encryption key
+# $5: UNIX time (for a date-based uuid)
+# $6: partition label
+# $7: if true, dm-verity layer will be disabled to open the image from GRUB
 _mkimg_swap+luks() {
     local _name="${1}"
     local _image_path="${2}"
-    local _size_kib="${3}"
+    local _size="${3}"
     local _encryption_key="${4}"
     local _epoch="${5}"
     local _label="${6}"
     local _grub="${7}"
     local _writable="true"
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkswap "${image_device}" "$(_get_internal_size "${_size_kib}")" "${_epoch}" "${_name}"
+    _run_mkswap "${image_device}" "$(_get_internal_size "${_size}")" "${_epoch}" "${_name}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
 }
 
-# Create an ext4 fs inside a LUKS container image file.
+# Creates an ext4 fs inside a LUKS container image file.
 _mkimg_ext4() {
     local _dir="${1}"
     local _image_path="${2}"
-    local _size_kib="${3}"
+    local _size="${3}"
     local _epoch="${4}"
     local _label="${5}"
     local _writable="true"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
                 "${_epoch}" "${_label}" "${_writable}"
     mv "${_dir}.img" "${_image_path}"
     sync
@@ -518,16 +575,16 @@ _mkimg_ext4+luks() {
     local _name="${1}"
     local _dir="${2}"
     local _image_path="${3}"
-    local _size_kib="${4}"
+    local _size="${4}"
     local _encryption_key="${5}"
     local _epoch="${6}"
     local _label="${7}"
     local _grub="${8}"
     local _writable="true"
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
                 "${_epoch}" "${_name}" "${_writable}"
     dd if="${_dir}.img" of="${image_device}" > /dev/null 2>&1
     sync
@@ -536,24 +593,29 @@ _mkimg_ext4+luks() {
     rm -- "${_dir}.img"
 }
 
-# Creates or expand ext4-formatted RAID0 and RAID1 arrays inside a LUKS container
-_mkimg_ext4+raid+luks() {
+# Creates an ext4-formatted RAID1 on a LUKS images array
+# $1: RAID name
+# $2: directory to fill the RAID with
+# $3: encryption key
+# $4: UNIX time (to get a date-based UUID)
+# $@: LUKS image paths array
+_mkimg_ext4+raid1+luks() {
   local _name="${1}"
   local _dir="${2}"
   # local _image_path="${3}"
-  local _size_kib="${4}"
-  local _encryption_key="${5}"
-  local _epoch="${6}"
-  local _label="${7}"
-  local _grub="${8}"
+  # local _size="${4}"
+  local _encryption_key="${3}"
+  local _epoch="${4}"
+  # local _label="${5}"
+  # local _grub="${6}"
   local _writable="true"
-  shift 8
+  shift 4
   local _images=("$@")
   local _image
   for _image in "${_images[@]}"; do
       echo "${_device}"
       _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-      _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+      _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                   "${_epoch}" "${_label}" "${_writable}" "${_grub}"
   done
 
@@ -563,6 +625,9 @@ _mkimg_ext4+raid+luks() {
 }
 
 # Creates or expand an ext4-formatted RAID array
+# $1: RAID name
+# $2: files to be put onto the RAID
+# $@: devices, in the following format <todo>
 _mkimg+ext4+raid() {
   local _name="${1}"
   local _dir="${2}"
@@ -574,20 +639,29 @@ _mkimg+ext4+raid() {
 
 # Creates an ext4 image and packs it inside a squashfs image.
 # Packs the squash image inside a LUKS image.
+# $1: device mapper name
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a datetime-based uuid)
+# $7: partition label
+# $8: if true, the image will be writable
+# $9: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
 _mkimg_ext4+squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
     local _image_path="${3}"
-    local _size_kib="${4}"
+    local _size="${4}"
     local _encryption_key="${5}"
     local _epoch="${6}"
     local _label="${7}"
     local _writable="${8}"
     local _grub="${9}"
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
                 "${_epoch}" "${_name}" "${_writable}"
     _run_mksquashfs "${_dir}.img" "${image_device}"
     sync
@@ -597,18 +671,27 @@ _mkimg_ext4+squashfs+luks() {
 }
 
 # Creates a squashfs image and saves it on a LUKS image.
+# $1: device mapper name
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a datetime-based uuid)
+# $7: partition label
+# $8: if true, the image will be writable
+# $9: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
 _mkimg_squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
     local _image_path="${3}"
-    local _size_kib="${4}"
+    local _size="${4}"
     local _encryption_key="${5}"
     local _epoch="${6}"
     local _label="${7}"
     local _writable="${8}"
     local _grub="${9}"
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     _run_mksquashfs "${_dir}" "${image_device}"
     sync
@@ -616,15 +699,19 @@ _mkimg_squashfs+luks() {
 }
 
 # Creates an ext4 file system inside a squashfs image.
+# $1: partition label
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: UNIX time (for a datetime-based uuid)
 _mkimg_ext4+squashfs() {
-    local _name="${1}"
+    local _label="${1}"
     local _dir="${2}"
     local _image_path="${3}"
-    local _size_kib="${4}"
+    local _size="${4}"
     local _epoch="${5}"
-    local _label="${6}"
     local _writable="false"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size_kib}")" \
+    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
                 "${_epoch}" "${_name}" "${_writable}"
     _run_mksquashfs "${_dir}.img" "${_image_path}"
     _msg_info "Done!"
@@ -632,10 +719,11 @@ _mkimg_ext4+squashfs() {
 }
 
 # Creates a squash fs image.
+# $1: directory to create the squashfs image with
+# $2: resulting image path
 _mkimg_squashfs() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
+    local _dir="${1}"
+    local _image_path="${2}"
     _run_mksquashfs "${_dir}" "${_image_path}"
 }
 
@@ -654,21 +742,21 @@ _mkimg_erofs+luks() {
     local _name="${1}"
     local _dir="${2}"
     local _image_path="${3}"
-    local _size_kib="${4}"
+    local _size="${4}"
     local _encryption_key="${5}"
     local _epoch="${6}"
     local _label="${7}"
     local _grub="${8}"
     local _writable="false"
     local _tmp_img="${work_dir}/tmp.erofs" _tmp_img_size
-    if [[ "${_size_kib}" == "" ]]; then
+    if [[ "${_size}" == "" ]]; then
 	_msg_info "Running mkerofs in advance to determine LUKS partition size"
         _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
         _tmp_img_size=$(du -s "${_tmp_img}" | cut -f 1)
-        _size_kib=$(( 69420 + _tmp_img_size * 12 / 10))
+        _size=$(( 69420 + _tmp_img_size * 12 / 10))
     fi
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size_kib}" "${_encryption_key}" \
+    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
     if [[ "${_tmp_img_size}" != "" ]]; then
         _msg_info "Copying erofs image"
@@ -690,9 +778,9 @@ _mkairootfs_common() {
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     _name="airootfs"
     _dir="${pacstrap_dir}"
-    _image_path="${airootfs_img_dir}/airootfs."$(_get_fs_ext "airootfs")
-    _size_kib="${airootfs_size}"
-    _encryption_key="${encryption_key}"
+    _image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
+    _size="${airootfs_size}"
+    _encryption_key="${airootfs_encryption_key}"
     _epoch="$((SOURCE_DATE_EPOCH))"
     _label="${iso_label}"
     _writable=false
@@ -700,38 +788,38 @@ _mkairootfs_common() {
     _auto_size=""
     rm -f -- "${_image_path}"
     [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "${airootfs_img_dir}"
+    install -d -m 0755 -- "${airootfs_dir}"
 }
 
 # Create an ext4 image containing the root file system.
 # Save the image on the ISO 9660 file system.
 _mkairootfs_ext4() {
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
 # Save the squashfs image on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs() {
-    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                          "${_epoch}" "${_label}" "${_writable}"
 }
 
 # Create an ext4 image containing the root file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkairootfs_ext4+squashfs+luks() {
-    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                               "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkairootfs_squashfs() {
-    _mkimg_squashfs "${_name}" "${_dir}" "${_image_path}"
+    _mkimg_squashfs "${_dir}" "${_image_path}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the LUKS image.
 # Saves the LUKS image on the ISO 9660 file system.
 _mkairootfs_squashfs+luks() {
-    _mkimg_squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                          "${_encryption_key}" "${_epoch}" "${_label}" "${_writable}" "${_grub}"
 }
 
@@ -754,8 +842,8 @@ _mkkeys_common() {
     _dir="${keys_dir}"
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
     _encryption_key="${keys_encryption_key}"
-    _size_kib="${keys_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + ${_EL}))
+    _size="${keys_size}"
+    _epoch=$((SOURCE_DATE_EPOCH + _keys_const))
     _label="${iso_label}_KEYS"
     _writable="false"
     _grub="false"
@@ -766,26 +854,26 @@ _mkkeys_common() {
 # Create an ext4 image containing the keys file system for the dongle.
 # Save the image on the dongle ISO 9660 file system.
 _mkkeys_ext4() {
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Save the squashfs image on the dongle ISO 9660 file system.
 _mkkeys_ext4+squashfs() {
-    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                          "${_epoch}" "${_label}" "${_writable}"
 }
 
 # Create an ext4 image containing the keys file system and pack it inside a squashfs image.
 # Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
 _mkkeys_ext4+squashfs+luks() {
-    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                               "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
 }
 
 # Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
 _mkkeys_squashfs() {
-    _mkimg_squashfs "${_name}" "${_dir}" "${_image_path}"
+    _mkimg_squashfs "${_dir}" "${_image_path}"
 }
 
 # Create an EROFS image containing the keys file system and saves it on the ISO 9660 file system.
@@ -804,10 +892,10 @@ _mkkeys_erofs+luks() {
 _mkpersistent_common() {
     _name="persistent"
     _dir="${persistent_dir}"
-    _image_path="${persistentimg}"
+    _image_path="${persistent_img}"
     _encryption_key="${persistent_encryption_key}"
-    _size_kib="${persistent_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
+    _size="${persistent_size}"
+    _epoch=$((SOURCE_DATE_EPOCH + _persistent_const))
     _label="${iso_label}_PERSISTENT"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -823,23 +911,24 @@ _mkpersistent_common() {
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkpersistent_ext4() {
     persistent_guid="${linux_guid}"
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
+
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
 _mkpersistent_ext4+luks() {
     persistent_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
-# Steps shared by _mkdongleboot+fs_type functions
-_mkdongleboot_common() {
+# Steps shared by _mkdongle_boot+fs_type functions
+_mkdongle_boot_common() {
     _name="dongleboot"
     _dir="${dongle_boot_dir}"
-    _image_path="${donglebootimg}"
+    _image_path="${dongle_boot_img}"
     _encryption_key="${dongle_boot_encryption_key}"
-    _size_kib="${dongle_boot_size_kib}"
+    _size="${dongle_boot_size}"
     _epoch="${dongle_boot_epoch}"
     _label="${iso_label}_DONGLE_BOOT"
     _writable="false"
@@ -848,19 +937,19 @@ _mkdongleboot_common() {
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the boot ISO partition.
-_mkdongleboot_ext4+luks() {
+_mkdongle_boot_ext4+luks() {
     boot_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
-# Steps shared by _mkdongleboot+fs_type functions
-_mkdonglepersistent_common() {
+# Steps shared by _mkdongle_boot+fs_type functions
+_mkdongle_persistent_common() {
     _name="donglepersistent"
     _dir="${dongle_persistent_dir}"
-    _image_path="${donglepersistentimg}"
+    _image_path="${dongle_persistent_img}"
     _encryption_key="${dongle_persistent_encryption_key}"
-    _size_kib="${dongle_persistent_size_kib}"
+    _size="${dongle_persistent_size}"
     _epoch="${dongle_persistent_epoch}"
     _label="${iso_label}_DONGLE_PERSISTENT"
     _writable="true"
@@ -869,26 +958,26 @@ _mkdonglepersistent_common() {
 }
 
 # Create an ext4 image to be used as the persistent ISO partition.
-_mkdonglepersistent_ext4() {
+_mkdongle_persistent_ext4() {
     persistent_guid="${linux_guid}"
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
 
 # Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
-_mkdonglepersistent_ext4+luks() {
+_mkdongle_persistent_ext4+luks() {
     persistent_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size_kib}" \
+    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkswap+fs_type functions
-_mkdongleswap_common() {
+_mkdongle_swap_common() {
     _name="dongle_swap"
-    _image_path="${dongleswapimg}"
+    _image_path="${dongle_swap_img}"
     # shellcheck disable=SC2154
     _encryption_key="${dongle_swap_encryption_key}"
-    _size_kib="${dongle_swap_size_kib}"
-    _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
+    _size="${dongle_swap_size}"
+    _epoch="$((SOURCE_DATE_EPOCH + _dongle_const + _swap_const))"
     if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_DONGLE_SWAP"
     else
@@ -903,11 +992,11 @@ _mkdongleswap_common() {
 # Steps shared by _mkswap+fs_type functions
 _mkswap_common() {
     _name="swap"
-    _image_path="${swapimg}"
+    _image_path="${swap_img}"
     # shellcheck disable=SC2154
     _encryption_key="${swap_encryption_key}"
-    _size_kib="${swap_size_kib}"
-    _epoch=$((SOURCE_DATE_EPOCH + ${_E}))
+    _size="${swap_size}"
+    _epoch=$((SOURCE_DATE_EPOCH + _swap_const))
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_SWAP"
     else
@@ -921,21 +1010,21 @@ _mkswap_common() {
 
 # Create an ext4 image to be used as the persistent ISO partition.
 _mkswap_swap() {
-    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+    _run_mkswap "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
 
 _mkswap_swap+luks() {
-    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size_kib}" \
+    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 } 
 
 # Create an ext4 image to be used as the persistent ISO partition.
-_mkdongleswap_swap() {
-    _run_mkswap "${_image_path}" "${_size_kib}" "${_epoch}" "${_label}"
+_mkdongle_swap_swap() {
+    _run_mkswap "${_image_path}" "${_size}" "${_epoch}" "${_label}"
 }
 
-_mkdongleswap_swap+luks() {
-    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size_kib}" \
+_mkdongle_swap_swap+luks() {
+    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size}" \
                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 } 
 
@@ -982,7 +1071,8 @@ _mksignature() {
     _msg_info "Done!"
 }
 
-# Get image extension.
+# Returns the extension for a given file system image
+# $1: a value in 'fs_images' (airootfs, persistent, ...)
 _get_fs_ext() {
     local _image="${1}"
     local _fs_type
@@ -994,7 +1084,8 @@ _get_fs_ext() {
     fi
 }
 
-# Get image extension.
+# Returns image extension for a given file system image
+# $1: a value in 'fs_images' (airootfs, persistent, ...)
 _get_fs_type() {
     local _image="${1}"
     local _no_luks
@@ -1002,6 +1093,8 @@ _get_fs_type() {
     echo "${_no_luks##*"+"}"
 }
 
+# Returns internal size for an internal partition from the outer image size
+# $1: outer partition size
 _get_internal_size() {
     local _size="${1}"
     if [[ "${_size}" -lt 50000 ]]; then
@@ -1031,7 +1124,7 @@ _run_once() {
     fi
 }
 
-# Set up custom pacman.conf with custom cache and pacman hook directories.
+# Sets up custom pacman.conf with custom cache and pacman hook directories.
 _make_pacman_conf() {
     local _cache_dirs _system_cache_dirs _profile_cache_dirs
     _system_cache_dirs="$(pacman-conf CacheDir| tr '\n' ' ')"
@@ -1056,7 +1149,7 @@ _make_pacman_conf() {
              /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" > "${work_dir}/${buildmode}.pacman.conf"
 }
 
-# Prepare working directory and copy custom root file system files.
+# Prepares working directory and copies custom root file system files.
 _make_custom_airootfs() {
     _validate_file_err="" _validate_file_warn=""
     local passwd=()
@@ -1192,7 +1285,8 @@ _make_boot_on_iso() {
     _msg_info "Done!"
 }
 
-# Add archiso modules to profile's mkinitcpio.conf
+# Adds archiso modules to profile's mkinitcpio.conf
+# $1: mkinitcpio.conf file to edit
 _build_archiso_mkinitcpio_conf() {
     local _mkinitcpio_conf="${1}"
     local _hooks=() _modules=()
@@ -1210,51 +1304,60 @@ _build_archiso_mkinitcpio_conf() {
          s|%ARCHISO_MODULES%|${_modules[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
 }
 
+# Returns epoch given a file system image name 
+# $1: value in fs_images
+_get_epoch() {
+    local _name="${1}"
+    eval "echo \$((${SOURCE_DATE_EPOCH} + ${_name}_const))"
+}
+
+# Returns an unique uuid given a datetime in UNIX time
+# $1: UNIX time
 _get_epoch_fsuuid() {
     local _epoch="${1}"
     uuidgen --sha1 \
-	        --namespace "${_epoch_namespace}" \
+	        --namespace "${epoch_namespace}" \
             --name "${_epoch}"
 }
 
-# Get UUID for the dongle GRUB plain mount
-_get_dongle_uuid() {
-    #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + ${_EL})))"
-}
-
-# Get UUID for the GRUB plain mount
+# Returns UUID for the GRUB plain mount
 _get_archiso_uuid() {
     #shellcheck disable=SC2005
     echo "$(_epoch_to_uuid "${SOURCE_DATE_EPOCH}")"
 }
 
-# Get UUID for the GRUB cryptomount
+# Returns UUID for the dongle GRUB plain mount
+_get_dongle_uuid() {
+    #shellcheck disable=SC2005
+    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + ${_dongle_const})))"
+}
+
+# Returns UUID for the GRUB cryptomount
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))"
+        _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_persistent_const}))"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
+        _epoch=$((SOURCE_DATE_EPOCH + ${_persistent_const}))
     fi
     _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
 _get_dongle_persistent_uuid() {
-    _epoch=$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))
+    _epoch=$(_get_epoch "dongle_persistent"))
     _get_epoch_fsuuid "${_epoch}"
 }
 
 _get_dongle_swap_uuid() {
-    _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
+    _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_swap_const}))"
     _get_epoch_fsuuid "${_epoch}"
 }
 
 # Get UUID for the dongle GRUB plain mount
 _get_swap_uuid() {
     if [[ "${buildmode}" == 'dongle' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + ${_EL} + ${_E}))"
+        _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_swap_const}))"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + ${_E}))
+        _epoch=$((SOURCE_DATE_EPOCH + ${_swap_const}))
     fi
     _get_epoch_fsuuid "${_epoch}"
 }
@@ -1284,7 +1387,7 @@ _get_crypto_params() {
     if [[ "${airootfs_image_type}" == *luks ]]; then
         _cparams+=("root=/dev/mapper/root"
                    "cryptdevice=UUID=$(_get_archiso_uuid),$(_get_airootfs_path):root:readonly")
-        if [ "${encryption_key}" != "" ]; then
+        if [ "${airootfs_encryption_key}" != "" ]; then
             _cparams+=("cryptkey=UUID=$(_get_dongle_uuid):iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
         fi
     fi
@@ -1435,6 +1538,7 @@ _make_bootmode_bios.syslinux.eltorito() {
     _msg_info "Done! SYSLINUX set up for BIOS booting from an optical disc successfully."
 }
 
+# 
 _make_bootmode_bios.syslinux.eltorito_iso() {
     _make_bootmode_bios.syslinux.eltorito "${isofs_dir}"
     # ISOLINUX and SYSLINUX installation is shared
@@ -1453,20 +1557,20 @@ _make_boot_on_fat() {
     local _images _ucode_image
     _msg_info "Preparing kernel and initramfs for the FAT file system..."
     _images=("initramfs-*" "vmlinuz-*")
-    mmd -D o -i "${efibootimg}" \
+    mmd -D o -i "${efi_boot_img}" \
         "::/${install_dir}" "::/${install_dir}/boot" "::/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/${arch}/" \; -quit
+        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efi_boot_img}" {} "::/${install_dir}/boot/${arch}/" \; -quit
     done
     for _ucode_image in "${ucodes[@]}"; do
-        find "${work_dir}" -iname "${_ucode_image}" -exec mcopy -D "o" -i "${efibootimg}" {} "::/${install_dir}/boot/" \;
+        find "${work_dir}" -iname "${_ucode_image}" -exec mcopy -D "o" -i "${efi_boot_img}" {} "::/${install_dir}/boot/" \;
     done
     _msg_info "Done!"
 }
 
 # Create a FAT image (efiboot.img) which will serve as the EFI system partition
 # $1: image size in bytes
-_make_efibootimg() {
+_make_efi_boot_img() {
     local imgsize_kib="0"
     local imgsize_bytes=${1}
 
@@ -1486,28 +1590,28 @@ _make_efibootimg() {
     )"
     # The FAT image must be created with mkfs.fat not mformat, as some systems have issues with mformat made images:
     # https://lists.gnu.org/archive/html/grub-devel/2019-04/msg00099.html
-    rm -f -- "${efibootimg}"
+    rm -f -- "${efi_boot_img}"
     _msg_info "Creating FAT image of size: ${imgsize_kib} KiB..."
     if [[ "${quiet}" == "y" ]]; then
         # mkfs.fat does not have a -q/--quiet option, so redirect stdout to /dev/null instead
         # https://github.com/dosfstools/dosfstools/issues/103
-        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize_kib}" > /dev/null
+        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${imgsize_kib}" > /dev/null
     else
-        mkfs.fat -C -n ARCHISO_EFI "${efibootimg}" "${imgsize_kib}"
+        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${imgsize_kib}"
     fi
 
     # Create the default/fallback boot path in which a boot loaders will be placed later.
-    mmd -D o -i "${efibootimg}" ::/EFI ::/EFI/BOOT
+    mmd -D o -i "${efi_boot_img}" ::/EFI ::/EFI/BOOT
 }
 
 # Copy GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
-_make_common_bootmode_grub_copy_to_efibootimg() {
+_make_common_bootmode_grub_copy_to_efi_boot_img() {
     local files_to_copy=()
     files_to_copy+=("${work_dir}/grub/"*'.cfg')
     if compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null; then
         files_to_copy+=("${profile}/grub/"!(*.cfg))
     fi
-    mcopy -D o -i "${efibootimg}" "${files_to_copy[@]}" ::/EFI/BOOT/
+    mcopy -D o -i "${efi_boot_img}" "${files_to_copy[@]}" ::/EFI/BOOT/
 }
 
 _epoch_to_uuid() {
@@ -1571,7 +1675,7 @@ _build_crypttab() {
     else
         sed -i '/%SWAP_UUID%/d' "${_out}"
     fi
-    if [[ "${swap_size_kib}" != "" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [[ "${swap_size}" != "" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         sed -i "s|%DONGLE_SWAP_UUID%|$(_get_dongle_swap_uuid)|g" "${_out}"
     else
         sed -i '/%DONGLE_SWAP_UUID%/d' "${_out}"
@@ -1582,12 +1686,12 @@ _build_crypttab() {
 _fill_persistent_ro_udev_rules() {
     local _template="${1}"
     # shellcheck disable=SC2154
-    if [[ "${persistent_size_kib}" != "" ]]; then
+    if [[ "${persistent_size}" != "" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_template}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_template}"
     fi
-    if [[ "${persistent_size_kib}" != "" ]]; then
+    if [[ "${persistent_size}" != "" ]]; then
         sed -i "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}"
     else
         sed -i '/%PERSISTENT_UUID%/d' "${_template}"
@@ -1605,8 +1709,8 @@ _make_common_bootmode_grub_cfg(){
         _build_bootloader_config "${_cfg}" "grub" > "${work_dir}/grub/${_cfg##*/}"
     done
     # Add all GRUB files to the list of files used to calculate the required FAT image size.
-    efiboot_files+=("${work_dir}/grub/"
-                    "${profile}/grub/"!(*.cfg))
+    efi_boot_files+=("${work_dir}/grub/"
+                     "${profile}/grub/"!(*.cfg))
 
     IFS='' read -r -d '' grubembedcfg <<'EOF' || true
 if ! [ -d "$cmdpath" ]; then
@@ -1677,8 +1781,8 @@ _make_bootmode_uefi-ia32.grub.esp() {
                       -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
 
     # Add GRUB to the list of files used to calculate the required FAT image size.
-    efiboot_files+=("${work_dir}/BOOTIA32.EFI"
-                    "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
+    efi_boot_files+=("${work_dir}/BOOTIA32.EFI"
+                     "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
 
     if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
         # TODO: Remove this branch.
@@ -1686,19 +1790,19 @@ _make_bootmode_uefi-ia32.grub.esp() {
     elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
         _run_once "_make_bootmode_uefi-x64.grub.esp_${bootable}"
     else
-        efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+        efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
         # Create a FAT image for the EFI system partition
-        _make_efibootimg "$efiboot_imgsize"
+        _make_efi_boot_img "${efi_boot_imgsize}"
     fi
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efibootimg}" "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
+    mcopy -D o -i "${efi_boot_img}" "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
 
     # Copy GRUB files
-    _run_once _make_common_bootmode_grub_copy_to_efibootimg
+    _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
 
     if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efibootimg}" "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
+        mcopy -D o -i "${efi_boot_img}" "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
     fi
 
     _msg_info "Done! GRUB set up for UEFI booting successfully."
@@ -1764,22 +1868,22 @@ _make_bootmode_uefi-x64.grub.esp() {
                       --disable-shim-lock \
                       -o "${work_dir}/BOOTx64.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
     # Add GRUB to the list of files used to calculate the required FAT image size.
-    efiboot_files+=("${work_dir}/BOOTx64.EFI"
-                    "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi")
+    efi_boot_files+=("${work_dir}/BOOTx64.EFI"
+                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi")
 
-    efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+    efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
 
     # Create a FAT image for the EFI system partition
-    _make_efibootimg "$efiboot_imgsize"
+    _make_efi_boot_img "${efi_boot_imgsize}"
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efibootimg}" "${work_dir}/BOOTx64.EFI" ::/EFI/BOOT/BOOTx64.EFI
+    mcopy -D o -i "${efi_boot_img}" "${work_dir}/BOOTx64.EFI" ::/EFI/BOOT/BOOTx64.EFI
 
     # Copy GRUB files
-    _run_once _make_common_bootmode_grub_copy_to_efibootimg
+    _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
 
     if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efibootimg}" \
+        mcopy -D o -i "${efi_boot_img}" \
                       "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" \
                       "::/shellx64.efi"
     fi
@@ -1837,7 +1941,7 @@ _make_bootmode_uefi-x64.grub.eltorito_dongle() {
 
 # Prepare systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
-    local _file efiboot_imgsize _results
+    local _file efi_boot_imgsize _results
     local _available_ucodes=()
     _msg_info "Setting up systemd-boot for UEFI booting..."
 
@@ -1847,33 +1951,33 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
         fi
     done
     # Calculate the required FAT image size in bytes
-    efiboot_files+=("${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
-                    "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
-                    "${profile}/efiboot/"
-                    "${_available_ucodes[@]}")
+    efi_boot_files+=("${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
+                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
+                     "${profile}/efiboot/"
+                     "${_available_ucodes[@]}")
     _images=("initramfs-*" "vmlinuz-*")
     for _query in "${_images[@]}"; do
-        mapfile -t efiboot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
+        mapfile -t efi_boot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
     done
 
-    efiboot_imgsize="$(du -bcs -- "${efiboot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+    efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
     # Create a FAT image for the EFI system partition
-    _make_efibootimg "$efiboot_imgsize"
+    _make_efi_boot_img "${efi_boot_imgsize}"
 
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efibootimg}" \
+    mcopy -D o -i "${efi_boot_img}" \
         "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" ::/EFI/BOOT/BOOTx64.EFI
 
     # Copy systemd-boot configuration files
-    mmd -D o -i "${efibootimg}" ::/loader ::/loader/entries
-    mcopy -D o -i "${efibootimg}" "${profile}/efiboot/loader/loader.conf" ::/loader/
+    mmd -D o -i "${efi_boot_img}" ::/loader ::/loader/entries
+    mcopy -D o -i "${efi_boot_img}" "${profile}/efiboot/loader/loader.conf" ::/loader/
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _build_bootloader_config "${_conf}" "systemd-boot" | mcopy -D o -i "${efibootimg}" - "::/loader/entries/${_conf##*/}"
+        _build_bootloader_config "${_conf}" "systemd-boot" | mcopy -D o -i "${efi_boot_img}" - "::/loader/entries/${_conf##*/}"
         done
 
     # shellx64.efi is picked up automatically when on /
     if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efibootimg}" \
+        mcopy -D o -i "${efi_boot_img}" \
             "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ::/shellx64.efi
     fi
 
@@ -1884,10 +1988,12 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     _msg_info "Done! systemd-boot set up for UEFI booting successfully."
 }
 
+# Prepares systemd-boot for the ISO image
 _make_bootmode_uefi-x64.systemd-boot.esp_iso() {
     _make_bootmode_uefi-x64.systemd-boot.esp
 }
 
+# Prepares systemd-boot for the dongle ISO image
 _make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
     _make_bootmode_uefi-x64.systemd-boot.esp
 }
@@ -1926,12 +2032,12 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     _msg_info "Done!"
 }
 
-# Prepare systemd-boot for El Torito booting
+# Prepare systemd-boot for El Torito booting on the ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_iso() {
     _make_bootmode_uefi-x64.systemd-boot.eltorito "${isofs_dir}" "iso"
 }
 
-# Prepare systemd-boot for El Torito booting
+# Prepare systemd-boot for El Torito booting on the dongle ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_dongle() {
     _make_bootmode_uefi-x64.systemd-boot.eltorito "${dongle_isofs_dir}" "dongle"
 }
@@ -2131,6 +2237,8 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
+# Resolve the value of an image encryption key from an <image>_encryption_key profiledef.sh variable
+# $1: a value in fs_images
 _resolve_secondary_encryption_key() {
     local _name="${1}"
     local _encryption_key _image_type
@@ -2184,15 +2292,17 @@ _resolve_secondary_encryption_key() {
     fi
 }
 
+# Returns install path of airootfs image
 _get_airootfs_path(){
     echo "${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
 }
 
+# Returns workdir airootfs image path
 _get_airootfs_img(){
-    echo "${airootfs_img_dir}/airootfs.$(_get_fs_ext "airootfs")"
+    echo "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
 }
 
-# Build airootfs filesystem image
+# Builds airootfs filesystem image
 _prepare_airootfs_image() {
     local _sig_dir pacstrap_size
 
@@ -2215,9 +2325,9 @@ _prepare_airootfs_image() {
     fi
 }
 
-# Build keys filesystem image
+# Builds keys filesystem image
 _prepare_keys_image() {
-    keys_size_kib=69420
+    keys_size=69420
     _run_once "_mkkeys_common"
     _run_once "_mkkeys_${keys_image_type}"
 
@@ -2227,25 +2337,29 @@ _prepare_keys_image() {
     fi
 }
 
-_prepare_dongle_swap_image() {
-    if [ "${swap_size_kib}" != "" ] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_secondary_encryption_key "dongle_swap"
-        if [[ "${dongle_swap_size_kib}" == "" ]]; then
-            dongle_swap_size_kib="${swap_size_kib}"
-        fi
-        _run_once "_mkdongleswap_common"
-        _run_once "_mkdongleswap_${swap_image_type}"
-    fi
-}
-
+# Builds swap filesystem image
 _prepare_swap_image() {
-    if [ "${swap_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${swap_size}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "swap"
         _run_once "_mkswap_common"
         _run_once "_mkswap_${swap_image_type}"
     fi
 }
 
+# Builds dongle swap filesystem image
+_prepare_dongle_swap_image() {
+    if [ "${swap_size}" != "" ] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _resolve_secondary_encryption_key "dongle_swap"
+        if [[ "${dongle_swap_size}" == "" ]]; then
+            dongle_swap_size="${swap_size}"
+        fi
+        _run_once "_mkdongle_swap_common"
+        _run_once "_mkdongle_swap_${swap_image_type}"
+    fi
+}
+
+# Checks whether an image's file system path is present in the profile directories
+# $1: file system path
 _is_file_in_work_paths() {
     local _filename="${1}"
     local _dir
@@ -2259,6 +2373,9 @@ _is_file_in_work_paths() {
     done
 }
 
+# Checks if an image's file system path can be applied permissions on
+# $1: filename path
+# $2: image name (airootfs, persistent)
 _validate_file() {
     local _filename="${1}"
     local _storage="${2}"
@@ -2280,21 +2397,22 @@ _validate_file() {
     fi
 }
 
+# Copies custom files onto an image, reading and applying permissions from a file
+# $1: destination image name (airootfs, persistent)
+# $2: output directory
 _copy_custom_files() {
     local _dest="${1}"
-    local _dir="${2}"
+    local _out_dir="${2}"
     local _error_code _msg=()
     local _opts=('-f') _chmod_opts=() _recur=()
     _msg_info "Copying custom ${_dest} files..."
-    cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_dir}"
+    cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_out_dir}"
     for filename in "${!file_permissions[@]}"; do
         IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
-        _user="${permissions[0]}"
-        _group="${permissions[1]}"
-        _perm="${permissions[2]}"
+        _user="${permissions[0]}" _group="${permissions[1]}" _perm="${permissions[2]}"
         _recur=()
         _validate_file_err="" _validate_file_warn="" _validate_file_result=""
-        _validate_file "${filename}" "${_dir}"
+        _validate_file "${filename}" "${_out_dir}"
         if [[ "${_validate_file_result}" == "" ]]; then
             _msg=("Setting" "${_perm} permissions for ${_user}:${_group} on ${filename}")
             if [[ "${filename: -1}" == "/" ]]; then
@@ -2304,8 +2422,8 @@ _copy_custom_files() {
             [[ "${quiet}" != "y" ]] && _msg_info "${_msg[*]}"
             _chown_opts=("${_opts[@]}" '-h' "${_recur[@]}")
             _chmod_opts=("${_opts[@]}" "${_recur[@]}")
-            chown "${_chown_opts[@]}" -- "${_user}:${_group}" "${_dir}${filename}"
-            chmod "${_chmod_opts[@]}" -- "${_perm}" "${_dir}${filename}"
+            chown "${_chown_opts[@]}" -- "${_user}:${_group}" "${_out_dir}${filename}"
+            chmod "${_chmod_opts[@]}" -- "${_perm}" "${_out_dir}${filename}"
          else
              _msg_type="warning"
 	     if [ "${_validate_file_err}" != "" ]; then
@@ -2324,9 +2442,9 @@ _prepare_persistent_image() {
     local persistent_dir="${work_dir}/persistent"
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
-    persistent_epoch=$((SOURCE_DATE_EPOCH + ${_PI}))
+    persistent_epoch=$((SOURCE_DATE_EPOCH + ${_persistent_const}))
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
-    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + ${_EL} + ${_PI}))
+    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_persistent_const}))
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
 
@@ -2335,23 +2453,23 @@ _prepare_persistent_image() {
     if [ -d "${profile}/persistent" ]; then
         _copy_custom_files "persistent" "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
-        persistent_size_kib=$(( persistent_dir_size > persistent_size_kib ? persistent_dir_size : persistent_size_kib ))
+        persistent_size=$(( persistent_dir_size > persistent_size ? persistent_dir_size : persistent_size ))
         _msg_info "Done!"
     fi
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
     _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
-    if [ "${persistent_size_kib}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${persistent_size}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            [ "${dongle_persistent_size_kib}" = "" ] && dongle_persistent_size_kib="${persistent_size_kib}"
-            _run_once "_mkdonglepersistent_common"
-            _run_once "_mkdonglepersistent_${dongle_persistent_image_type}"
-            _run_once "_mkdongleboot_common"
-            _run_once "_mkdongleboot_${dongle_boot_image_type}"
+            [ "${dongle_persistent_size}" = "" ] && dongle_persistent_size="${persistent_size}"
+            _run_once "_mkdongle_persistent_common"
+            _run_once "_mkdongle_persistent_${dongle_persistent_image_type}"
+            _run_once "_mkdongle_boot_common"
+            _run_once "_mkdongle_boot_${dongle_boot_image_type}"
         fi
     fi
 }
@@ -2442,6 +2560,10 @@ _validate_requirements_persistent_image_type_ext4+luks() {
     fi
 }
 
+# Generates an encryption key when the "auto" value has been specified for an
+# <image>_encryption_key variable in profiledef.sh
+# $1: output file path
+# $2: mode (binary/random plain)
 _gen_key() {
     local _out="${1}"
     local _mode="${2}"
@@ -2452,14 +2574,15 @@ _gen_key() {
     fi
 }
 
+# Resolves the value of the airootfs image encryption key 
 _resolve_encryption_key(){
-    if [ ! -f "${encryption_key}" ]; then
-        if [ "${encryption_key}" = 'auto' ]; then
+    if [ ! -f "${airootfs_encryption_key}" ]; then
+        if [ "${airootfs_encryption_key}" = 'auto' ]; then
             encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            _gen_key "${encryption_key}" "binary"
-        elif [ "${encryption_key}" != 'auto' ]; then
-            _msg_error "File '${encryption_key}' does not exist." 0
+            _gen_key "${airootfs_encryption_key}" "binary"
+        elif [ "${airootfs_encryption_key}" != 'auto' ]; then
+            _msg_error "File '${airootfs_encryption_key}' does not exist." 0
         fi
     fi
 }
@@ -2666,9 +2789,9 @@ _add_xorrisofs_options_persistent() {
         persistent_guid="${linux_guid}"
     fi
     if [[ "${buildmode}" == "dongle" ]]; then
-        _img="${donglepersistentimg}"
+        _img="${dongle_persistent_img}"
     else
-        _img="${persistentimg}"
+        _img="${persistent_img}"
     fi
     _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
@@ -2676,7 +2799,7 @@ _add_xorrisofs_options_persistent() {
 
 _add_xorrisofs_options_dongle_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
-    _img="${dongleswapimg}"
+    _img="${dongle_swap_img}"
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _swap_guid="${luks_guid}"
     else
@@ -2688,7 +2811,7 @@ _add_xorrisofs_options_dongle_swap() {
 
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
-    _img="${swapimg}"
+    _img="${swap_img}"
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _swap_guid="${luks_guid}"
     else
@@ -2842,7 +2965,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     # shellcheck disable=SC2076
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || _xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
-    _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
+    _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efi_boot_img}")
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
@@ -2900,7 +3023,7 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
         # The ISO will not contain a GPT partition table, so to be able to reference efiboot.img, place it as a
         # file inside the ISO 9660 file system
         install -d -m 0755 -- "${bootable_dir}/EFI/archiso"
-        cp -a -- "${efibootimg}" "${bootable_dir}/EFI/archiso/efiboot.img"
+        cp -a -- "${efi_boot_img}" "${bootable_dir}/EFI/archiso/efiboot.img"
         # systemd-boot in an embedded efiboot.img via El Torito
         _xorrisofs_options+=(
             # Start a new El Torito boot entry for UEFI
@@ -2933,7 +3056,7 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
     # shellcheck disable=SC2076
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || _xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition type to "EFI system partition"
-    _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efibootimg}")
+    _xorrisofs_options+=('-append_partition' '2' 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B' "${efi_boot_img}")
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || [[ " ${bootmodes[*]} " =~ ' bios.grub.mbr ' ]]; then
@@ -2993,7 +3116,7 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
         # The ISO will not contain a GPT partition table, so to be able to reference efiboot.img, place it as a
         # file inside the ISO 9660 file system
         install -d -m 0755 -- "${bootable_dir}/EFI/archiso"
-        cp -a -- "${efibootimg}" "${bootable_dir}/EFI/archiso/efiboot.img"
+        cp -a -- "${efi_boot_img}" "${bootable_dir}/EFI/archiso/efiboot.img"
         # grub in an embedded efiboot.img via El Torito
         _xorrisofs_options+=(
           # Start a new El Torito boot entry for UEFI
@@ -3043,11 +3166,11 @@ _build_dongle_image() {
         "_add_xorrisofs_options_${bootmode}_dongle" 
     done
 
-    if [ "${persistent_size_kib}" != "" ]; then
+    if [ "${persistent_size}" != "" ]; then
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_persistent "${dongle_xorrisofs_options[@]}")")
     fi
 
-    if [ "${swap_size_kib}" != "" ]; then
+    if [ "${swap_size}" != "" ]; then
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_dongle_swap "${dongle_xorrisofs_options[@]}")")
     fi
 
@@ -3061,7 +3184,7 @@ _build_dongle_image() {
     fi
 
     # Update SORCE_DATE_EPOCH for dongle ISO UUID
-    SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + ${_EL}))
+    SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + ${_dongle_const}))
 
     rm -f -- "${out_dir}/${image_name}"
     _msg_info "Creating ISO image..."
@@ -3109,11 +3232,11 @@ _build_iso_image() {
         "_add_xorrisofs_options_${bootmode}_iso" 
     done
 
-    if [ "${persistent_size_kib}" != "" ]; then
+    if [ "${persistent_size}" != "" ]; then
         xorrisofs_options=("$(_add_xorrisofs_options_persistent "${xorrisofs_options[@]}")")
     fi
 
-    if [ "${swap_size_kib}" != "" ]; then
+    if [ "${swap_size}" != "" ]; then
         xorrisofs_options=("$(_add_xorrisofs_options_swap "${xorrisofs_options[@]}")")
     fi
 
@@ -3141,7 +3264,7 @@ _build_iso_image() {
     du -h -- "${out_dir}/${image_name}"
 
     if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        cp "${encryption_key}" "${out_dir}"
+        cp "${airootfs_encryption_key}" "${out_dir}"
         cp "${persistent_encryption_key}" "${out_dir}"
     fi
 }
@@ -3283,14 +3406,14 @@ _set_overrides() {
     [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
-    [[ -n "$airootfs_img_dir" ]] || airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
+    [[ -n "$airootfs_dir" ]] || airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
     [[ -n "$dongle_isofs_dir" ]] || dongle_isofs_dir="${work_dir}/dongle_iso"
-    [[ -n "$efibootimg" ]] || efibootimg="${work_dir}/efiboot.img"
-    [[ -n "$persistentimg" ]] || persistentimg="${work_dir}/persistent."$(_get_fs_ext "persistent")
-    [[ -n "$donglepersistentimg" ]] || donglepersistentimg="${work_dir}/donglepersistent."$(_get_fs_ext "dongle_persistent")
-    [[ -n "$donglebootimg" ]] || donglebootimg="${work_dir}/dongleboot."$(_get_fs_ext "dongle_boot")
-    [[ -n "$swapimg" ]] || swapimg="${work_dir}/swap.img"
-    [[ -n "$dongleswapimg" ]] || dongleswapimg="${work_dir}/dongleswap.img"
+    [[ -n "$efi_boot_img" ]] || efi_boot_img="${work_dir}/efiboot.img"
+    [[ -n "$persistent_img" ]] || persistent_img="${work_dir}/persistent."$(_get_fs_ext "persistent")
+    [[ -n "$dongle_persistent_img" ]] || dongle_persistent_img="${work_dir}/donglepersistent."$(_get_fs_ext "dongle_persistent")
+    [[ -n "$dongle_boot_img" ]] || dongle_boot_img="${work_dir}/dongleboot."$(_get_fs_ext "dongle_boot")
+    [[ -n "$swap_img" ]] || swap_img="${work_dir}/swap.img"
+    [[ -n "$dongle_swap_img" ]] || dongle_swap_img="${work_dir}/dongleswap.img"
 }
 
 _export_gpg_publickey() {
@@ -3362,7 +3485,7 @@ _make_pkglist() {
     _msg_info "Done!"
 }
 
-# build the base for an ISO and/or a netboot target
+# Builds the base for an ISO and/or a netboot target
 _build_dongle_base() {
     local run_once_mode="base"
     local _sig_dir
@@ -3374,8 +3497,8 @@ _build_dongle_base() {
     [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
     [[ -d "${dongle_boot_dir}" ]] || install -d -- "${dongle_boot_dir}"
 
-    if [ "${encryption_key}" != "" ]; then
-        cp "${encryption_key}" "${keys_dir}/airootfs.key"
+    if [ "${airootfs_encryption_key}" != "" ]; then
+        cp "${airootfs_encryption_key}" "${keys_dir}/airootfs.key"
     fi
 
     if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -3397,13 +3520,13 @@ _build_iso_base() {
     pacstrap_dir="${work_dir}/${arch}/airootfs"
     isofs_dir="${work_dir}/iso"
     keys_dir="${work_dir}/keys"
-    airootfs_img_dir="${isofs_dir}/${install_dir}/${arch}"
+    airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
     persistent_dir="${work_dir}/persistent"
     dongle_persistent_dir="${work_dir}/dongle_persistent"
     dongle_boot_dir="${work_dir}/dongle_boot"
 
     # Create working directory
-    [[ -d "${airootfs_img_dir}" ]] || install -d -- "${airootfs_img_dir}"
+    [[ -d "${airootfs_dir}" ]] || install -d -- "${airootfs_dir}"
     [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
     [[ -d "${persistent_dir}" ]] || install -d -- "${persistent_dir}"
     [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
@@ -3472,7 +3595,7 @@ _build_buildmode_netboot() {
 _build_buildmode_iso() {
     local image_name="${iso_name}-${iso_version}-${arch}.iso"
     local run_once_mode="${buildmode}"
-    efibootimg="${work_dir}/efiboot.img"
+    efi_boot_img="${work_dir}/efiboot.img"
     _build_iso_base
     _run_once _build_iso_image
 }
@@ -3481,7 +3604,7 @@ _build_buildmode_iso() {
 _build_buildmode_dongle() {
     local image_name="${iso_name}-dongle-${iso_version}-${arch}.iso"
     local run_once_mode="${buildmode}"
-    efibootimg="${work_dir}/efiboot.img"
+    efi_boot_img="${work_dir}/efiboot.img"
     _build_dongle_base
     _run_once _build_dongle_image
 }
