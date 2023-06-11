@@ -52,7 +52,7 @@ fs_images=(
     'dongle_boot'
     'dongle_persistent'
     'dongle_swap'
-    'dongle_recovery'
+    'recovery'
     'efi_boot')
 fs_images_str_vars=(
     'dir'
@@ -94,10 +94,11 @@ _dongle_const="${_EL}"
 _boot_const="${_RO}"
 _persistent_const="${_PI}"
 _swap_const="${_E}"
-_keys_const=$((_dongle_const + _boot_const + _persistent_const))
 _dongle_boot_const=$((_dongle_const + _boot_const))
 _dongle_persistent_const=$((_dongle_const + _persistent_const))
-_dongle_swap_const=$((_dongle_const + _persistent_const))
+_dongle_swap_const=$((_dongle_const + _swap_const))
+_keys_const=$((_dongle_const + _boot_const + _persistent_const))
+_recovery_const=$((_dongle_const + _boot_const + _keys_const))
 # Show an INFO message
 # $1: message string
 _msg_info() {
@@ -748,17 +749,17 @@ _mkimg_erofs+luks() {
     local _label="${7}"
     local _grub="${8}"
     local _writable="false"
-    local _tmp_img="${work_dir}/tmp.erofs" _tmp_img_size
+    local _tmp_img="${work_dir}/tmp.erofs" _tmp_size
     if [[ "${_size}" == "" ]]; then
 	_msg_info "Running mkerofs in advance to determine LUKS partition size"
         _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
-        _tmp_img_size=$(du -s "${_tmp_img}" | cut -f 1)
-        _size=$(( 69420 + _tmp_img_size * 12 / 10))
+        _tmp_size=$(du -s "${_tmp_img}" | cut -f 1)
+        _size=$(( 69420 + _tmp_size * 12 / 10))
     fi
     _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
     _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
                 "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    if [[ "${_tmp_img_size}" != "" ]]; then
+    if [[ "${_tmp_size}" != "" ]]; then
         _msg_info "Copying erofs image"
 	if [[ "${quiet}" == "y" ]]; then
             dd if="${_tmp_img}" of="${image_device}" > /dev/null 2>&1
@@ -771,24 +772,6 @@ _mkimg_erofs+luks() {
     fi 
     sync
     _close_luks_device "${image_device}"
-}
-
-# Steps shared by _mkairootfs_fs_type functions
-_mkairootfs_common() {
-    _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _name="airootfs"
-    _dir="${pacstrap_dir}"
-    _image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
-    _size="${airootfs_size}"
-    _encryption_key="${airootfs_encryption_key}"
-    _epoch="$(_get_epoch "airootfs")"
-    _label="${iso_label}"
-    _writable=false
-    _grub=false
-    _auto_size=""
-    rm -f -- "${_image_path}"
-    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "${airootfs_dir}"
 }
 
 # Defines functions to create ext4 for file system images
@@ -833,16 +816,6 @@ for _img in "${fs_images[@]}"; do
                                         "\${_epoch}" \
                                         "\${_writable}" \
                                         "\${_grub}"; }"
-    eval "_mk${_img}_squashfs+luks() { \
-              _mkimg_squashfs+luks "\${_name}" \
-                                   "\${_dir}" \
-                                   "\${_image_path}" \
-                                   "\${_size}" \
-                                   "\${_encryption_key}" \
-                                   "\${_epoch}" \
-                                   "\${_label}" \
-                                   "\${_writable}" \
-                                   "\${_grub}"; }"
     eval "_mk${_img}_ext4+luks() { \
               ${_img}_guid="${luks_guid}" \
               _mkimg_ext4+luks "\${_name}" \
@@ -853,14 +826,50 @@ for _img in "${fs_images[@]}"; do
                                "\${_epoch}" \
                                "\${_label}" \
                                "\${_grub}"; }"
+    eval "_mk${_img}_squashfs+luks() { \
+              _mkimg_squashfs+luks "\${_name}" \
+                                   "\${_dir}" \
+                                   "\${_image_path}" \
+                                   "\${_size}" \
+                                   "\${_encryption_key}" \
+                                   "\${_epoch}" \
+                                   "\${_label}" \
+                                   "\${_writable}" \
+                                   "\${_grub}"; }"
     eval "_mk${_img}_swap() { \
               _run_mkswap "\${_image_path}" \
                           "\${_size}" \
                           "\${_epoch}" \
                           "\${_label}"; }"
+    eval "_mk${_img}_swap+luks() { \
+              _mkimg_swap+luks "\${_name}" \
+                               "\${_image_path}" \
+                               "\${_size}" \
+                               "\${_encryption_key}" \
+                               "\${_epoch}" \
+                               "\${_label}" \
+                               "\${_grub}"; }"
 done
 
-# Steps shared by _mkkeys+fs_type functions
+# Parameters for _mkairootfs_fs_type functions
+_mkairootfs_common() {
+    _mkfs_options=("${airootfs_image_tool_options[@]}")
+    _name="airootfs"
+    _dir="${pacstrap_dir}"
+    _image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
+    _size="${airootfs_size}"
+    _encryption_key="${airootfs_encryption_key}"
+    _epoch="$(_get_epoch "airootfs")"
+    _label="${iso_label}"
+    _writable=false
+    _grub=false
+    _auto_size=""
+    rm -f -- "${_image_path}"
+    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
+    install -d -m 0755 -- "${airootfs_dir}"
+}
+
+# Parameters for _mkkeys_fs_type functions
 _mkkeys_common() {
     _mkfs_options=("${keys_image_tool_options[@]}")
     _name="keys"
@@ -876,7 +885,7 @@ _mkkeys_common() {
     rm -f -- "${_image_path}"
 }
 
-# Steps shared by _mkpersistent+fs_type functions
+# Parameters for _mkpersistent_fs_type functions
 _mkpersistent_common() {
     _name="persistent"
     _dir="${persistent_dir}"
@@ -896,7 +905,7 @@ _mkpersistent_common() {
     rm -f -- "${_image_path}"
 }
 
-# Steps shared by _mkdongle_boot+fs_type functions
+# Parameters for _mkdongle_boot_fs_type functions
 _mkdongle_boot_common() {
     _name="dongleboot"
     _dir="${dongle_boot_dir}"
@@ -910,7 +919,7 @@ _mkdongle_boot_common() {
     rm -f -- "${_image_path}"
 }
 
-# Steps shared by _mkdongle_boot+fs_type functions
+# Parameters for _mkdongle_persistent_fs_type functions
 _mkdongle_persistent_common() {
     _name="donglepersistent"
     _dir="${dongle_persistent_dir}"
@@ -924,7 +933,7 @@ _mkdongle_persistent_common() {
     rm -f -- "${_image_path}"
 }
 
-# Steps shared by _mkswap+fs_type functions
+# Parameters for _mkswap_fs_type functions
 _mkswap_common() {
     _name="swap"
     _image_path="${swap_img}"
@@ -943,7 +952,7 @@ _mkswap_common() {
     rm -f -- "${_image_path}"
 }
 
-# Steps shared by _mkswap+fs_type functions
+# Parameters for _mkdongle_swap_fs_type functions
 _mkdongle_swap_common() {
     _name="dongle_swap"
     _image_path="${dongle_swap_img}"
@@ -960,6 +969,23 @@ _mkdongle_swap_common() {
     _grub="false"
     _auto_size=""
     rm -f -- "${_image_path}"
+}
+
+# Parameters for _mkrecovery_fs_type functions
+_mkrecovery_common() {
+    _mkfs_options=("${airootfs_image_tool_options[@]}")
+    _name="recovery"
+    _dir="${pacstrap_dir}"
+    _image_path="${recovery_img}"
+    _size="${recovery_size}"
+    _encryption_key="${recovery_encryption_key}"
+    _epoch="$(_get_epoch "recovery")"
+    _label="${iso_label}_RECOVERY"
+    _writable=false
+    _grub=true
+    _auto_size=""
+    rm -f -- "${_image_path}"
+    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
 }
 
 # Create checksum for a given file.
@@ -1186,8 +1212,8 @@ _make_boot_on_iso9660() {
 # Copy kernel and initramfs to dongle ISO 9660
 _make_boot_on_dongle() {
     _make_boot_on_iso "${work_dir}/dongle_iso" "dongle ISO 9660"
-    _make_boot_on_iso "${work_dir}/dongle_persistent" "dongle persistent"
     _make_boot_on_iso "${work_dir}/dongle_boot" "dongle boot"
+    _make_boot_on_iso "${work_dir}/dongle_persistent" "dongle persistent"
 }
 
 # Copy kernel and initramfs to ISO 9660
@@ -1242,7 +1268,7 @@ _build_archiso_mkinitcpio_conf() {
 # $1: value in fs_images
 _get_epoch() {
     local _name="${1}"
-    eval "echo \$((SOURCE_DATE_EPOCH + ${_name}_const))"
+    eval "echo \$((SOURCE_DATE_EPOCH + _${_name}_const))"
 }
 
 # Returns an unique uuid given a datetime in UNIX time
@@ -1507,33 +1533,33 @@ _make_boot_on_fat() {
 # Create a FAT image (efiboot.img) which will serve as the EFI system partition
 # $1: image size in bytes
 _make_efi_boot_img() {
-    local imgsize_kib="0"
-    local imgsize_bytes=${1}
+    local _size_kib="0"
+    local _size_bytes=${1}
 
-    if (( imgsize_bytes < 2*1024*1024 )); then
-        _msg_info "Validating '${bootmode}': efiboot.img size is ${imgsize_bytes} bytes is less than 2 MiB! Bumping up to 2 MiB"
-        imgsize_bytes=$((20*1024*1024))
+    if (( _size_bytes < 2*1024*1024 )); then
+        _msg_info "Validating '${bootmode}': efiboot.img size is ${_size_bytes} bytes is less than 2 MiB! Bumping up to 2 MiB"
+        _size_bytes=$((20*1024*1024))
     fi
 
     # Where it spills?
-    imgsize_bytes=$((imgsize_bytes * 10))
+    _size_bytes=$((_size_bytes * 10))
 
     # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
-    imgsize_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
+    _size_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
             function byte_to_kib(x){return x/1024}
             function mib_to_kib(x){return x*1024}
-            END {print mib_to_kib(ceil((byte_to_kib($1)+1024)/1024))}' <<< "${imgsize_bytes}"
+            END {print mib_to_kib(ceil((byte_to_kib($1)+1024)/1024))}' <<< "${_size_bytes}"
     )"
     # The FAT image must be created with mkfs.fat not mformat, as some systems have issues with mformat made images:
     # https://lists.gnu.org/archive/html/grub-devel/2019-04/msg00099.html
     rm -f -- "${efi_boot_img}"
-    _msg_info "Creating FAT image of size: ${imgsize_kib} KiB..."
+    _msg_info "Creating FAT image of size: ${_size_kib} KiB..."
     if [[ "${quiet}" == "y" ]]; then
         # mkfs.fat does not have a -q/--quiet option, so redirect stdout to /dev/null instead
         # https://github.com/dosfstools/dosfstools/issues/103
-        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${imgsize_kib}" > /dev/null
+        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${_size_kib}" > /dev/null
     else
-        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${imgsize_kib}"
+        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${_size_kib}"
     fi
 
     # Create the default/fallback boot path in which a boot loaders will be placed later.
@@ -1726,9 +1752,9 @@ _make_bootmode_uefi-ia32.grub.esp() {
     elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
         _run_once "_make_bootmode_uefi-x64.grub.esp_${bootable}"
     else
-        efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+        efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
         # Create a FAT image for the EFI system partition
-        _make_efi_boot_img "${efi_boot_imgsize}"
+        _make_efi_boot_img "${efi_boot_size}"
     fi
 
     # Copy GRUB EFI binary to the default/fallback boot path
@@ -1807,10 +1833,10 @@ _make_bootmode_uefi-x64.grub.esp() {
     efi_boot_files+=("${work_dir}/BOOTx64.EFI"
                      "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi")
 
-    efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+    efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
 
     # Create a FAT image for the EFI system partition
-    _make_efi_boot_img "${efi_boot_imgsize}"
+    _make_efi_boot_img "${efi_boot_size}"
 
     # Copy GRUB EFI binary to the default/fallback boot path
     mcopy -D o -i "${efi_boot_img}" "${work_dir}/BOOTx64.EFI" ::/EFI/BOOT/BOOTx64.EFI
@@ -1877,7 +1903,7 @@ _make_bootmode_uefi-x64.grub.eltorito_dongle() {
 
 # Prepare systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
-    local _file efi_boot_imgsize _results
+    local _file efi_boot_size _results
     local _available_ucodes=()
     _msg_info "Setting up systemd-boot for UEFI booting..."
 
@@ -1896,9 +1922,9 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
         mapfile -t efi_boot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
     done
 
-    efi_boot_imgsize="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
+    efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
     # Create a FAT image for the EFI system partition
-    _make_efi_boot_img "${efi_boot_imgsize}"
+    _make_efi_boot_img "${efi_boot_size}"
 
     # Copy systemd-boot EFI binary to the default/fallback boot path
     mcopy -D o -i "${efi_boot_img}" \
@@ -2240,10 +2266,10 @@ _get_airootfs_img(){
 
 # Builds airootfs filesystem image
 _prepare_airootfs_image() {
-    local _sig_dir pacstrap_size
+    local _sig_dir _pacstrap_size
 
-    pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
-    airootfs_size=$((pacstrap_size+200000))
+    _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+    airootfs_size=$((_pacstrap_size+200000))
 
     _run_once "_mkairootfs_common"
     _run_once "_mkairootfs_${airootfs_image_type}"
@@ -2291,6 +2317,23 @@ _prepare_dongle_swap_image() {
         fi
         _run_once "_mkdongle_swap_common"
         _run_once "_mkdongle_swap_${swap_image_type}"
+    fi
+}
+
+# Builds recovery filesystem image
+_prepare_recovery_image() {
+    local _pacstrap_size
+
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+       [ "${recovery}" = true ]; then
+        _resolve_secondary_encryption_key "recovery"
+        if [ "${airootfs_size}" = "" ]; then
+            _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+            airootfs_size=$((pacstrap_size+200000))
+            recovery_size="${airootfs_size}"
+        fi
+        _run_once "_mkrecovery_common"
+        _run_once "_mkrecovery_${recovery_image_type}"
     fi
 }
 
@@ -2394,7 +2437,8 @@ _prepare_persistent_image() {
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
     _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
-    if [ "${persistent_size}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${persistent_size}" != "" ] || \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
         _run_once "_mkpersistent_common"
@@ -2406,6 +2450,13 @@ _prepare_persistent_image() {
             _run_once "_mkdongle_boot_common"
             _run_once "_mkdongle_boot_${dongle_boot_image_type}"
         fi
+    fi
+}
+
+_prepare_dongle_boot_image() {
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _run_once "_mkdongle_boot_common"
+        _run_once "_mkdongle_boot_${dongle_boot_image_type}"
     fi
 }
 
@@ -2771,17 +2822,8 @@ _add_xorrisofs_options_swap() {
 _add_xorrisofs_options_recovery() {
     local _img _xorrisofs_options=("$@")
     recovery_guid="${luks_guid}"
-    # if [[ "${persistent_image_type}" == *"luks" ]]; then
-    #     persistent_guid="${luks_guid}"
-    # else
-    #     persistent_guid="${linux_guid}"
-    # fi
-    if [[ "${buildmode}" == "dongle" ]]; then
-        _img="${dongle_boot_img}"
-    else
-        _img="${boot_img}"
-    fi
-    _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${_img}")
+    _img="${recovery_img}"
+    _xorrisofs_options+=('-append_partition' '6' "${recovery_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 # GRUB (isohybrid)
@@ -3140,6 +3182,8 @@ _build_dongle_image() {
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_dongle_swap "${dongle_xorrisofs_options[@]}")")
     fi
 
+    dongle_xorrisofs_options=("$(_add_xorrisofs_options_recovery "${dongle_xorrisofs_options[@]}")")
+
     [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
 
     if [[ "${quiet}" == "y" ]]; then
@@ -3372,6 +3416,7 @@ _set_overrides() {
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
     [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
     [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
+    [[ -n "$recovery_encryption_key" ]] || recovery_encryption_key="auto"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
     [[ -n "$airootfs_dir" ]] || airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
@@ -3382,6 +3427,7 @@ _set_overrides() {
     [[ -n "$dongle_boot_img" ]] || dongle_boot_img="${work_dir}/dongleboot."$(_get_fs_ext "dongle_boot")
     [[ -n "$swap_img" ]] || swap_img="${work_dir}/swap.img"
     [[ -n "$dongle_swap_img" ]] || dongle_swap_img="${work_dir}/dongleswap.img"
+    [[ -n "$recovery_img" ]] || recovery_img="${work_dir}/recovery.img"
 }
 
 _export_gpg_publickey() {
@@ -3514,9 +3560,10 @@ _build_iso_base() {
     _run_once _make_version
     _run_once _make_customize_airootfs
     _run_once _make_pkglist
-    _run_once _prepare_swap_image
-    _run_once _prepare_dongle_swap_image
     _run_once _prepare_persistent_image
+    _run_once _prepare_swap_image
+    _run_once _prepare_dongle_boot_image
+    _run_once _prepare_dongle_swap_image
     if [[ "${buildmode}" == 'netboot' ]]; then
         _run_once _make_boot_on_iso9660
     else
@@ -3524,6 +3571,7 @@ _build_iso_base() {
     fi
     _run_once _cleanup_pacstrap_dir
     _run_once _prepare_airootfs_image
+    _run_once _prepare_recovery_image
 }
 
 # Build the bootstrap buildmode
