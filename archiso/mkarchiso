@@ -43,7 +43,14 @@ pacstrap_dir=""
 keys_dir=""
 buildmodes=()
 bootmodes=()
-_img=""
+xorriso_options=()
+xorrisofs_options=()
+dongle_isofs_dir=""
+dongle_xorriso_options=()
+dongle_xorrisofs_options=()
+cert_list=()
+sign_netboot_artifacts=""
+declare -A file_permissions=()
 fs_images=(
     'airootfs'
     'persistent'
@@ -63,6 +70,7 @@ fs_images_str_vars=(
     'encryption_key')
 fs_images_arr_vars=('files'
                     'image_tool_options')
+_img=""
 for _img in "${fs_images[@]}"; do
     for _var in "${fs_images_str_vars[@]}"; do
         eval "${_img}_${_var}=''"
@@ -71,16 +79,10 @@ for _img in "${fs_images[@]}"; do
         eval "${_img}_${_var}=()"
     done
 done
-xorriso_options=()
-xorrisofs_options=()
-dongle_isofs_dir=""
-dongle_xorriso_options=()
-dongle_xorrisofs_options=()
-cert_list=()
-sign_netboot_artifacts=""
-declare -A file_permissions=()
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
+
+# Constants
 epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
 luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
@@ -99,6 +101,7 @@ _dongle_persistent_const=$((_dongle_const + _persistent_const))
 _dongle_swap_const=$((_dongle_const + _swap_const))
 _keys_const=$((_dongle_const + _boot_const + _persistent_const))
 _recovery_const=$((_dongle_const + _boot_const + _keys_const))
+
 # Show an INFO message
 # $1: message string
 _msg_info() {
@@ -183,7 +186,7 @@ _show_config() {
     _msg_info "                  GPG key:   ${gpg_key:-None}"
     _msg_info "               GPG signer:   ${gpg_sender:-None}"
     _msg_info "                 GPG Home:   ${gpg_home:-None}"
-    _msg_info "           Encryption Key:   ${encryption_key:-None}"
+    _msg_info "           Encryption Key:   ${airootfs_encryption_key:-None}"
     _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
     _msg_info "                  Profile:   ${profile}"
     _msg_info "Pacman configuration file:   ${pacman_conf}"
@@ -556,7 +559,12 @@ _mkimg_swap+luks() {
     _msg_info "Done!"
 }
 
-# Creates an ext4 fs inside a LUKS container image file.
+# Creates an ext4 file system image
+# $1: directory to use to generate the image
+# $2: image path
+# $3: image size
+# $4: UNIX time (for a date-based uuid)
+# $5: partition label
 _mkimg_ext4() {
     local _dir="${1}"
     local _image_path="${2}"
@@ -572,6 +580,14 @@ _mkimg_ext4() {
 }
 
 # Creates an ext4 fs inside a LUKS container image file.
+# $1: device mapper name
+# $2: directory to be put onto the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a date-based uuid)
+# $7: partion label
+# $8: if true, the dm-verity will be disabled to let GRUB open it
 _mkimg_ext4+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -729,6 +745,9 @@ _mkimg_squashfs() {
 }
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
+# $1: image path
+# $2: directory to be put onto the image
+# $3: UNIX time (for a date-based uuid)
 _mkimg_erofs() {
     local _image_path="${1}"
     local _dir="${2}"
@@ -739,6 +758,14 @@ _mkimg_erofs() {
 
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
+# $1: device mapper name
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a datetime-based uuid)
+# $7: partition label
+# $8: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
 _mkimg_erofs+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -1057,13 +1084,13 @@ _get_fs_type() {
 # $1: outer partition size
 _get_internal_size() {
     local _size="${1}"
-    if [[ "${_size}" -lt 50000 ]]; then
+    if [[ "${_size}" -lt $((50 * 1000)) ]]; then
         ratio=60
-    elif [[ "${_size}" -gt 50000 ]] && [[ "${_size}" -lt 200000 ]]; then
+    elif [[ "${_size}" -gt $((50 * 1000)) ]] && [[ "${_size}" -lt $((200 * 1000)) ]]; then
         ratio=70
-    elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 1000000 ]]; then
+    elif [[ "${_size}" -gt $((200 * 1000)) ]] && [[ "${_size}" -lt $((1000 * 1000)) ]]; then
         ratio=75
-    elif [[ "${_size}" -gt 200000 ]] && [[ "${_size}" -lt 5000000 ]]; then
+    elif [[ "${_size}" -gt $((200 * 1000)) ]] && [[ "${_size}" -lt $((5000000)) ]]; then
         ratio=80
     else
         ratio=85
@@ -1295,7 +1322,7 @@ _get_dongle_uuid() {
 # Returns UUID for the GRUB cryptomount (i.e. currently the encrypted boot partition)
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$(_get_epoch "dongle_persistent")"
+        _epoch="$(_get_epoch "dongle_boot")"
     else
         _epoch="$(_get_epoch "persistent")"
     fi
@@ -1325,7 +1352,7 @@ _get_swap_uuid() {
 }
 
 
-# Produce kernel parameters.
+# Produces kernel parameters.
 _get_kernel_params() {
     local _kparams=()
     _kparams+=("archisobasedir=${install_dir}"
@@ -1339,7 +1366,7 @@ _get_kernel_params() {
     echo "${_kparams[@]}"
 }
 
-# Produce the 'encrypt' hook's kernel parameters needed to boot an encrypted ISO.
+# Produces the 'encrypt' hook's kernel parameters needed to boot an encrypted ISO.
 _get_crypto_params() {
     declare -a _cparams
     local _keys_fs_type _keys_path
@@ -1356,7 +1383,7 @@ _get_crypto_params() {
     echo "${_cparams[@]}"
 }
 
-# Prepare syslinux for booting from MBR (isohybrid)
+# Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
     bootable_dir="${1}"
     bootable="${2}"
@@ -1385,15 +1412,18 @@ _make_bootmode_bios.grub.mbr() {
     _msg_info "Done! GRUB set up for BIOS booting from a disk successfully."
 }
 
+# Prepares GRUB for booting from MBR on the ISO
 _make_bootmode_bios.grub.mbr_iso() {
     _make_bootmode_bios.grub.mbr "${isofs_dir}" "iso"
 }
 
+# Prepares GRUB for booting from MBR on the dongle ISO
 _make_bootmode_bios.grub.mbr_dongle() {
     _make_bootmode_bios.grub.mbr "${dongle_isofs_dir}" "dongle"
 }
 
-# Prepare GRUB for El-Torito booting
+# Prepares GRUB for El-Torito booting on BIOS systems
+# $1: root file system for grub
 _make_bootmode_bios.grub.eltorito() {
     local bootable_dir="${1}"
     _msg_info "Setting up GRUB for BIOS booting from an optical disc..."
@@ -1423,19 +1453,23 @@ _make_bootmode_bios.grub.eltorito() {
     fi
 }
 
+# Prepares GRUB El Torito on BIOS for the ISO image
 _make_bootmode_bios.grub.eltorito_iso() {
     _make_bootmode_bios.grub.eltorito "${isofs_dir}"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.grub.mbr_iso
 }
 
+# Prepares GRUB El Torito on BIOS for the dongle ISO image
 _make_bootmode_bios.grub.eltorito_dongle() {
     _make_bootmode_bios.grub.eltorito "${dongle_isofs_dir}"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.grub.mbr_dongle
 }
 
-# Prepare syslinux for booting from MBR (isohybrid)
+# Prepares syslinux for booting from MBR (isohybrid)
+# $1: root file system for syslinux
+# $2: device type (iso, dongle)
 _make_bootmode_bios.syslinux.mbr() {
     bootable_dir="${1}"
     bootable="${2}"
@@ -1481,15 +1515,18 @@ _make_bootmode_bios.syslinux.mbr() {
     _msg_info "Done! SYSLINUX set up for BIOS booting from a disk successfully."
 }
 
+# Prepares syslinux for booting from MBR on the ISO
 _make_bootmode_bios.syslinux.mbr_iso() {
     _make_bootmode_bios.syslinux.mbr "${isofs_dir}" "iso"
 }
 
+# Prepares syslinux for booting from MBR on the ISO
 _make_bootmode_bios.syslinux.mbr_dongle() {
     _make_bootmode_bios.syslinux.mbr "${dongle_isofs_dir}" "dongle"
 }
 
-# Prepare syslinux for El-Torito booting
+# Prepares syslinux for El-Torito booting
+# $1: root file system for syslinux
 _make_bootmode_bios.syslinux.eltorito() {
     local bootable_dir="${1}"
     _msg_info "Setting up SYSLINUX for BIOS booting from an optical disc..."
@@ -1500,7 +1537,7 @@ _make_bootmode_bios.syslinux.eltorito() {
     _msg_info "Done! SYSLINUX set up for BIOS booting from an optical disc successfully."
 }
 
-# 
+# Prepares syslinux for El-Torito booting on BIOS on the ISO
 _make_bootmode_bios.syslinux.eltorito_iso() {
     _make_bootmode_bios.syslinux.eltorito "${isofs_dir}"
     # ISOLINUX and SYSLINUX installation is shared
@@ -1508,13 +1545,14 @@ _make_bootmode_bios.syslinux.eltorito_iso() {
 
 }
 
+# Prepares syslinux for El-Torito booting on BIOS on the dongle ISO
 _make_bootmode_bios.syslinux.eltorito_dongle() {
     _make_bootmode_bios.syslinux.eltorito "${dongle_isofs_dir}"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.syslinux.mbr_dongle
 }
 
-# Copy kernel and initramfs to FAT image
+# Copies kernel and initramfs to FAT image
 _make_boot_on_fat() {
     local _images _ucode_image
     _msg_info "Preparing kernel and initramfs for the FAT file system..."
@@ -1530,7 +1568,7 @@ _make_boot_on_fat() {
     _msg_info "Done!"
 }
 
-# Create a FAT image (efiboot.img) which will serve as the EFI system partition
+# Creates a FAT image (efiboot.img) which will serve as the EFI system partition
 # $1: image size in bytes
 _make_efi_boot_img() {
     local _size_kib="0"
@@ -1566,7 +1604,7 @@ _make_efi_boot_img() {
     mmd -D o -i "${efi_boot_img}" ::/EFI ::/EFI/BOOT
 }
 
-# Copy GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
+# Copies GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
 _make_common_bootmode_grub_copy_to_efi_boot_img() {
     local files_to_copy=()
     files_to_copy+=("${work_dir}/grub/"*'.cfg')
@@ -1576,6 +1614,8 @@ _make_common_bootmode_grub_copy_to_efi_boot_img() {
     mcopy -D o -i "${efi_boot_img}" "${files_to_copy[@]}" ::/EFI/BOOT/
 }
 
+# Gets an ext4-compatible uuid from a date
+# $1: datetime in UNIX time
 _epoch_to_uuid() {
     local _epoch="${1}"
     local _uuid
@@ -1583,15 +1623,7 @@ _epoch_to_uuid() {
     echo "${_uuid}"
 }
 
-_get_device_select_cmdline() {
-    #shellcheck disable=SC2005
-    if [[ "${persistent_image_type}" == *luks ]]; then
-        echo "cryptomount -u $(_get_cryptomount_uuid)"
-    else
-        echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
-    fi
-}
-
+# Returns ISO image uuid for current buildmode
 _get_bootable_uuid() {
     local _uuid
     _uuid="$(_get_archiso_uuid)"
@@ -1601,7 +1633,20 @@ _get_bootable_uuid() {
     echo "${_uuid}"
 }
 
+# Returns the correct device selection command line for use in a templatized GRUB
+# configuration file
+_get_device_select_cmdline() {
+    #shellcheck disable=SC2005
+    if [[ "${persistent_image_type}" == *luks ]]; then
+        echo "cryptomount -u $(_get_cryptomount_uuid)"
+    else
+        echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
+    fi
+}
+
 # Fill a bootloader configuration template and copy the result in a file
+# $1: bootloader configuration file (templatized, see profile directory)
+# $2: bootloader (empty?)
 _build_bootloader_config() {
     local _template="${1}"
     local _bootloader="${2}"
@@ -1614,6 +1659,8 @@ _build_bootloader_config() {
 }
 
 # Fill a templatized crypttab
+# $1: crypttab template
+# $2: out file
 _build_crypttab() {
     local _template="${1}"
     local _out="${2}"
@@ -1644,7 +1691,8 @@ _build_crypttab() {
     fi
 }
 
-# Fill a templatized crypttab
+# Fill templatized udev rules for the persistent partitions
+# $1: template udev rule file
 _fill_persistent_ro_udev_rules() {
     local _template="${1}"
     # shellcheck disable=SC2154
@@ -1697,6 +1745,7 @@ _make_common_bootmode_grub_copy_to_isofs_dongle() {
     _make_common_bootmode_grub_copy_to_isofs "${dongle_isofs_dir}"
 }
 
+# $1: directory where the content of the ISO file system resides
 _make_common_bootmode_grub_copy_to_isofs() {
     local isofs_dir="${1}"
     local files_to_copy=()
@@ -1708,7 +1757,9 @@ _make_common_bootmode_grub_copy_to_isofs() {
     install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/EFI/BOOT/"
 }
 
+# Minimum GRUB module list to open a luks2 image
 # Module list from https://bugs.archlinux.org/task/71382#comment202911
+# $1: 'bios' or 'efi'
 _get_grubmodules(){
     local _mode="${1}"
     _modules=(afsplitter boot bufio chain configfile cryptodisk disk echo ext2 gcry_rijndael
@@ -1727,6 +1778,8 @@ _get_grubmodules(){
     echo "${_modules[*]}"
 }
 
+# Prepares GRUB (32-bit) for EFI boot
+# $1: device type ('iso', 'dongle')
 _make_bootmode_uefi-ia32.grub.esp() {
     local bootable="${1}"
 
@@ -1770,15 +1823,19 @@ _make_bootmode_uefi-ia32.grub.esp() {
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
+# Prepares GRUB (32 bit) for UEFI the ISO image
 _make_bootmode_uefi-ia32.grub.esp_iso() {
     _make_bootmode_uefi-ia32.grub.esp "iso"
 }
 
+# Prepares GRUB (32 bit) for UEFI the dongle ISO image
 _make_bootmode_uefi-ia32.grub.esp_dongle() {
     _make_bootmode_uefi-ia32.grub.esp "dongle"
 }
 
-# Prepare GRUB for El Torito booting
+# Prepares GRUB (32 bit) for El Torito booting
+# $1: root file system for GRUB
+# $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-ia32.grub.eltorito() {
     local bootable_dir="${1}"
     local bootable="${2}"
@@ -1809,14 +1866,17 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
     _msg_info "Done!"
 }
 
+# Prepares GRUB (32 bit) El Torito for UEFI on the ISO image
 _make_bootmode_uefi-ia32.grub.eltorito_iso() {
     _make_bootmode_uefi-ia32.grub.eltorito "${isofs_dir}" "iso"
 }
-
+ 
+# Prepares GRUB (32 bit) El Torito for UEFI on the dongle ISO image
 _make_bootmode_uefi-ia32.grub.eltorito_dongle() {
     _make_bootmode_uefi-ia32.grub.eltorito "${dongle_isofs_dir}" "dongle"
 }
 
+# Prepares GRUB for EFI boot
 _make_bootmode_uefi-x64.grub.esp() {
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
@@ -1852,16 +1912,20 @@ _make_bootmode_uefi-x64.grub.esp() {
 
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
-
+ 
+# Prepares GRUB for the ISO image
 _make_bootmode_uefi-x64.grub.esp_iso() {
     _make_bootmode_uefi-x64.grub.esp
 }
 
+# Prepares GRUB for the dongle ISO image
 _make_bootmode_uefi-x64.grub.esp_dongle() {
     _make_bootmode_uefi-x64.grub.esp
 }
 
-# Prepare GRUB for El Torito booting
+# Prepares GRUB for El Torito booting
+# $1: root file system for GRUB
+# $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-x64.grub.eltorito() {
     local bootable_dir="${1}"
     local bootable="${2}"
@@ -1893,15 +1957,17 @@ _make_bootmode_uefi-x64.grub.eltorito() {
     _msg_info "Done!"
 }
 
+# Prepares GRUB El Torito for UEFI on the ISO image
 _make_bootmode_uefi-x64.grub.eltorito_iso() {
     _make_bootmode_uefi-x64.grub.eltorito "${isofs_dir}" "iso"
 }
 
+# Prepares GRUB El Torito for UEFI the dongle ISO image
 _make_bootmode_uefi-x64.grub.eltorito_dongle() {
     _make_bootmode_uefi-x64.grub.eltorito "${dongle_isofs_dir}" "dongle"
 }
 
-# Prepare systemd-boot for booting when written to a disk (isohybrid)
+# Prepares systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _file efi_boot_size _results
     local _available_ucodes=()
@@ -1960,7 +2026,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
     _make_bootmode_uefi-x64.systemd-boot.esp
 }
 
-# Prepare systemd-boot for El Torito booting
+# Prepares systemd-boot for El Torito booting
 _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     local bootable_dir="${1}"
     local bootable="${2}"
@@ -1994,12 +2060,12 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     _msg_info "Done!"
 }
 
-# Prepare systemd-boot for El Torito booting on the ISO
+# Prepares systemd-boot for El Torito booting on the ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_iso() {
     _make_bootmode_uefi-x64.systemd-boot.eltorito "${isofs_dir}" "iso"
 }
 
-# Prepare systemd-boot for El Torito booting on the dongle ISO
+# Prepares systemd-boot for El Torito booting on the dongle ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_dongle() {
     _make_bootmode_uefi-x64.systemd-boot.eltorito "${dongle_isofs_dir}" "dongle"
 }
@@ -2199,7 +2265,7 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
-# Resolve the value of an image encryption key from an <image>_encryption_key profiledef.sh variable
+# Resolves the value of an image encryption key from an <image>_encryption_key profiledef.sh variable
 # $1: a value in fs_images
 _resolve_secondary_encryption_key() {
     local _name="${1}"
@@ -2447,8 +2513,6 @@ _prepare_persistent_image() {
             [ "${dongle_persistent_size}" = "" ] && dongle_persistent_size="${persistent_size}"
             _run_once "_mkdongle_persistent_common"
             _run_once "_mkdongle_persistent_${dongle_persistent_image_type}"
-            _run_once "_mkdongle_boot_common"
-            _run_once "_mkdongle_boot_${dongle_boot_image_type}"
         fi
     fi
 }
@@ -2564,7 +2628,7 @@ _gen_key() {
 _resolve_encryption_key(){
     if [ ! -f "${airootfs_encryption_key}" ]; then
         if [ "${airootfs_encryption_key}" = 'auto' ]; then
-            encryption_key="${work_dir}/${iso_label}.key"
+            airootfs_encryption_key="${work_dir}/${iso_label}.key"
             [ ! -d "${work_dir}" ] && install -d "${work_dir}"
             _gen_key "${airootfs_encryption_key}" "binary"
         elif [ "${airootfs_encryption_key}" != 'auto' ]; then
@@ -2600,7 +2664,7 @@ _validate_requirements_airootfs_image_type_luks() {
                     "Install 'cryptsetup'!")
         _msg_error "${_msg[*]}" 0
     fi
-    [[ -n "$encryption_key" ]] && _resolve_encryption_key 
+    [[ -n "$airootfs_encryption_key" ]] && _resolve_encryption_key 
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -2689,7 +2753,7 @@ _validate_common_requirements_buildmode_iso_netboot() {
 
 _validate_requirements_buildmode_dongle() {
     _validate_common_requirements_buildmode_all
-    [[ -n "$encryption_key" ]] && _resolve_encryption_key
+    [[ -n "$airootfs_encryption_key" ]] && _resolve_encryption_key
     if [[ ! "${airootfs_image_type}" == *luks ]]; then
         _msg_warning "Dongle buildmode active but root file system encryption disabled."
     fi
@@ -2767,6 +2831,8 @@ _validate_requirements_buildmode_netboot() {
     fi
 }
 
+# Add boot partition options to a xorrisofs options array
+# $@: array
 _add_xorrisofs_options_boot() {
     local _img _xorrisofs_options=("$@")
     boot_guid="${luks_guid}"
@@ -2779,34 +2845,18 @@ _add_xorrisofs_options_boot() {
     echo "${_xorrisofs_options[@]}"
 }
 
-_add_xorrisofs_options_persistent() {
+# Add recovery partition options to a xorrisofs options array
+# $@: array
+_add_xorrisofs_options_recovery() {
     local _img _xorrisofs_options=("$@")
-    if [[ "${persistent_image_type}" == *"luks" ]]; then
-        persistent_guid="${luks_guid}"
-    else
-        persistent_guid="${linux_guid}"
-    fi
-    if [[ "${buildmode}" == "dongle" ]]; then
-        _img="${dongle_persistent_img}"
-    else
-        _img="${persistent_img}"
-    fi
-    _xorrisofs_options+=('-append_partition' '4' "${persistent_guid}" "${_img}")
+    recovery_guid="${luks_guid}"
+    _img="${recovery_img}"
+    _xorrisofs_options+=('-append_partition' '4' "${recovery_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
-_add_xorrisofs_options_dongle_swap() {
-    local _img _swap_guid _xorrisofs_options=("$@")
-    _img="${dongle_swap_img}"
-    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
-        _swap_guid="${luks_guid}"
-    else
-        _swap_guid="${swap_guid}"
-    fi
-    _xorrisofs_options+=('-append_partition' '5' "${_swap_guid}" "${_img}")
-    echo "${_xorrisofs_options[@]}"
-}
-
+# Add swap partition options to a xorrisofs options array
+# $@: array
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="${swap_img}"
@@ -2819,14 +2869,27 @@ _add_xorrisofs_options_swap() {
     echo "${_xorrisofs_options[@]}"
 }
 
-_add_xorrisofs_options_recovery() {
+# Add persistent partition options to a xorrisofs options array
+# $@: array
+_add_xorrisofs_options_persistent() {
     local _img _xorrisofs_options=("$@")
-    recovery_guid="${luks_guid}"
-    _img="${recovery_img}"
-    _xorrisofs_options+=('-append_partition' '6' "${recovery_guid}" "${_img}")
+    if [[ "${persistent_image_type}" == *"luks" ]]; then
+        persistent_guid="${luks_guid}"
+    else
+        persistent_guid="${linux_guid}"
+    fi
+    if [[ "${buildmode}" == "dongle" ]]; then
+        _img="${dongle_persistent_img}"
+    else
+        _img="${persistent_img}"
+    fi
+    _xorrisofs_options+=('-append_partition' '6' "${persistent_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
-# GRUB (isohybrid)
+
+# Add GRUB (isohybrid) options to a xorrisofs options array
+# $1: root directory for the bootloader
+# $@: xorrisofs_options array
 _add_xorrisofs_options_bios.grub.mbr() {
     local bootable_dir="${1}"
     shift
@@ -2854,7 +2917,8 @@ _add_xorrisofs_options_bios.grub.mbr_dongle() {
     dongle_xorrisofs_options=("$(_add_xorrisofs_options_bios.grub.mbr "${dongle_isofs_dir}" "${dongle_xorrisofs_options[@]}")")
 }
 
-# GRUB El Torito
+# Add GRUB El Torito options to a xorrisofs options array
+# $@: array
 _add_xorrisofs_options_bios.grub.eltorito() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(# El Torito boot image for x86 BIOS
@@ -2874,7 +2938,9 @@ _add_xorrisofs_options_bios.grub.eltorito_dongle() {
     dongle_xorrisofs_options=("$(_add_xorrisofs_options_bios.grub.eltorito "${dongle_xorrisofs_options[@]}")")
 }
 
-# SYSLINUX MBR (isohybrid)
+# Add SYSLINUX MBR (isohybrid) options to a xorrisofs options array
+# $1: root directory for the bootloader
+# $@: options array
 _add_xorrisofs_options_bios.syslinux.mbr() {
     local bootable_dir="${1}"
     shift
@@ -2903,7 +2969,8 @@ _add_xorrisofs_options_bios.syslinux.mbr_dongle() {
     dongle_xorrisofs_options=("$(_add_xorrisofs_options_bios.syslinux.mbr "${dongle_isofs_dir}" "${dongle_xorrisofs_options[@]}")")
 }
 
-# SYSLINUX El Torito
+# Add SYSLINUX El Torito options to a xorrisofs options array
+# $@: array
 _add_xorrisofs_options_bios.syslinux.eltorito() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(# El Torito boot image for x86 BIOS
@@ -3179,7 +3246,7 @@ _build_dongle_image() {
     fi
 
     if [ "${swap_size}" != "" ]; then
-        dongle_xorrisofs_options=("$(_add_xorrisofs_options_dongle_swap "${dongle_xorrisofs_options[@]}")")
+        dongle_xorrisofs_options=("$(_add_xorrisofs_options_swap "${dongle_xorrisofs_options[@]}")")
     fi
 
     dongle_xorrisofs_options=("$(_add_xorrisofs_options_recovery "${dongle_xorrisofs_options[@]}")")
