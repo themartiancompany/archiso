@@ -781,7 +781,7 @@ _mkairootfs_common() {
     _image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
     _size="${airootfs_size}"
     _encryption_key="${airootfs_encryption_key}"
-    _epoch="$((SOURCE_DATE_EPOCH))"
+    _epoch="$(_get_epoch "airootfs")"
     _label="${iso_label}"
     _writable=false
     _grub=false
@@ -791,49 +791,74 @@ _mkairootfs_common() {
     install -d -m 0755 -- "${airootfs_dir}"
 }
 
-# Create an ext4 image containing the root file system.
-# Save the image on the ISO 9660 file system.
-_mkairootfs_ext4() {
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
-}
-
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
-# Save the squashfs image on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs() {
-    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                         "${_epoch}" "${_label}" "${_writable}"
-}
-
-# Create an ext4 image containing the root file system and pack it inside a squashfs image.
-# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
-_mkairootfs_ext4+squashfs+luks() {
-    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                              "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_squashfs() {
-    _mkimg_squashfs "${_dir}" "${_image_path}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the LUKS image.
-# Saves the LUKS image on the ISO 9660 file system.
-_mkairootfs_squashfs+luks() {
-    _mkimg_squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                         "${_encryption_key}" "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-}
-
-# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
-_mkairootfs_erofs() {
-    _mkimg_erofs "${_image_path}" "${_dir}" "${_epoch}"
-}
-
-# Create an EROFS image containing the root file system and saves it on the LUKS image.
-# Save the LUKS image on the ISO 9660 file system.
-_mkairootfs_erofs+luks() {
-    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_auto_size}" \
-                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
-}
+# Defines functions to create ext4 for file system images
+for _img in "${fs_images[@]}"; do
+    eval "_mk${_img}_ext4() { \
+             ${_img}_guid="${linux_guid}"; \
+              _mkimg_ext4 "\${_dir}" \
+                          "\${_image_path}" \
+                          "\${_size}" \
+                          "\${_epoch}" \
+                          "\${_label}"; }"
+    eval "_mk${_img}_squashfs() { \
+              _mkimg_squashfs "\${_dir}" \
+                              "\${_image_path}"; }"
+    eval "_mk${_img}_erofs() { \
+              _mkimg_erofs "\${_image_path}" \
+                           "\${_dir}" \
+                           "\${_epoch}"; }"
+    eval "_mk${_img}_erofs+luks() { \
+              _mkimg_erofs+luks "\${_name}" \
+                                "\${_dir}" \
+                                "\${_image_path}" \
+                                "\${_auto_size}" \
+                                "\${_encryption_key}" \
+                                "\${_epoch}" \
+                                "\${_label}" \
+                                "\${_grub}"; }"
+    eval "_mk${_img}_ext4+squashfs() { \
+              _mkimg_ext4+squashfs "\${_name}" \
+                                   "\${_dir}" \
+                                   "\${_image_path}" \
+                                   "\${_size}" \
+                                   "\${_epoch}" \
+                                   "\${_label}" \
+                                   "\${_writable}"; }"
+    eval "_mk${_img}_ext4+squashfs+luks() { \
+              _mkimg_ext4+squashfs+luks "\${_name}" \
+                                        "\${_dir}" \
+                                        "\${_image_path}" \
+                                        "\${_size}" \
+                                        "\${_encryption_key}" \
+                                        "\${_epoch}" \
+                                        "\${_writable}" \
+                                        "\${_grub}"; }"
+    eval "_mk${_img}_squashfs+luks() { \
+              _mkimg_squashfs+luks "\${_name}" \
+                                   "\${_dir}" \
+                                   "\${_image_path}" \
+                                   "\${_size}" \
+                                   "\${_encryption_key}" \
+                                   "\${_epoch}" \
+                                   "\${_label}" \
+                                   "\${_writable}" \
+                                   "\${_grub}"; }"
+    eval "_mk${_img}_ext4+luks() { \
+              ${_img}_guid="${luks_guid}" \
+              _mkimg_ext4+luks "\${_name}" \
+                               "\${_dir}" \
+                               "\${_image_path}" \
+                               "\${_size}" \
+                               "\${_encryption_key}" \
+                               "\${_epoch}" \
+                               "\${_label}" \
+                               "\${_grub}"; }"
+    eval "_mk${_img}_swap() { \
+              _run_mkswap "\${_image_path}" \
+                          "\${_size}" \
+                          "\${_epoch}" \
+                          "\${_label}"; }"
+done
 
 # Steps shared by _mkkeys+fs_type functions
 _mkkeys_common() {
@@ -843,49 +868,12 @@ _mkkeys_common() {
     _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
     _encryption_key="${keys_encryption_key}"
     _size="${keys_size}"
-    _epoch=$((SOURCE_DATE_EPOCH + _keys_const))
+    _epoch="$(_get_epoch "keys")"
     _label="${iso_label}_KEYS"
     _writable="false"
     _grub="false"
     _auto_size=""
     rm -f -- "${_image_path}"
-}
-
-# Create an ext4 image containing the keys file system for the dongle.
-# Save the image on the dongle ISO 9660 file system.
-_mkkeys_ext4() {
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
-}
-
-# Create an ext4 image containing the keys file system and pack it inside a squashfs image.
-# Save the squashfs image on the dongle ISO 9660 file system.
-_mkkeys_ext4+squashfs() {
-    _mkimg_ext4+squashfs "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                         "${_epoch}" "${_label}" "${_writable}"
-}
-
-# Create an ext4 image containing the keys file system and pack it inside a squashfs image.
-# Pack the squash image inside the LUKS image and save it on the ISO 9660 file system.
-_mkkeys_ext4+squashfs+luks() {
-    _mkimg_ext4+squashfs+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                              "${_encryption_key}" "${_epoch}" "${_writable}" "${_grub}"
-}
-
-# Create a squashfs image containing the root file system and saves it on the ISO 9660 file system.
-_mkkeys_squashfs() {
-    _mkimg_squashfs "${_dir}" "${_image_path}"
-}
-
-# Create an EROFS image containing the keys file system and saves it on the ISO 9660 file system.
-_mkkeys_erofs() {
-    _mkimg_erofs "${_image_path}" "${_dir}" "${_epoch}"
-}
-
-# Create an EROFS image containing the keys file system and saves it on the LUKS image.
-# Save the LUKS image on the ISO 9660 file system.
-_mkkeys_erofs+luks() {
-    _mkimg_erofs+luks "${_name}" "${_dir}" "${_image_path}" "${_auto_size}" \
-                      "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkpersistent+fs_type functions
@@ -895,7 +883,7 @@ _mkpersistent_common() {
     _image_path="${persistent_img}"
     _encryption_key="${persistent_encryption_key}"
     _size="${persistent_size}"
-    _epoch=$((SOURCE_DATE_EPOCH + _persistent_const))
+    _epoch="$(_get_epoch "persistent")"
     _label="${iso_label}_PERSISTENT"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -906,20 +894,6 @@ _mkpersistent_common() {
     _auto_size=""
     persistent_epoch="${_epoch}"
     rm -f -- "${_image_path}"
-}
-
-# Create an ext4 image to be used as the persistent ISO partition.
-_mkpersistent_ext4() {
-    persistent_guid="${linux_guid}"
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
-}
-
-
-# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
-_mkpersistent_ext4+luks() {
-    persistent_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
 }
 
 # Steps shared by _mkdongle_boot+fs_type functions
@@ -936,13 +910,6 @@ _mkdongle_boot_common() {
     rm -f -- "${_image_path}"
 }
 
-# Create an ext4 fs inside a LUKS container to be used as the boot ISO partition.
-_mkdongle_boot_ext4+luks() {
-    boot_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
-}
-
 # Steps shared by _mkdongle_boot+fs_type functions
 _mkdongle_persistent_common() {
     _name="donglepersistent"
@@ -957,38 +924,6 @@ _mkdongle_persistent_common() {
     rm -f -- "${_image_path}"
 }
 
-# Create an ext4 image to be used as the persistent ISO partition.
-_mkdongle_persistent_ext4() {
-    persistent_guid="${linux_guid}"
-    _mkimg_ext4 "${_dir}" "${_image_path}" "${_size}" "${_epoch}" "${_label}"
-}
-
-# Create an ext4 fs inside a LUKS container to be used as the persistent ISO partition.
-_mkdongle_persistent_ext4+luks() {
-    persistent_guid="${luks_guid}"
-    _mkimg_ext4+luks "${_name}" "${_dir}" "${_image_path}" "${_size}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
-}
-
-# Steps shared by _mkswap+fs_type functions
-_mkdongle_swap_common() {
-    _name="dongle_swap"
-    _image_path="${dongle_swap_img}"
-    # shellcheck disable=SC2154
-    _encryption_key="${dongle_swap_encryption_key}"
-    _size="${dongle_swap_size}"
-    _epoch="$((SOURCE_DATE_EPOCH + _dongle_const + _swap_const))"
-    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
-        _label="${iso_label}_DONGLE_SWAP"
-    else
-        _label="${_name}"
-    fi
-    _writable="true"
-    _grub="false"
-    _auto_size=""
-    rm -f -- "${_image_path}"
-}
-
 # Steps shared by _mkswap+fs_type functions
 _mkswap_common() {
     _name="swap"
@@ -996,7 +931,7 @@ _mkswap_common() {
     # shellcheck disable=SC2154
     _encryption_key="${swap_encryption_key}"
     _size="${swap_size}"
-    _epoch=$((SOURCE_DATE_EPOCH + _swap_const))
+    _epoch=$(_get_epoch "swap")
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _label="${iso_label}_SWAP"
     else
@@ -1008,25 +943,24 @@ _mkswap_common() {
     rm -f -- "${_image_path}"
 }
 
-# Create an ext4 image to be used as the persistent ISO partition.
-_mkswap_swap() {
-    _run_mkswap "${_image_path}" "${_size}" "${_epoch}" "${_label}"
+# Steps shared by _mkswap+fs_type functions
+_mkdongle_swap_common() {
+    _name="dongle_swap"
+    _image_path="${dongle_swap_img}"
+    # shellcheck disable=SC2154
+    _encryption_key="${dongle_swap_encryption_key}"
+    _size="${dongle_swap_size}"
+    _epoch="$(_get_epoch "dongle_swap")"
+    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
+        _label="${iso_label}_DONGLE_SWAP"
+    else
+        _label="${_name}"
+    fi
+    _writable="true"
+    _grub="false"
+    _auto_size=""
+    rm -f -- "${_image_path}"
 }
-
-_mkswap_swap+luks() {
-    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
-} 
-
-# Create an ext4 image to be used as the persistent ISO partition.
-_mkdongle_swap_swap() {
-    _run_mkswap "${_image_path}" "${_size}" "${_epoch}" "${_label}"
-}
-
-_mkdongle_swap_swap+luks() {
-    _mkimg_swap+luks "${_name}" "${_image_path}" "${_size}" \
-                     "${_encryption_key}" "${_epoch}" "${_label}" "${_grub}"
-} 
 
 # Create checksum for a given file.
 _mkchecksum() {
@@ -1308,7 +1242,7 @@ _build_archiso_mkinitcpio_conf() {
 # $1: value in fs_images
 _get_epoch() {
     local _name="${1}"
-    eval "echo \$((${SOURCE_DATE_EPOCH} + ${_name}_const))"
+    eval "echo \$((SOURCE_DATE_EPOCH + ${_name}_const))"
 }
 
 # Returns an unique uuid given a datetime in UNIX time
@@ -1323,41 +1257,43 @@ _get_epoch_fsuuid() {
 # Returns UUID for the GRUB plain mount
 _get_archiso_uuid() {
     #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid "${SOURCE_DATE_EPOCH}")"
+    echo "$(_epoch_to_uuid $(_get_epoch "airootfs"))"
 }
 
 # Returns UUID for the dongle GRUB plain mount
 _get_dongle_uuid() {
     #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $((SOURCE_DATE_EPOCH + ${_dongle_const})))"
+    echo "$(_epoch_to_uuid $(_get_epoch "dongle"))"
 }
 
-# Returns UUID for the GRUB cryptomount
+# Returns UUID for the GRUB cryptomount (i.e. currently the encrypted boot partition)
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_persistent_const}))"
+        _epoch="$(_get_epoch "dongle_persistent")"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + ${_persistent_const}))
+        _epoch="$(_get_epoch "persistent")"
     fi
     _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
+# Returns dongle persistent partition uuid
 _get_dongle_persistent_uuid() {
     _epoch=$(_get_epoch "dongle_persistent"))
     _get_epoch_fsuuid "${_epoch}"
 }
 
+# Returns dongle swap partition uuid
 _get_dongle_swap_uuid() {
-    _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_swap_const}))"
+    _epoch="$(_get_epoch "dongle_swap")"
     _get_epoch_fsuuid "${_epoch}"
 }
 
-# Get UUID for the dongle GRUB plain mount
+# Returns UUID for the dongle swap mount
 _get_swap_uuid() {
     if [[ "${buildmode}" == 'dongle' ]]; then
-        _epoch="$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_swap_const}))"
+        _epoch="$(_get_epoch "dongle_swap")"
     else
-        _epoch=$((SOURCE_DATE_EPOCH + ${_swap_const}))
+        _epoch="$(_get_epoch "swap")"
     fi
     _get_epoch_fsuuid "${_epoch}"
 }
@@ -2442,11 +2378,10 @@ _prepare_persistent_image() {
     local persistent_dir="${work_dir}/persistent"
     local persistent_dir_size persistent_epoch persistent_uuid
     local crypttab="${profile}/airootfs/etc/crypttab"
-    persistent_epoch=$((SOURCE_DATE_EPOCH + ${_persistent_const}))
+    persistent_epoch="$(_get_epoch "persistent")"
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
-    dongle_persistent_epoch=$((SOURCE_DATE_EPOCH + ${_dongle_const} + ${_persistent_const}))
+    dongle_persistent_epoch=$(_get_epoch "dongle_persistent")
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
-
 
     local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
     local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
@@ -2781,6 +2716,18 @@ _validate_requirements_buildmode_netboot() {
     fi
 }
 
+_add_xorrisofs_options_boot() {
+    local _img _xorrisofs_options=("$@")
+    boot_guid="${luks_guid}"
+    if [[ "${buildmode}" == "dongle" ]]; then
+        _img="${dongle_boot_img}"
+    else
+        _img="${boot_img}"
+    fi
+    _xorrisofs_options+=('-append_partition' '3' "${boot_guid}" "${_img}")
+    echo "${_xorrisofs_options[@]}"
+}
+
 _add_xorrisofs_options_persistent() {
     local _img _xorrisofs_options=("$@")
     if [[ "${persistent_image_type}" == *"luks" ]]; then
@@ -2793,19 +2740,19 @@ _add_xorrisofs_options_persistent() {
     else
         _img="${persistent_img}"
     fi
-    _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${_img}")
+    _xorrisofs_options+=('-append_partition' '4' "${persistent_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_dongle_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="${dongle_swap_img}"
-    if [[ "${swap_image_type}" == *"luks" ]]; then
+    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
         _swap_guid="${luks_guid}"
     else
         _swap_guid="${swap_guid}"
     fi
-    _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
+    _xorrisofs_options+=('-append_partition' '5' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -2817,10 +2764,26 @@ _add_xorrisofs_options_swap() {
     else
         _swap_guid="${swap_guid}"
     fi
-    _xorrisofs_options+=('-append_partition' '4' "${_swap_guid}" "${_img}")
+    _xorrisofs_options+=('-append_partition' '5' "${_swap_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
+_add_xorrisofs_options_recovery() {
+    local _img _xorrisofs_options=("$@")
+    recovery_guid="${luks_guid}"
+    # if [[ "${persistent_image_type}" == *"luks" ]]; then
+    #     persistent_guid="${luks_guid}"
+    # else
+    #     persistent_guid="${linux_guid}"
+    # fi
+    if [[ "${buildmode}" == "dongle" ]]; then
+        _img="${dongle_boot_img}"
+    else
+        _img="${boot_img}"
+    fi
+    _xorrisofs_options+=('-append_partition' '3' "${persistent_guid}" "${_img}")
+    echo "${_xorrisofs_options[@]}"
+}
 # GRUB (isohybrid)
 _add_xorrisofs_options_bios.grub.mbr() {
     local bootable_dir="${1}"
@@ -3157,6 +3120,7 @@ _build_bootstrap_image() {
     cd -- "${OLDPWD}"
 }
 
+# Builds dongle ISO image
 _build_dongle_image() {
     local bootmode dongle_xorriso_cmd_line dongle_xorriso_options=() dongle_xorrisofs_options=()
     dongle_isofs_dir="${work_dir}/dongle_iso"
@@ -3165,6 +3129,8 @@ _build_dongle_image() {
     for bootmode in "${bootmodes[@]}"; do
         "_add_xorrisofs_options_${bootmode}_dongle" 
     done
+
+    dongle_xorrisofs_options=("$(_add_xorrisofs_options_boot "${dongle_xorrisofs_options[@]}")")
 
     if [ "${persistent_size}" != "" ]; then
         dongle_xorrisofs_options=("$(_add_xorrisofs_options_persistent "${dongle_xorrisofs_options[@]}")")
@@ -3184,7 +3150,7 @@ _build_dongle_image() {
     fi
 
     # Update SORCE_DATE_EPOCH for dongle ISO UUID
-    SOURCE_DATE_EPOCH=$((SOURCE_DATE_EPOCH + ${_dongle_const}))
+    SOURCE_DATE_EPOCH="$(_get_epoch "dongle")"
 
     rm -f -- "${out_dir}/${image_name}"
     _msg_info "Creating ISO image..."
@@ -3212,7 +3178,7 @@ _build_dongle_image() {
     du -h -- "${out_dir}/${image_name}"
 }
 
-# Build ISO
+# Builds ISO image
 _build_iso_image() {
     local xorriso_cmd_line
     isofs_dir="${work_dir}/iso"
@@ -3398,8 +3364,10 @@ _set_overrides() {
 
     # Set variables that do not have overrides
     [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
+    [[ -n "$boot_image_type" ]] || boot_image_type="ext4+luks"
     [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
     [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
+    [[ -n "$dongle_boot_image_type" ]] || dongle_boot_image_type="${boot_image_type}"
     [[ -n "$dongle_persistent_image_type" ]] || dongle_persistent_image_type="${persistent_image_type}"
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
     [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
