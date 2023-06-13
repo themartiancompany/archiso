@@ -1,8 +1,13 @@
 # mkinitcpio preset file for the 'linux' package on archiso
 
-PRESETS=('archiso')
+PRESETS=(
+  'archiso'
+  'dongle'
+)
 
 ALL_kver='/boot/vmlinuz-linux'
 ALL_config='/etc/mkinitcpio.conf'
+dongle_config='/etc/mkinitcpio.dongle.conf'
 
 archiso_image="/boot/initramfs-linux.img"
+dongle_image="/boot/initramfs-linux-dongle.img"

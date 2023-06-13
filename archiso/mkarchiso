@@ -1146,6 +1146,22 @@ _make_custom_airootfs() {
 
     if [[ -d "${profile}/airootfs" ]]; then
         _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.conf" 
+        if [[ "${airootfs_image_type}" == *luks ]] && \
+           [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+             _resolve_secondary_encryption_key "keys"
+             dongle_boot_encryption_key="${keys_encryption_key}"
+             cp "${profile}/airootfs/etc/mkinitcpio.conf" \
+                "${profile}/airootfs/etc/mkinitcpio.dongle_boot.conf"
+             _build_archiso_mkinitcpio_conf \
+                 "${profile}/airootfs/etc/mkinitcpio.dongle_boot.conf" \
+                 "${airootfs_encryption_key}"
+             _resolve_secondary_encryption_key "recovery"
+             cp "${profile}/airootfs/etc/mkinitcpio.conf" \
+                "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
+             _build_archiso_mkinitcpio_conf \
+                 "${profile}/airootfs/etc/mkinitcpio.recovery.conf" \
+                 "${recovery_encryption_key}"
+        fi
         _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.recovery.conf" 
         _copy_custom_files "airootfs" "${pacstrap_dir}"
     fi
@@ -1272,13 +1288,21 @@ _make_boot_on_iso() {
     _msg_info "Done!"
 }
 
-# Adds archiso modules to profile's mkinitcpio.conf
+# Adds archiso hooks to profile's mkinitcpio.conf
 # $1: mkinitcpio.conf file to edit
+# $2: an encryption key to add to resulting initrd image
 _build_archiso_mkinitcpio_conf() {
     local _mkinitcpio_conf="${1}"
-    local _hooks=() _modules=()
-    if [[ "${airootfs_image_type}" == *luks ]] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    local _encryption_key="${2}"
+    local _files=() _hooks=() _modules=()
+    local _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
+    
+    if [[ "${airootfs_image_type}" == *luks ]] || \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _hooks+=("encrypt") 
+        if [[ "${_encryption_key}" != "" ]]; then
+            _files+=("${_encryption_key}")
+        fi
     fi
     _hooks+=("archiso")
 
@@ -1286,9 +1310,11 @@ _build_archiso_mkinitcpio_conf() {
         _modules+=("ext4")
     fi
 
-    cp "${_mkinitcpio_conf}" "${work_dir}/mkinitcpio.conf"
-    sed "s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
-         s|%ARCHISO_MODULES%|${_modules[*]}|g" "${work_dir}/mkinitcpio.conf" > "${_mkinitcpio_conf}"
+    cp "${_mkinitcpio_conf}" "${_mkinitcpio_conf_tmp}"
+    sed "s|%ARCHISO_FILES%|${_files[*]}|g;
+         s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
+         s|%ARCHISO_MODULES%|${_modules[*]}|g" \
+        "${_mkinitcpio_conf_tmp}" > "${_mkinitcpio_conf}"
 }
 
 # Returns epoch given a file system image name 
@@ -1691,7 +1717,7 @@ _build_crypttab() {
     fi
 }
 
-# Fill templatized udev rules for the persistent partitions
+# Fills templatized udev rules for the persistent partitions
 # $1: template udev rule file
 _fill_persistent_ro_udev_rules() {
     local _template="${1}"
@@ -2265,7 +2291,8 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
-# Resolves the value of an image encryption key from an <image>_encryption_key profiledef.sh variable
+# Resolves the value of an image encryption key from an <image>_encryption_key
+# profiledef.sh variable
 # $1: a value in fs_images
 _resolve_secondary_encryption_key() {
     local _name="${1}"
@@ -2392,7 +2419,7 @@ _prepare_recovery_image() {
 
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
        [ "${recovery}" = true ]; then
-        _resolve_secondary_encryption_key "recovery"
+        # _resolve_secondary_encryption_key "recovery"
         if [ "${airootfs_size}" = "" ]; then
             _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
             airootfs_size=$((pacstrap_size+200000))
@@ -3483,6 +3510,7 @@ _set_overrides() {
     [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
     [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
     [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
+    [[ -n "$keys_encryption_key" ]] || keys_encryption_key="auto"
     [[ -n "$recovery_encryption_key" ]] || recovery_encryption_key="auto"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"

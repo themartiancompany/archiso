@@ -27,7 +27,6 @@ persistent_size=200000
 persistent_image_type="ext4+luks"
 persistent_encryption_key="auto"
 dongle_persistent_encryption_key="auto"
-recovery="true"
 swap_size=250000
 swap_image_type="swap+luks"
 keys_image_type="erofs"
