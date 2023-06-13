@@ -40,6 +40,10 @@ For linting the shell scripts the following package is required:
 
 * shellcheck
 
+For generating the man pages:
+
+* python-docutils
+
 Profiles
 ========
 

@@ -4,6 +4,7 @@
 PREFIX ?= /usr/local
 BIN_DIR=$(DESTDIR)$(PREFIX)/bin
 DOC_DIR=$(DESTDIR)$(PREFIX)/share/doc/archiso
+MAN_DIR?=$(DESTDIR)$(PREFIX)/share/man
 PROFILE_DIR=$(DESTDIR)$(PREFIX)/share/archiso
 
 DOC_FILES=$(wildcard docs/*) $(wildcard *.rst)
@@ -34,4 +35,7 @@ install-profiles:
 install-doc:
 	install -vDm 644 $(DOC_FILES) -t $(DOC_DIR)
 
-.PHONY: check install install-doc install-profiles install-scripts shellcheck
+man:
+	rst2man man/mkarchiso.1.rst $(MAN_DIR)/man1/mkarchiso.1
+
+.PHONY: check install install-doc install-profiles install-scripts shellcheck man
