@@ -58,7 +58,7 @@ _generate_ephemeral_openssl_key() {
   _unit="${6}"
   _domain="${7}"
   local codesigning_conf="${codesigning_dir}/openssl.cnf"
-  local codesigning_subj="/C=${_state}/ST=${_state}/L=${_city}/O=${_org}/OU=${_unit}/CN=${_domain}"
+  local codesigning_subj="/C=${_country}/ST=${_state}/L=${_city}/O=${_org}/OU=${_unit}/CN=${_domain}"
   codesigning_cert="${codesigning_dir}/codesign.crt"
   codesigning_key="${codesigning_dir}/codesign.key"
   mkdir -p "${codesigning_dir}"

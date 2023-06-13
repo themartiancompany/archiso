@@ -43,25 +43,31 @@ signature_info() {
   sig_comment="Ephemeral Signing Key"
 }
 
+# Section start display function
+# $1: section name
+# $2: section title
 print_section_start() {
-  # gitlab collapsible sections start: https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
-  local _section _title
-  _section="${1}"
-  _title="${2}"
-
-  printf "\e[0Ksection_start:%(%s)T:%s\r\e[0K%s\n" '-1' "${_section}" "${_title}"
+  # gitlab collapsible sections start:
+  # https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
+  local _section="${1}"
+  local _title="${2}"
+  local _section_start="\e[0Ksection_start:%(%s)T:%s\r\e[0K%s\n"
+  printf "${_section_start}" '-1' "${_section}" "${_title}"
 }
 
+# Section end display function
+# $1: section name
 print_section_end() {
-  # gitlab collapsible sections end: https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
+  # gitlab collapsible sections end:
+  # https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
   local _section
   _section="${1}"
-
-  printf "\e[0Ksection_end:%(%s)T:%s\r\e[0K\n" '-1' "${_section}"
+  local _Section_end="\e[0Ksection_end:%(%s)T:%s\r\e[0K\n"
+  printf "${_section_end}" '-1' "${_section}"
 }
 
+# Cleans up temporary directories
 cleanup() {
-  # clean up temporary directories
   print_section_start "cleanup" "Cleaning up temporary directory"
 
   if [ -n "${tmpdir_base:-}" ]; then
@@ -71,9 +77,9 @@ cleanup() {
   print_section_end "cleanup"
 }
 
+# Creates checksums for files
+# $@: files
 create_checksums() {
-  # create checksums for files
-  # $@: files
   local _file_path _file_name _current_pwd
   _current_pwd="${PWD}"
 
@@ -95,9 +101,9 @@ create_checksums() {
   print_section_end "checksums"
 }
 
+# Creates zsync control files for files
+# $@: files
 create_zsync_delta() {
-  # create zsync control files for files
-  # $@: files
   local _file
 
   print_section_start "zsync_delta" "Creating zsync delta"
@@ -114,9 +120,9 @@ create_zsync_delta() {
   print_section_end "zsync_delta"
 }
 
+# Creates metrics
 create_metrics() {
   local _metrics="${output}/metrics.txt"
-  # create metrics
   print_section_start "metrics" "Creating metrics"
 
   {
@@ -170,6 +176,7 @@ create_metrics() {
   print_section_end "metrics"
 }
 
+# Create ephemeral signing keys
 create_ephemeral_keys() {
   local _gen_key
   local _gen_key_options=('ephemeral') _gpg_options=() _openssl_options=()
