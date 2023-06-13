@@ -2421,7 +2421,7 @@ _prepare_recovery_image() {
        [[ "${recovery}" == "true" ]]; then
         if [ "${airootfs_size}" = "" ]; then
             _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
-            airootfs_size=$((pacstrap_size+200000))
+            airootfs_size=$((_pacstrap_size+200000))
             recovery_size="${airootfs_size}"
         fi
         _run_once "_mkrecovery_common"
