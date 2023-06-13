@@ -128,17 +128,34 @@ A configuration for pacman is required per profile.
 
 Some configuration options will not be used or will be modified:
 
-* ``CacheDir``: the profile's option is **only** used if it is not the default (i.e. ``/var/cache/pacman/pkg``) and if it is
-  not the same as the system's option. In all other cases the system's pacman cache is used.
-* ``HookDir``: it is **always** set to the ``/etc/pacman.d/hooks`` directory in the work directory's airootfs to allow
-  modification via the profile and ensure interoparability with hosts using dracut (see `#73
-  <https://gitlab.archlinux.org/archlinux/archiso/-/issues/73>`_)
-* ``RootDir``: it is **always** removed, as setting it explicitely otherwise refers to the host's root filesystem (see
-  ``man 8 pacman`` for further information on the ``-r`` option used by ``pacstrap``)
-* ``LogFile``: it is **always** removed, as setting it explicitely otherwise refers to the host's pacman log file (see
-  ``man 8 pacman`` for further information on the ``-r`` option used by ``pacstrap``)
-* ``DBPath``: it is **always** removed, as setting it explicitely otherwise refers to the host's pacman database (see
-  ``man 8 pacman`` for further information on the ``-r`` option used by ``pacstrap``)
+* ``CacheDir``: the profile's option is **only** used if it is not
+  the default (i.e. ``/var/cache/pacman/pkg``) and if it is not
+  the same as the system's option. In all other cases the system's
+  pacman cache is used;
+* ``HookDir``: it is **always** set to the ``/etc/pacman.d/hooks`` directory
+  in the work directory's airootfs to allow modification via the profile and
+  ensure interoparability with hosts using dracut (see `#73
+  <https://gitlab.archlinux.org/archlinux/archiso/-/issues/73>`_);
+* ``RootDir``: it is **always** removed, as setting it explicitely otherwise 
+  refers to the host's root filesystem (see ``man 8 pacman`` for further
+  information on the ``-r`` option used by ``pacstrap``);
+* ``LogFile``: it is **always** removed, as setting it explicitely otherwise
+  refers to the host's pacman log file (see ``man 8 pacman`` for further
+  information on the ``-r`` option used by ``pacstrap``)
+* ``DBPath``: it is **always** removed, as setting it explicitely otherwise
+  refers to the host's pacman database (see ``man 8 pacman`` for further
+  information on the ``-r`` option used by ``pacstrap``)
+
+mkinitcpio.conf
+===============
+
+Additionally there are also *custom template identifiers* have harcoded
+values set by ``mkarchiso`` that cannot be overridden:
+
+* ``%DEVICE_SELECT_CMDLINE%``: GRUB root device selection line; changes
+  according to selected setup (root file system encryption enabled, 
+  dongle enabled),
+*
 
 airootfs
 ========
