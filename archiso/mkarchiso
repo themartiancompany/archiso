@@ -1357,7 +1357,7 @@ _get_cryptomount_uuid() {
 
 # Returns dongle persistent partition uuid
 _get_dongle_persistent_uuid() {
-    _epoch=$(_get_epoch "dongle_persistent"))
+    _epoch=$(_get_epoch "dongle_persistent")
     _get_epoch_fsuuid "${_epoch}"
 }
 
