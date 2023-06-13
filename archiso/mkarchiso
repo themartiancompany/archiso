@@ -803,58 +803,58 @@ _mkimg_erofs+luks() {
 
 # Defines functions to create ext4 for file system images
 for _img in "${fs_images[@]}"; do
-    eval "_mk${_img}_ext4() { \
-             ${_img}_guid="${linux_guid}"; \
-              _mkimg_ext4 "\${_dir}" \
+    eval "_mk${_img}_ext4() {" \
+             "${_img}_guid=${linux_guid};" \
+              "_mkimg_ext4 \${_dir}" \
                           "\${_image_path}" \
                           "\${_size}" \
                           "\${_epoch}" \
-                          "\${_label}"; }"
-    eval "_mk${_img}_squashfs() { \
-              _mkimg_squashfs "\${_dir}" \
-                              "\${_image_path}"; }"
-    eval "_mk${_img}_erofs() { \
-              _mkimg_erofs "\${_image_path}" \
+                          "\${_label}; }"
+    eval "_mk${_img}_squashfs() {" \
+              "_mkimg_squashfs \${_dir}" \
+                              "\${_image_path}; }"
+    eval "_mk${_img}_erofs() {" \
+              "_mkimg_erofs \${_image_path}" \
                            "\${_dir}" \
-                           "\${_epoch}"; }"
-    eval "_mk${_img}_erofs+luks() { \
-              _mkimg_erofs+luks "\${_name}" \
+                           "\${_epoch}; }"
+    eval "_mk${_img}_erofs+luks() {" \
+              "_mkimg_erofs+luks \${_name}" \
                                 "\${_dir}" \
                                 "\${_image_path}" \
                                 "\${_auto_size}" \
                                 "\${_encryption_key}" \
                                 "\${_epoch}" \
                                 "\${_label}" \
-                                "\${_grub}"; }"
-    eval "_mk${_img}_ext4+squashfs() { \
-              _mkimg_ext4+squashfs "\${_name}" \
+                                "\${_grub}; }"
+    eval "_mk${_img}_ext4+squashfs() {" \
+              "_mkimg_ext4+squashfs \${_name}" \
                                    "\${_dir}" \
                                    "\${_image_path}" \
                                    "\${_size}" \
                                    "\${_epoch}" \
                                    "\${_label}" \
-                                   "\${_writable}"; }"
-    eval "_mk${_img}_ext4+squashfs+luks() { \
-              _mkimg_ext4+squashfs+luks "\${_name}" \
+                                   "\${_writable}; }"
+    eval "_mk${_img}_ext4+squashfs+luks() {" \
+              "_mkimg_ext4+squashfs+luks \${_name}" \
                                         "\${_dir}" \
                                         "\${_image_path}" \
                                         "\${_size}" \
                                         "\${_encryption_key}" \
                                         "\${_epoch}" \
                                         "\${_writable}" \
-                                        "\${_grub}"; }"
-    eval "_mk${_img}_ext4+luks() { \
-              ${_img}_guid="${luks_guid}" \
-              _mkimg_ext4+luks "\${_name}" \
+                                        "\${_grub}; }"
+    eval "_mk${_img}_ext4+luks() {" \
+              "${_img}_guid=${luks_guid};" \
+              "_mkimg_ext4+luks \${_name}" \
                                "\${_dir}" \
                                "\${_image_path}" \
                                "\${_size}" \
                                "\${_encryption_key}" \
                                "\${_epoch}" \
                                "\${_label}" \
-                               "\${_grub}"; }"
-    eval "_mk${_img}_squashfs+luks() { \
-              _mkimg_squashfs+luks "\${_name}" \
+                               "\${_grub}; }"
+    eval "_mk${_img}_squashfs+luks() {" \
+              "_mkimg_squashfs+luks \${_name}" \
                                    "\${_dir}" \
                                    "\${_image_path}" \
                                    "\${_size}" \
@@ -862,20 +862,20 @@ for _img in "${fs_images[@]}"; do
                                    "\${_epoch}" \
                                    "\${_label}" \
                                    "\${_writable}" \
-                                   "\${_grub}"; }"
-    eval "_mk${_img}_swap() { \
-              _run_mkswap "\${_image_path}" \
+                                   "\${_grub}; }"
+    eval "_mk${_img}_swap() {" \
+              "_run_mkswap \${_image_path}" \
                           "\${_size}" \
                           "\${_epoch}" \
-                          "\${_label}"; }"
-    eval "_mk${_img}_swap+luks() { \
-              _mkimg_swap+luks "\${_name}" \
+                          "\${_label}; }"
+    eval "_mk${_img}_swap+luks() {" \
+              "_mkimg_swap+luks \${_name}" \
                                "\${_image_path}" \
                                "\${_size}" \
                                "\${_encryption_key}" \
                                "\${_epoch}" \
                                "\${_label}" \
-                               "\${_grub}"; }"
+                               "\${_grub}; }"
 done
 
 # Parameters for _mkairootfs_fs_type functions
