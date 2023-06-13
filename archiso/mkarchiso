@@ -1336,43 +1336,43 @@ _get_epoch_fsuuid() {
 # Returns UUID for the GRUB plain mount
 _get_archiso_uuid() {
     #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $(_get_epoch "airootfs"))"
+    echo "$(_epoch_to_uuid "$(_get_epoch airootfs)")"
 }
 
 # Returns UUID for the dongle GRUB plain mount
 _get_dongle_uuid() {
     #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid $(_get_epoch "dongle"))"
+    echo "$(_epoch_to_uuid "$(_get_epoch dongle)")"
 }
 
 # Returns UUID for the GRUB cryptomount (i.e. currently the encrypted boot partition)
 _get_cryptomount_uuid() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$(_get_epoch "dongle_boot")"
+        _epoch="$(_get_epoch dongle_boot)"
     else
-        _epoch="$(_get_epoch "persistent")"
+        _epoch="$(_get_epoch persistent)"
     fi
     _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
 # Returns dongle persistent partition uuid
 _get_dongle_persistent_uuid() {
-    _epoch=$(_get_epoch "dongle_persistent")
+    _epoch=$(_get_epoch dongle_persistent)
     _get_epoch_fsuuid "${_epoch}"
 }
 
 # Returns dongle swap partition uuid
 _get_dongle_swap_uuid() {
-    _epoch="$(_get_epoch "dongle_swap")"
+    _epoch="$(_get_epoch dongle_swap)"
     _get_epoch_fsuuid "${_epoch}"
 }
 
 # Returns UUID for the dongle swap mount
 _get_swap_uuid() {
     if [[ "${buildmode}" == 'dongle' ]]; then
-        _epoch="$(_get_epoch "dongle_swap")"
+        _epoch="$(_get_epoch dongle_swap)"
     else
-        _epoch="$(_get_epoch "swap")"
+        _epoch="$(_get_epoch swap)"
     fi
     _get_epoch_fsuuid "${_epoch}"
 }
