@@ -939,7 +939,7 @@ _mkdongle_boot_common() {
     _image_path="${dongle_boot_img}"
     _encryption_key="${dongle_boot_encryption_key}"
     _size="${dongle_boot_size}"
-    _epoch="${dongle_boot_epoch}"
+    _epoch=$(_get_epoch "dongle_boot")
     _label="${iso_label}_DONGLE_BOOT"
     _writable="false"
     _grub="true"
@@ -2546,6 +2546,7 @@ _prepare_persistent_image() {
 
 _prepare_dongle_boot_image() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        dongle_boot_size=169042 # 169.042 MB
         _run_once "_mkdongle_boot_common"
         _run_once "_mkdongle_boot_${dongle_boot_image_type}"
     fi
