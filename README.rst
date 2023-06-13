@@ -2,14 +2,17 @@
 archiso
 =======
 
-The archiso project features scripts and configuration templates to build installation media (*.iso* images and
-*.tar.gz* bootstrap images) as well as netboot artifacts for BIOS and UEFI based systems on the x86_64 architecture.
-Currently creating the images is only supported on Arch Linux but may work on other operating systems as well.
+The archiso project features scripts and configuration templates to build 
+installation media (*.iso* images and *.tar.gz* bootstrap images) as well
+as netboot artifacts for BIOS and UEFI based systems on the x86_64 architecture.
+Currently creating the images is only supported on Arch Linux but may work
+on other operating systems as well.
 
 Requirements
 ============
 
-The following packages need to be installed to be able to create an image with the included scripts:
+The following packages need to be installed to be able to create an image
+with the included scripts:
 
 * arch-install-scripts
 * awk
@@ -27,7 +30,8 @@ The following packages need to be installed to be able to create an image with t
 * sed
 * squashfs-tools
 
-For running the images in a virtualized test environment the following packages are required:
+For running the images in a virtualized test environment the following
+packages are required:
 
 * edk2-ovmf
 * qemu
@@ -39,27 +43,34 @@ For linting the shell scripts the following package is required:
 Profiles
 ========
 
-Archiso comes with two profiles: **baseline** and **releng**. While both can serve as starting points for creating
+Archiso comes with two profiles: **baseline** and **releng**.
+While both can serve as starting points for creating
 custom live media, **releng** is used to create the monthly installation medium.
-They can be found below `configs/baseline/ <configs/baseline/>`_  and `configs/releng/ <configs/releng/>`_
-(respectively). Both profiles are defined by files to be placed into overlays (e.g. airootfs ‎→‎ the image's ``/``).
+They can be found below `configs/baseline/ <configs/baseline/>`_
+and `configs/releng/ <configs/releng/>`_ (respectively).
+Both profiles are defined by files to be placed into overlays
+(e.g. airootfs ‎→‎ the image's ``/``).
 
-Read `README.profile.rst <docs/README.profile.rst>`_ to learn more about how to create profiles.
+Read `README.profile.rst <docs/README.profile.rst>`_ to learn more about
+how to create profiles.
 
 Create images
 =============
 
-Usually the archiso tools are installed as a package. However, it is also possible to clone this repository and create
-images without installing archiso system-wide.
+Usually the archiso tools are installed as a package. However, it is also
+possible to clone this repository and create images without installing
+archiso system-wide.
 
-As filesystems are created and various mount actions have to be done when creating an image, **root** is required to run
-the scripts.
+As filesystems are created and various mount actions have to be done when
+creating an image, **root** is required to run the scripts.
 
-When archiso is installed system-wide and the modification of a profile is desired, it is necessary to copy it to a
-writeable location, as ``/usr/share/archiso`` is tracked by the package manager and only writeable by root (changes will
-be lost on update).
+When archiso is installed system-wide and the modification of a profile
+is desired, it is necessary to copy it to a writeable location,
+as ``/usr/share/archiso`` is tracked by the package manager
+and only writeable by root (changes will be lost on update).
 
-The examples below will assume an unmodified profile in a system location (unless noted otherwise).
+The examples below will assume an unmodified profile in a system location
+(unless noted otherwise).
 
 It is advised to consult the help output of **mkarchiso**:
 
