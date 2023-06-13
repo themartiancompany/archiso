@@ -2,7 +2,8 @@
 profile
 =======
 
-An archiso profile consists of several configuration files and a directory for files to be added to the resulting image.
+An archiso profile consists of several configuration files and a directory
+for files to be added to the resulting image.
 
 .. code:: plaintext
 
@@ -22,104 +23,157 @@ The required files and directories are explained in the following sections.
 profiledef.sh
 =============
 
-This file describes several attributes of the resulting image and is a place for customization to the general behavior
-of the image.
+This file describes several attributes of the resulting image and is a
+place for customization to the general behavior of the image.
 
-The image file is constructed from some of the variables in ``profiledef.sh``: ``<iso_name>-<iso_version>-<arch>.iso``
-(e.g. ``archlinux-202010-x86_64.iso``).
+The image file is constructed from some of the variables in ``profiledef.sh``:
+``<iso_name>-<iso_version>-<arch>.iso`` (e.g. ``archlinux-202010-x86_64.iso``).
 
-* ``iso_name``: The first part of the name of the resulting image (defaults to ``mkarchiso``)
+* ``iso_name``: The first part of the name of the resulting image
+                (defaults to ``mkarchiso``)
 * ``iso_label``: The ISO's volume label (defaults to ``MKARCHISO``)
-* ``iso_publisher``: A free-form string that states the publisher of the resulting image (defaults to ``mkarchiso``)
-* ``iso_application``: A free-form string that states the application (i.e. its use-case) of the resulting image (defaults
+* ``iso_publisher``: A free-form string that states the publisher of the
+                     resulting image (defaults to ``mkarchiso``)
+* ``iso_application``: A free-form string that states the application
+                       (i.e. its use-case) of the resulting image (defaults
   to ``mkarchiso iso``)
-* ``iso_version``: A string that states the version of the resulting image (defaults to ``""``)
-* ``install_dir``: A string (maximum eight characters long, which **must** consist of ``[a-z0-9]``) that states the
-  directory on the resulting image into which all files will be installed (defaults to ``mkarchiso``)
-* ``buildmodes``: An optional list of strings, that state the build modes that the profile uses. Only the following are
-  understood:
+* ``iso_version``: A string that states the version of the resulting image
+                   (defaults to ``""``)
+* ``install_dir``: A string (maximum eight characters long, which **must**
+                   consist of ``[a-z0-9]``) that states the directory on the
+                   resulting image into which all files will be installed
+                   (defaults to ``mkarchiso``)
+* ``buildmodes``: An optional list of strings, that state the build modes
+                  that the profile uses. Only the following are understood:
 
-  - ``bootstrap``: Build a compressed file containing a minimal system to bootstrap from
-  - ``dongle``: Build a "dongle" bootable ISO to enforce a chain of trust on systems vulnerable to evil maids.
-  - ``iso``: Build a bootable ISO image (implicit default, if no ``buildmodes`` are set)
+  - ``bootstrap``: Build a compressed file containing a minimal system
+                   to bootstrap from
+  - ``dongle``: Build a "dongle" bootable ISO to enforce a chain of trust
+                on systems vulnerable to evil maids.
+  - ``iso``: Build a bootable ISO image (implicit default, if no ``buildmodes``
+             are set)
   - ``netboot``: Build artifacts required for netboot using iPXE
-* ``bootmodes``: A list of strings, that state the supported boot modes of the resulting image. Only the following are
-  understood:
-
+* ``bootmodes``: A list of strings, that state the supported boot modes
+                 of the resulting image. Only the following are understood:
   - ``bios.grub.mbr``: GRUBS for x86 BIOS booting from a disk
   - ``bios.grub.eltorito``: GRUB for x86 BIOS booting from an optical disc
   - ``bios.syslinux.mbr``: Syslinux for x86 BIOS booting from a disk
-  - ``bios.syslinux.eltorito``: Syslinux for x86 BIOS booting from an optical disc
+  - ``bios.syslinux.eltorito``: Syslinux for x86 BIOS booting from an
+                                optical disc
   - ``uefi-ia32.grub.esp``: GRUB for IA32 UEFI booting from a disk
-  - ``uefi-ia32.grub.eltorito``: GRUB for IA32 UEFI booting from an optical disc
+  - ``uefi-ia32.grub.eltorito``: GRUB for IA32 UEFI booting from an
+                                 optical disc
   - ``uefi-x64.grub.esp``: GRUB for x86_64 UEFI booting from a disk
-  - ``uefi-x64.grub.eltorito``: GRUB for x86_64 UEFI booting from an optical disc
-  - ``uefi-x64.systemd-boot.esp``: systemd-boot for x86_64 UEFI booting from a disk
-  - ``uefi-x64.systemd-boot.eltorito``: systemd-boot for x86_64 UEFI booting from an optical disc
-    Note that BIOS El Torito boot mode must always be listed before UEFI El Torito boot mode.
-* ``arch``: The architecture (e.g. ``x86_64``) to build the image for. This is also used to resolve the name of the packages
-  file (e.g. ``packages.x86_64``)
-* ``pacman_conf``: The ``pacman.conf`` to use to install packages to the work directory when creating the image (defaults to
-  the host's ``/etc/pacman.conf``)
-* ``airootfs_image_type``: The image type to create. The following options are understood (defaults to ``squashfs``):
-  - ``squashfs``: Create a squashfs image directly from the airootfs work directory
-  - ``squashfs+luks``: Create a LUKS image containing a squashfs generated directly from the airootfs work directory
-  - ``ext4+squashfs``: Create an ext4 partition, copy the airootfs work directory to it and create a squashfs image from it
-  - ``ext4+squashfs+luks``: Create an ext4 partition, copy the airootfs work directory to it and create a LUKS containing a squashfs image generated from it
+  - ``uefi-x64.grub.eltorito``: GRUB for x86_64 UEFI booting from
+                                an optical disc
+  - ``uefi-x64.systemd-boot.esp``: systemd-boot for x86_64 UEFI booting
+                                   from a disk
+  - ``uefi-x64.systemd-boot.eltorito``: systemd-boot for x86_64 UEFI booting
+                                        from an optical disc. Note that BIOS
+                                        El Torito boot mode must always be
+                                        listed before UEFI El Torito boot mode.
+* ``arch``: The architecture (e.g. ``x86_64``) to build the image for.
+            This is also used to resolve the name of the packages file
+            (e.g. ``packages.x86_64``)
+* ``pacman_conf``: The ``pacman.conf`` to use to install packages to the work
+                   directory when creating the image (defaults to the host's
+                   ``/etc/pacman.conf``)
+* ``airootfs_image_type``: The image type to create. The following options are
+                           understood (defaults to ``squashfs``):
+  - ``squashfs``: Create a squashfs image directly from the airootfs
+                  work directory
+  - ``squashfs+luks``: Create a LUKS image containing a squashfs generated
+                       directly from the airootfs work directory
+  - ``ext4+squashfs``: Create an ext4 partition, copy the airootfs work
+                       directory to it and create a squashfs image from it
+  - ``ext4+squashfs+luks``: Create an ext4 partition, copy the airootfs
+                            work directory to it and create a LUKS containing
+                            a squashfs image generated from it
   - ``erofs``: Create an EROFS image for the airootfs work directory
-  - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
-* ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
-  ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
+  - ``erofs+luks``: Create a LUKS image containing an EROFS image for the
+                    airootfs work directory
+* ``airootfs_image_tool_options``: An array of options to pass to the tool
+                                   to create the airootfs image. ``mksquashfs``
+                                   and ``mkfs.erofs`` are supported.
+                                   See ``mksquashfs --help`` or
+                                   ``mkfs.erofs --help`` for all possible
+                                   options
 * ``airootfs_encryption_key``: 
   - ``<filename>``: file to use as key for the file system volume.
   - ``auto``: generates a binary key at build time (default);
   - ``""`` (no value): plain-text passphrase prompt. 
-  This description is valid for all the ``<fs_type>_encryption_key`` variables.
+                       This description is valid for all the
+                       ``<fs_type>_encryption_key`` variables.
 * ``persistent_size``: Size in KB of the persistent partition. 
 * ``persistent_image_type``: The type of the persistent partition of the ISO.
   - ``ext4``: Create an ext4 partition.
   - ``ext4+luks``: Create a LUKS container with an ext4 partition inside.
-* ``persistent_encryption_key``: See above; key for the persistent partition on the ISO; defaults to plain-text auto random key.
-* ``dongle_persistent_image_type``: The type of the persistent partition of the dongle ISO (same as ``persistent_image_type``.
-* ``dongle_persistent_encryption_key``: See above; key for the persistent partition on the ISO dongle; defaults to plain-text auto random key.
-* ``recovery_encryption_key``: See above; key for the dongle recovery root file system partition; defaults to plain-text auto random key.
+* ``persistent_encryption_key``: See above; key for the persistent partition
+                                 on the ISO; defaults to plain-text auto random
+                                 key.
+* ``dongle_persistent_image_type``: The type of the persistent partition of the
+                                    dongle ISO (same as ``persistent_image_type``).
+* ``dongle_persistent_encryption_key``: See above; key for the persistent
+                                        partition on the ISO dongle; defaults
+                                        to plain-text auto random key.
+* ``recovery_encryption_key``: See above; key for the dongle recovery root
+                               file system partition; defaults to plain-text
+                               auto random key.
 * ``swap_size``: Size in KB of the swap partition. 
 * ``swap_image_type``: The type of the swap partition of the ISO.
   - ``swap``: Create a normal swap partition.
   - ``swap+luks``: Create a LUKS container with a swap partition inside.
-* ``dongle_swap_image_type``: The type of the swap partition of the dongle ISO (same as ``swap_image_type``).
-* ``dongle_swap_encryption_key``: See above; key for the dongle swap partition encryption key; defaults to plain-text auto random key.
+* ``dongle_swap_image_type``: The type of the swap partition of the dongle ISO
+                              (same as ``swap_image_type``).
+* ``dongle_swap_encryption_key``: See above; key for the dongle swap partition
+                                  encryption key; defaults to plain-text auto
+                                  random key.
 * ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
-* ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
-* ``keys_encryption_key``: See above; key you actually type in at boot. Defaults to plain-text auto random key.
-* ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
-  permissions. The array's keys contain the path and the value is a colon separated list of owner UID, owner GID and
-  access mode. E.g. ``file_permissions=(["/etc/shadow"]="0:0:400")``. When directories are listed with a trailing backslash (``/``) **all** files and directories contained within the listed directory will have the same owner UID, owner GID, and access mode applied recursively.
+* ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for
+                               the "keys" ISO.
+* ``keys_encryption_key``: See above; key you actually type in at boot;
+                           defaults to plain-text auto random key.
+* ``file_permissions``: An associative array that lists files and/or directories
+                        who need specific ownership or permissions.
+                        The array's keys contain the path and the value is a
+                        colon separated list of owner UID, owner GID and
+                        access mode.
+                        E.g. ``file_permissions=(["/etc/shadow"]="0:0:400")``.
+                        When directories are listed with a trailing backslash
+                        (``/``) **all** files and directories contained within
+                        the listed directory will have the same owner UID,
+                        owner GID, and access mode applied recursively.
 
 bootstrap_packages.arch
 =======================
 
-All packages to be installed into the environment of a bootstrap image have to be listed in an architecture specific
-file (e.g. ``bootstrap_packages.x86_64``), which resides top-level in the profile.
+All packages to be installed into the environment of a bootstrap image
+have to be listed in an architecture specific file (e.g.
+``bootstrap_packages.x86_64``), which resides top-level in the profile.
 
-Packages have to be listed one per line. Lines starting with a ``#`` and blank lines are ignored.
+Packages have to be listed one per line. Lines starting with a ``#``
+and blank lines are ignored.
 
-This file is required when generating bootstrap images using the ``bootstrap`` build mode.
+This file is required when generating bootstrap images using the ``bootstrap``
+build mode.
 
 packages.arch
 =============
 
-All packages to be installed into the environment of an ISO image have to be listed in an architecture specific file
+All packages to be installed into the environment of an ISO image
+have to be listed in an architecture specific file
 (e.g. ``packages.x86_64``), which resides top-level in the profile.
 
-Packages have to be listed one per line. Lines starting with a ``#`` and blank lines are ignored.
+Packages have to be listed one per line. Lines starting with a ``#``
+and blank lines are ignored.
 
   .. note::
 
-    The **mkinitcpio** and **mkinitcpio-archiso** packages are mandatory (see `#30
-    <https://gitlab.archlinux.org/archlinux/archiso/-/issues/30>`_).
+    The **mkinitcpio** and **mkinitcpio-archiso** packages are mandatory (see
+    `#30 <https://gitlab.archlinux.org/archlinux/archiso/-/issues/30>`_).
 
-This file is required when generating ISO images using the ``iso`` or ``netboot`` build modes.
+This file is required when generating ISO images using the ``iso`` or
+``netboot`` build modes.
 
 pacman.conf
 ===========
@@ -162,21 +216,27 @@ airootfs
 
 This optional directory may contain files and directories that will be copied
 to the work directory of the resulting image's root filesystem.
-The files are copied before packages are being installed to work directory location.
+The files are copied before packages are being installed to work directory
+location.
 Ownership and permissions of files and directories from the profile's ``airootfs``
-directory are not preserved. The mode will be ``644`` for files and ``755`` for directories,
-all of them will be owned by root. To set custom ownership and/or
-permissions, use ``file_permissions`` in ``profiledef.sh``.
+directory are not preserved. The mode will be ``644`` for files
+and ``755`` for directories, all of them will be owned by root.
+To set custom ownership and/or permissions, use ``file_permissions``
+in ``profiledef.sh``.
 
-With this overlay structure it is possible to e.g. create users and set passwords for them, by providing
-``airootfs/etc/passwd``, ``airootfs/etc/shadow``, ``airootfs/etc/gshadow`` (see ``man 5 passwd``, ``man 5 shadow`` and ``man 5 gshadow`` respectively).
-If user home directories exist in the profile's ``airootfs``, their ownership and (and top-level) permissions will be
-altered according to the provided information in the password file.
+With this overlay structure it is possible to e.g. create users and set
+passwords for them, by providing ``airootfs/etc/passwd``,
+``airootfs/etc/shadow``, ``airootfs/etc/gshadow`` (see ``man 5 passwd``,
+``man 5 shadow`` and ``man 5 gshadow`` respectively).
+If user home directories exist in the profile's ``airootfs``, their
+ownership and (and top-level) permissions will be altered according
+to the provided information in the password file.
 
 persistent
 ========
 
-This optional directory may contain files and directories that will be copied to the work directory of the resulting image's persistent filesystem.
+This optional directory may contain files and directories that will be copied
+to the work directory of the resulting image's persistent filesystem.
 The files are copied before packages are being installed to work directory location.
 Ownership and permissions of files and directories from the profile's ``persistent``
 directory are not preserved. The mode will be ``644`` for files and ``755`` for directories,
@@ -187,8 +247,8 @@ permissions, use ``file_permissions`` in ``profiledef.sh``.
 Boot loader configuration
 =========================
 
-A profile may contain configuration for several boot loaders. These reside in specific top-level directories, which are
-explained in the following subsections.
+A profile may contain configuration for several boot loaders. These reside in
+specific top-level directories, which are explained in the following subsections.
 
 The following *custom template identifiers* are understood and will be replaced
 according to the assignments of the respective variables in ``profiledef.sh``:
@@ -211,26 +271,30 @@ values set by ``mkarchiso`` that cannot be overridden:
 efiboot
 -------
 
-This directory is mandatory when the ``uefi-x64.systemd-boot.esp`` or ``uefi-x64.systemd-boot.eltorito`` bootmodes are
-selected in ``profiledef.sh``. It contains configuration for `systemd-boot
+This directory is mandatory when the ``uefi-x64.systemd-boot.esp`` or
+``uefi-x64.systemd-boot.eltorito`` bootmodes are selected in ``profiledef.sh``.
+It contains configuration for `systemd-boot
 <https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/>`_.
 
   .. note::
 
-    The directory is a top-level representation of the systemd-boot configuration directories and files found in the
+    The directory is a top-level representation of the systemd-boot
+    configuration directories and files found in the
     root of an EFI system partition.
 
-The *custom template identifiers* are **only** understood in the boot loader entry `.conf` files (i.e. **not** in
-``loader.conf``).
+The *custom template identifiers* are **only** understood in the boot loader
+entry `.conf` files (i.e. **not** in ``loader.conf``).
 
 syslinux
 --------
 
-This directory is mandatory when the ``bios.syslinux.mbr`` or the ``bios.syslinux.eltorito`` bootmodes are selected in
-``profiledef.sh``.
-It contains configuration files for `syslinux <https://wiki.syslinux.org/wiki/index.php?title=SYSLINUX>`_ or `isolinux
-<https://wiki.syslinux.org/wiki/index.php?title=ISOLINUX>`_ , or `pxelinux
-<https://wiki.syslinux.org/wiki/index.php?title=PXELINUX>`_ used in the resulting image.
+This directory is mandatory when the ``bios.syslinux.mbr`` or the
+``bios.syslinux.eltorito`` bootmodes are selected in ``profiledef.sh``.
+It contains configuration files for
+`syslinux <https://wiki.syslinux.org/wiki/index.php?title=SYSLINUX>`_ or
+`isolinux <https://wiki.syslinux.org/wiki/index.php?title=ISOLINUX>`_ , or
+`pxelinux <https://wiki.syslinux.org/wiki/index.php?title=PXELINUX>`_
+used in the resulting image.
 
 The *custom template identifiers* are understood in all `.cfg` files in this directory.
 
