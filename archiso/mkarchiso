@@ -1080,6 +1080,13 @@ _get_fs_type() {
     echo "${_no_luks##*"+"}"
 }
 
+# Returns work directory path for a given file system image
+_get_fs_img() {
+    local _fs_image="${1}"
+    local _img_name="$(echo "${_fs_image}" | tr -d '_')"
+    echo "${work_dir}/${_img_name}.$(_get_fs_ext ${_fs_image})"
+}
+
 # Returns internal size for an internal partition from the outer image size
 # $1: outer partition size
 _get_internal_size() {
@@ -3440,8 +3447,18 @@ _validate_options() {
     _msg_info "Done!"
 }
 
+# Assign value to variable if empty
+# $1: variable
+# $2: value
+_set_no_override() {
+    local _var="${1}"
+    local _value="${2}"
+    eval "[[ -n \$${_var} ]] || ${_var}=${_value}"
+}
+
 # Set defaults and, if present, overrides from mkarchiso command line option parameters
 _set_overrides() {
+    local _var _img _no_override_fs_images=()
     # Set variables that have command line overrides
     [[ ! -v override_buildmodes ]] || buildmodes=("${override_buildmodes[@]}")
     if (( ${#buildmodes[@]} < 1 )); then
@@ -3501,30 +3518,41 @@ _set_overrides() {
     fi
 
     # Set variables that do not have overrides
-    [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
-    [[ -n "$boot_image_type" ]] || boot_image_type="ext4+luks"
-    [[ -n "$keys_image_type" ]] || keys_image_type="squashfs+luks"
-    [[ -n "$persistent_image_type" ]] || persistent_image_type="ext4+luks"
-    [[ -n "$recovery_image_type" ]] || recovery_image_type="ext4+luks"
-    [[ -n "$dongle_boot_image_type" ]] || dongle_boot_image_type="${boot_image_type}"
-    [[ -n "$dongle_persistent_image_type" ]] || dongle_persistent_image_type="ext4+luks"
-    [[ -n "$swap_image_type" ]] || swap_image_type="swap+luks"
-    [[ -n "$dongle_swap_image_type" ]] || dongle_swap_image_type="${swap_image_type}"
-    [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
-    [[ -n "$keys_encryption_key" ]] || keys_encryption_key="auto"
-    [[ -n "$recovery_encryption_key" ]] || recovery_encryption_key="auto"
-    [[ -n "$recovery" ]] || recovery="false"
-    [[ -n "$iso_name" ]] || iso_name="${app_name}"
-    [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
-    [[ -n "$airootfs_dir" ]] || airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
-    [[ -n "$dongle_isofs_dir" ]] || dongle_isofs_dir="${work_dir}/dongle_iso"
-    [[ -n "$efi_boot_img" ]] || efi_boot_img="${work_dir}/efiboot.img"
-    [[ -n "$persistent_img" ]] || persistent_img="${work_dir}/persistent."$(_get_fs_ext "persistent")
-    [[ -n "$dongle_persistent_img" ]] || dongle_persistent_img="${work_dir}/donglepersistent."$(_get_fs_ext "dongle_persistent")
-    [[ -n "$dongle_boot_img" ]] || dongle_boot_img="${work_dir}/dongleboot."$(_get_fs_ext "dongle_boot")
-    [[ -n "$swap_img" ]] || swap_img="${work_dir}/swap.img"
-    [[ -n "$dongle_swap_img" ]] || dongle_swap_img="${work_dir}/dongleswap.img"
-    [[ -n "$recovery_img" ]] || recovery_img="${work_dir}/recovery.img"
+    no_override_vars=(
+      ["airootfs_image_type"]="squashfs"
+      ["boot_image_type"]="ext4+luks"
+      ["keys_image_type"]="squashfs+luks"
+      ["persistent_image_type"]="ext4+luks"
+      ["recovery_image_type"]="ext4+luks"
+      ["dongle_boot_image_type"]="ext4+luks"
+      ["dongle_persistent_image_type"]="ext4+luks"
+      ["swap_image_type"]="swap+luks"
+      ["dongle_swap_image_type"]="swap+luks"
+      ["dongle_persistent_encryption_key"]="auto"
+      ["keys_encryption_key"]="auto"
+      ["recovery_encryption_key"]="auto"
+      ["recovery"]="false"
+      ["iso_name"]="${app_name}"
+      ["isofs_dir"]="${work_dir}/iso"
+      ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
+      ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+    )
+    _no_override_fs_images=(
+        "efi_boot"
+        "persistent"
+        "dongle"
+        "dongle_boot"
+        "dongle_persistent"
+        "swap"
+        "dongle_swap"
+        "recovery"
+    )
+    for _img in "${_no_override_fs_images[@]}"; do
+        no_override_vars["${_img}"]="$(_get_fs_img "${_img}")"
+    done
+    for _var in "${!no_override_vars[@]}"; do
+        _set_no_override "${_var}" "${no_override_vars[${_var}]}"
+    done
 }
 
 _export_gpg_publickey() {
