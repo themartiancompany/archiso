@@ -2418,8 +2418,7 @@ _prepare_recovery_image() {
     local _pacstrap_size
 
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       [ "${recovery}" = true ]; then
-        # _resolve_secondary_encryption_key "recovery"
+       [[ "${recovery}" == "true" ]]; then
         if [ "${airootfs_size}" = "" ]; then
             _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
             airootfs_size=$((pacstrap_size+200000))
@@ -3513,6 +3512,7 @@ _set_overrides() {
     [[ -n "$dongle_persistent_encryption_key" ]] || dongle_persistent_encryption_key="auto"
     [[ -n "$keys_encryption_key" ]] || keys_encryption_key="auto"
     [[ -n "$recovery_encryption_key" ]] || recovery_encryption_key="auto"
+    [[ -n "$recovery" ]] || recovery="false"
     [[ -n "$iso_name" ]] || iso_name="${app_name}"
     [[ -n "$isofs_dir" ]] || isofs_dir="${work_dir}/iso"
     [[ -n "$airootfs_dir" ]] || airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
