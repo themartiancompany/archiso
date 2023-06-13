@@ -14,6 +14,7 @@ An archiso profile consists of several configuration files and a directory for f
    ├── bootstrap_packages.arch
    ├── packages.arch
    ├── pacman.conf
+   ├── persistent/
    └── profiledef.sh
 
 The required files and directories are explained in the following sections.
@@ -142,11 +143,12 @@ Some configuration options will not be used or will be modified:
 airootfs
 ========
 
-This optional directory may contain files and directories that will be copied to the work directory of the resulting
-image's root filesystem.
+This optional directory may contain files and directories that will be copied
+to the work directory of the resulting image's root filesystem.
 The files are copied before packages are being installed to work directory location.
-Ownership and permissions of files and directories from the profile's ``airootfs`` directory are not preserved. The mode
-will be ``644`` for files and ``755`` for directories, all of them will be owned by root. To set custom ownership and/or
+Ownership and permissions of files and directories from the profile's ``airootfs``
+directory are not preserved. The mode will be ``644`` for files and ``755`` for directories,
+all of them will be owned by root. To set custom ownership and/or
 permissions, use ``file_permissions`` in ``profiledef.sh``.
 
 With this overlay structure it is possible to e.g. create users and set passwords for them, by providing
@@ -154,20 +156,41 @@ With this overlay structure it is possible to e.g. create users and set password
 If user home directories exist in the profile's ``airootfs``, their ownership and (and top-level) permissions will be
 altered according to the provided information in the password file.
 
+persistent
+========
+
+This optional directory may contain files and directories that will be copied to the work directory of the resulting image's persistent filesystem.
+The files are copied before packages are being installed to work directory location.
+Ownership and permissions of files and directories from the profile's ``persistent``
+directory are not preserved. The mode will be ``644`` for files and ``755`` for directories,
+all of them will be owned by root. To set custom ownership and/or
+permissions, use ``file_permissions`` in ``profiledef.sh``.
+
+
 Boot loader configuration
 =========================
 
 A profile may contain configuration for several boot loaders. These reside in specific top-level directories, which are
 explained in the following subsections.
 
-The following *custom template identifiers* are understood and will be replaced according to the assignments of the
-respective variables in ``profiledef.sh``:
+The following *custom template identifiers* are understood and will be replaced
+according to the assignments of the respective variables in ``profiledef.sh``:
 
-* ``%ARCHISO_LABEL%``: Set this using the ``iso_label`` variable in ``profiledef.sh``.
-* ``%INSTALL_DIR%``: Set this using the ``iso_label`` variable in ``profiledef.sh``.
+* ``%INSTALL_DIR%``: Set this using the ``install_dir`` variable in ``profiledef.sh``.
 * ``%ARCH%``: Set this using the ``arch`` variable in ``profiledef.sh``.
 
+Additionally there are also *custom template identifiers* have harcoded
+values set by ``mkarchiso`` that cannot be overridden:
 
+* ``%DEVICE_SELECT_CMDLINE%``: GRUB root device selection line; changes
+  according to selected setup (root file system encryption enabled, 
+  dongle enabled),
+* ``%BOOTABLE_UUID%``: ISO 9660 modification date in UTC, i.e. its "UUID" for the
+  highest priority boot disk (changes dynamically with above parameters),
+* ``%FALLBACK_UUID%``: ISO 9660 modification date in UTC, i.e. its "UUID" for the
+  second highest priority boot disk (changes dynamically with above parameters),
+* ``%KERNEL_PARAMS%``: dynamically generated kernel parameters array.
+ 
 efiboot
 -------
 
