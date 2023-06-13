@@ -69,21 +69,28 @@ The image file is constructed from some of the variables in ``profiledef.sh``: `
   - ``erofs+luks``: Create a LUKS image containing an EROFS image for the airootfs work directory
 * ``airootfs_image_tool_options``: An array of options to pass to the tool to create the airootfs image. ``mksquashfs`` and
   ``mkfs.erofs`` are supported. See ``mksquashfs --help`` or ``mkfs.erofs --help`` for all possible options
-* ``encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will generate a key
-  at build time; if empty, will prompt for a plain-text passphrase.
-* ``persistent_size_kib``: Size in KB of the persistent partition. 
+* ``airootfs_encryption_key``: 
+  - ``<filename>``: file to use as key for the file system volume.
+  - ``auto``: generates a binary key at build time (default);
+  - ``""`` (no value): plain-text passphrase prompt. 
+  This description is valid for all the ``<fs_type>_encryption_key`` variables.
+* ``persistent_size``: Size in KB of the persistent partition. 
 * ``persistent_image_type``: The type of the persistent partition of the ISO.
   - ``ext4``: Create an ext4 partition.
   - ``ext4+luks``: Create a LUKS container with an ext4 partition inside.
+* ``persistent_encryption_key``: See above; key for the persistent partition on the ISO; defaults to plain-text auto random key.
 * ``dongle_persistent_image_type``: The type of the persistent partition of the dongle ISO (same as ``persistent_image_type``.
-* ``dongle_persistent_encryption_key``: If pointing to a file, it will use as encryption key for the airootfs; if "auto" will use random a plain-text key; if empty will prompt for a plain-text passphrase.
-* ``swap_size_kib``: Size in KB of the swap partition. 
+* ``dongle_persistent_encryption_key``: See above; key for the persistent partition on the ISO dongle; defaults to plain-text auto random key.
+* ``recovery_encryption_key``: See above; key for the dongle recovery root file system partition; defaults to plain-text auto random key.
+* ``swap_size``: Size in KB of the swap partition. 
 * ``swap_image_type``: The type of the swap partition of the ISO.
   - ``swap``: Create a normal swap partition.
   - ``swap+luks``: Create a LUKS container with a swap partition inside.
-* ``dongle_swap_image_type``: The type of the swap partition of the dongle ISO (same as ``swap_image_type``.
+* ``dongle_swap_image_type``: The type of the swap partition of the dongle ISO (same as ``swap_image_type``).
+* ``dongle_swap_encryption_key``: See above; key for the dongle swap partition encryption key; defaults to plain-text auto random key.
 * ``keys_image_type``: Same as ``airootfs_image_type`` for the "keys" ISO.
 * ``keys_image_tool_options``: Same as ``airootfs_image_tool_options`` for the "keys" ISO.
+* ``keys_encryption_key``: See above; key you actually type in at boot. Defaults to plain-text auto random key.
 * ``file_permissions``: An associative array that lists files and/or directories who need specific ownership or
   permissions. The array's keys contain the path and the value is a colon separated list of owner UID, owner GID and
   access mode. E.g. ``file_permissions=(["/etc/shadow"]="0:0:400")``. When directories are listed with a trailing backslash (``/``) **all** files and directories contained within the listed directory will have the same owner UID, owner GID, and access mode applied recursively.

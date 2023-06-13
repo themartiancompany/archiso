@@ -1141,28 +1141,28 @@ _make_custom_airootfs() {
     _validate_file_err="" _validate_file_warn=""
     local passwd=()
     local filename permissions
+    local _etc="${profile}/airootfs/etc"
 
     install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
 
     if [[ -d "${profile}/airootfs" ]]; then
-        _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.conf" 
         if [[ "${airootfs_image_type}" == *luks ]] && \
            [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
              _resolve_secondary_encryption_key "keys"
              dongle_boot_encryption_key="${keys_encryption_key}"
-             cp "${profile}/airootfs/etc/mkinitcpio.conf" \
-                "${profile}/airootfs/etc/mkinitcpio.dongle_boot.conf"
+             cp "${_etc}/mkinitcpio.conf" \
+                "${_etc}/mkinitcpio.dongle_boot.conf"
              _build_archiso_mkinitcpio_conf \
-                 "${profile}/airootfs/etc/mkinitcpio.dongle_boot.conf" \
+                 "${_etc}/mkinitcpio.dongle_boot.conf" \
                  "${airootfs_encryption_key}"
              _resolve_secondary_encryption_key "recovery"
-             cp "${profile}/airootfs/etc/mkinitcpio.conf" \
+             cp "${_etc}/mkinitcpio.conf" \
                 "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
              _build_archiso_mkinitcpio_conf \
-                 "${profile}/airootfs/etc/mkinitcpio.recovery.conf" \
+                 "${_etc}/mkinitcpio.recovery.conf" \
                  "${recovery_encryption_key}"
         fi
-        _build_archiso_mkinitcpio_conf "${profile}/airootfs/etc/mkinitcpio.recovery.conf" 
+        _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" 
         _copy_custom_files "airootfs" "${pacstrap_dir}"
     fi
 }
