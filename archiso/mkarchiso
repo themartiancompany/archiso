@@ -1093,15 +1093,16 @@ _get_fs_type() {
 # $1: value in fs_images
 _get_fs_img() {
     local _fs_image="${1}"
-    local _img_name="$(echo "${_fs_image}" | tr -d '_')"
-    echo "${work_dir}/${_img_name}.$(_get_fs_ext ${_fs_image})"
+    local _img_name
+    _img_name="$(echo "${_fs_image}" | tr -d '_')"
+    echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
 }
 
 # Returns value for a given file system encryption key variable
 # $1: value in fs_images
 _get_fs_encryption_key() {
     local _name="${1}"
-    echo "echo \${${_name}_encryption_key}"
+    echo "$(echo \${${_name}_encryption_key})"
 }
 
 # Returns value for a given file system image type variable
@@ -1114,7 +1115,8 @@ _get_fs_image_type() {
 # $1: value in fs_images
 _get_iso_partition_label() {
     local _image="${1}"
-    local _suffix="$(echo "${_image}" | tr a-z A-Z)"
+    local _suffix
+    _suffix="$(echo "${_image}" | tr a-z A-Z)"
     echo "${iso_label}_${_suffix}" 
 }
 
@@ -1127,9 +1129,9 @@ _get_internal_size() {
         _ratio=60
     elif [[ "${_size}" -gt $((_s * 1000)) ]] && [[ "${_size}" -lt $((_S * 1000)) ]]; then
         _ratio=70
-    elif [[ "${_size}" -gt $((_S * 1000)) ]] && [[ "${_size}" -lt $((_m * 1000)) ]]; then
+    elif [[ "${_size}" -gt $((_S * 1000)) ]] && [[ "${_size}" -lt $((_l * 1000)) ]]; then
         _ratio=75
-    elif [[ "${_size}" -gt $((_m * 1000)) ]] && [[ "${_size}" -lt $((_M * 1000)) ]]; then
+    elif [[ "${_size}" -gt $((_l * 1000)) ]] && [[ "${_size}" -lt $((_L * 1000)) ]]; then
         _ratio=80
     else
         _ratio=85
@@ -1188,7 +1190,7 @@ _make_custom_airootfs() {
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _resolve_secondary_encryption_key "keys"
             if [[ "${airootfs_image_type}" == *luks ]]; then
-                 dongle_boot_encryption_key="${keys_encryption_key}"
+                dongle_boot_encryption_key="$(_get_fs_encryption_key keys)"
                 cp "${_etc}/mkinitcpio.conf" \
                    "${_etc}/mkinitcpio.dongle_boot.conf"
                 _build_archiso_mkinitcpio_conf \
@@ -1199,7 +1201,7 @@ _make_custom_airootfs() {
                    "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
                 _build_archiso_mkinitcpio_conf \
                     "${_etc}/mkinitcpio.recovery.conf" \
-                    "${recovery_encryption_key}"
+                    "$(_get_fs_encryption_key recovery)"
             fi
         fi
         _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" 
@@ -1730,12 +1732,12 @@ _build_bootloader_config() {
 _build_crypttab() {
     local _template="${1}"
     local _out="${2}"
-    if [[ "${persistent_image_type}" == *"luks" ]]; then
+    if [[ "$(_get_fs_image_type persistent)" == *"luks" ]]; then
         sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
     else
         sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
     fi
-    if [[ "${dongle_persistent_image_type}" == *"luks" ]]; then
+    if [[ "$(_get_fs_image_type dongle_persistent)" == *"luks" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_out}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
@@ -2458,6 +2460,7 @@ _prepare_recovery_image() {
     local _pacstrap_size
 
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+       # shellcheck disable=SC2154
        [[ "${recovery}" == "true" ]]; then
         if [ "${airootfs_size}" = "" ]; then
             _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
@@ -2465,7 +2468,7 @@ _prepare_recovery_image() {
             recovery_size="${airootfs_size}"
         fi
         _run_once "_mkrecovery_common"
-        _run_once "_mkrecovery_${recovery_image_type}"
+        _run_once "_mkrecovery_$(_get_fs_image_type recovery)"
     fi
 }
 
@@ -2555,7 +2558,7 @@ _prepare_persistent_image() {
     local crypttab="${profile}/airootfs/etc/crypttab"
     persistent_epoch="$(_get_epoch "persistent")"
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
-    dongle_persistent_epoch=$(_get_epoch "dongle_persistent")
+    # dongle_persistent_epoch=$(_get_epoch "dongle_persistent")
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
     local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
@@ -2587,7 +2590,7 @@ _prepare_dongle_boot_image() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         dongle_boot_size=169042 # 169.042 MB
         _run_once "_mkdongle_boot_common"
-        _run_once "_mkdongle_boot_${dongle_boot_image_type}"
+        _run_once "_mkdongle_boot_$(_get_fs_image_type dongle_boot)"
     fi
 }
 
@@ -2906,7 +2909,7 @@ _add_xorrisofs_options_boot() {
     if [[ "${buildmode}" == "dongle" ]]; then
         _img="$(_get_fs_img dongle_boot)"
     else
-        _img="${boot_img}"
+        _img="$(_get_fs_img boot)"
     fi
     _xorrisofs_options+=('-append_partition' '3' "${boot_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
@@ -2917,7 +2920,7 @@ _add_xorrisofs_options_boot() {
 _add_xorrisofs_options_recovery() {
     local _img _xorrisofs_options=("$@")
     recovery_guid="${luks_guid}"
-    _img="${recovery_img}"
+    _img="$(_get_fs_img recovery)"
     _xorrisofs_options+=('-append_partition' '4' "${recovery_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
@@ -2926,7 +2929,7 @@ _add_xorrisofs_options_recovery() {
 # $@: array
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
-    _img="${swap_img}"
+    _img="$(_get_fs_img swap)"
     if [[ "${swap_image_type}" == *"luks" ]]; then
         _swap_guid="${luks_guid}"
     else
@@ -2946,9 +2949,9 @@ _add_xorrisofs_options_persistent() {
         persistent_guid="${linux_guid}"
     fi
     if [[ "${buildmode}" == "dongle" ]]; then
-        _img="${dongle_persistent_img}"
+        _img="$(_get_fs_img dongle_persistent)"
     else
-        _img="${persistent_img}"
+        _img="$(_get_fs_img persistent)"
     fi
     _xorrisofs_options+=('-append_partition' '6' "${persistent_guid}" "${_img}")
     echo "${_xorrisofs_options[@]}"

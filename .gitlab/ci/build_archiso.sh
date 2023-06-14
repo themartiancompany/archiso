@@ -51,8 +51,7 @@ print_section_start() {
   # https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
   local _section="${1}"
   local _title="${2}"
-  local _section_start="\e[0Ksection_start:%(%s)T:%s\r\e[0K%s\n"
-  printf "${_section_start}" '-1' "${_section}" "${_title}"
+  printf "\e[0Ksection_start:%(%s)T:%s\r\e[0K%s\n" '-1' "${_section}" "${_title}"
 }
 
 # Section end display function
