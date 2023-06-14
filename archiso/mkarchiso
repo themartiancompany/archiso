@@ -1102,7 +1102,7 @@ _get_fs_img() {
 # $1: value in fs_images
 _get_fs_encryption_key() {
     local _name="${1}"
-    echo "$(echo \${${_name}_encryption_key})"
+    eval "echo \${${_name}_encryption_key}"
 }
 
 # Returns value for a given file system image type variable
@@ -2458,9 +2458,8 @@ _prepare_dongle_swap_image() {
 # Builds recovery filesystem image
 _prepare_recovery_image() {
     local _pacstrap_size
-
+    # shellcheck disable=SC2154
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       # shellcheck disable=SC2154
        [[ "${recovery}" == "true" ]]; then
         if [ "${airootfs_size}" = "" ]; then
             _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
