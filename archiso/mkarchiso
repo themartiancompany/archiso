@@ -988,7 +988,7 @@ _mkdongle_swap_common() {
     _encryption_key="$(_get_encryption_key dongle_swap)"
     _size="${dongle_swap_size}"
     _epoch="$(_get_epoch dongle_swap)"
-    if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
+    if [[ "$(_get_fs_image_type dongle_swap)" == *"luks" ]]; then
         _label="$(_get_iso_partition_label dongle_swap)"
     else
         _label="${_name}"
@@ -1004,11 +1004,11 @@ _mkrecovery_common() {
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     _name="recovery"
     _dir="${pacstrap_dir}"
-    _image_path="${recovery_img}"
+    _image_path="$(_get_fs_img recovery)"
     _size="${recovery_size}"
-    _encryption_key="${recovery_encryption_key}"
-    _epoch="$(_get_epoch "recovery")"
-    _label="${iso_label}_RECOVERY"
+    _encryption_key="$(_get_fs_encryption_key recovery)"
+    _epoch="$(_get_epoch recovery)"
+    _label="$(_get_iso_partition_label recovery)"
     _writable=false
     _grub=true
     _auto_size=""
@@ -1104,6 +1104,12 @@ _get_fs_encryption_key() {
     echo "echo \${${_name}_encryption_key}"
 }
 
+# Returns value for a given file system image type variable
+_get_fs_image_type() {
+    local _name="${1}"
+    echo "echo \${${_name}_encryption_key}"
+}
+
 # Returns partition label for a physical partition
 # $1: value in fs_images
 _get_iso_partition_label() {
@@ -1111,6 +1117,7 @@ _get_iso_partition_label() {
     local _suffix="$(echo "${_image}" | tr a-z A-Z)"
     echo "${iso_label}_${_suffix}" 
 }
+
 # Returns internal size for an internal partition from the outer image size
 # $1: outer partition size
 _get_internal_size() {
