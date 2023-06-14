@@ -801,7 +801,8 @@ _mkimg_erofs+luks() {
     _close_luks_device "${image_device}"
 }
 
-# Defines functions to create ext4 for file system images
+# Defines run once functions to create file system images
+# for all supported file system formats.
 for _img in "${fs_images[@]}"; do
     eval "_mk${_img}_ext4() {" \
              "${_img}_guid=${linux_guid};" \
@@ -881,12 +882,12 @@ done
 # Parameters for _mkairootfs_fs_type functions
 _mkairootfs_common() {
     _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _name="airootfs"
+    _name="$(_get_fs_name airootfs)"
     _dir="${pacstrap_dir}"
-    _image_path="${airootfs_dir}/airootfs."$(_get_fs_ext "airootfs")
+    _image_path="${airootfs_dir}/${_name}.$(_get_fs_ext airootfs)"
     _size="${airootfs_size}"
-    _encryption_key="${airootfs_encryption_key}"
-    _epoch="$(_get_epoch "airootfs")"
+    _encryption_key="$(_get_fs_encryption_key airootfs)"
+    _epoch="$(_get_epoch airootfs)"
     _label="${iso_label}"
     _writable=false
     _grub=false
@@ -899,13 +900,13 @@ _mkairootfs_common() {
 # Parameters for _mkkeys_fs_type functions
 _mkkeys_common() {
     _mkfs_options=("${keys_image_tool_options[@]}")
-    _name="keys"
+    _name="$(_get_fs_name keys)"
     _dir="${keys_dir}"
-    _image_path="${dongle_isofs_dir}/keys."$(_get_fs_ext "keys")
-    _encryption_key="${keys_encryption_key}"
+    _image_path="${dongle_isofs_dir}/${_name}.$(_get_fs_ext keys)"
+    _encryption_key="$(_get_fs_encryption_key keys)"
     _size="${keys_size}"
-    _epoch="$(_get_epoch "keys")"
-    _label="${iso_label}_KEYS"
+    _epoch="$(_get_epoch keys)"
+    _label="$(_get_iso_partition_label keys)"
     _writable="false"
     _grub="false"
     _auto_size=""
@@ -914,13 +915,13 @@ _mkkeys_common() {
 
 # Parameters for _mkpersistent_fs_type functions
 _mkpersistent_common() {
-    _name="persistent"
+    _name="$(_get_fs_name persistent)"
     _dir="${persistent_dir}"
-    _image_path="${persistent_img}"
-    _encryption_key="${persistent_encryption_key}"
+    _image_path="$(_get_fs_img persistent)"
+    _encryption_key="$(_get_fs_encryption_key persistent)"
     _size="${persistent_size}"
-    _epoch="$(_get_epoch "persistent")"
-    _label="${iso_label}_PERSISTENT"
+    _epoch="$(_get_epoch persistent)"
+    _label="$(_get_iso_partition_label persistent)"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _grub="false"
@@ -934,13 +935,13 @@ _mkpersistent_common() {
 
 # Parameters for _mkdongle_boot_fs_type functions
 _mkdongle_boot_common() {
-    _name="dongleboot"
+    _name="$(_get_fs_name dongle_boot)"
     _dir="${dongle_boot_dir}"
-    _image_path="${dongle_boot_img}"
-    _encryption_key="${dongle_boot_encryption_key}"
+    _image_path="$(_get_fs_img dongle_boot)"
+    _encryption_key="$(_get_fs_encryption_key dongle_boot)"
     _size="${dongle_boot_size}"
-    _epoch=$(_get_epoch "dongle_boot")
-    _label="${iso_label}_DONGLE_BOOT"
+    _epoch=$(_get_epoch dongle_boot)
+    _label="$(_get_iso_partition_label dongle_boot)"
     _writable="false"
     _grub="true"
     rm -f -- "${_image_path}"
@@ -950,11 +951,11 @@ _mkdongle_boot_common() {
 _mkdongle_persistent_common() {
     _name="donglepersistent"
     _dir="${dongle_persistent_dir}"
-    _image_path="${dongle_persistent_img}"
-    _encryption_key="${dongle_persistent_encryption_key}"
+    _image_path="$(_get_fs_img dongle_persistent)"
+    _encryption_key="$(_get_fs_encryption_key dongle_persistent)"
     _size="${dongle_persistent_size}"
-    _epoch="${dongle_persistent_epoch}"
-    _label="${iso_label}_DONGLE_PERSISTENT"
+    _epoch="$(_get_epoch dongle_persistent)"
+    _label="$(_get_iso_partition_label dongle_persistent)"
     _writable="true"
     _grub="false"
     rm -f -- "${_image_path}"
@@ -962,14 +963,14 @@ _mkdongle_persistent_common() {
 
 # Parameters for _mkswap_fs_type functions
 _mkswap_common() {
-    _name="swap"
-    _image_path="${swap_img}"
+    _name="$(_get_fs_name swap)"
+    _image_path="$(_get_fs_img swap)"
     # shellcheck disable=SC2154
-    _encryption_key="${swap_encryption_key}"
+    _encryption_key="$(_get_fs_encryption_key swap)"
     _size="${swap_size}"
     _epoch=$(_get_epoch "swap")
     if [[ "${swap_image_type}" == *"luks" ]]; then
-        _label="${iso_label}_SWAP"
+        _label="$(_get_iso_partition_label swap)"
     else
         _label="${_name}"
     fi
@@ -981,14 +982,14 @@ _mkswap_common() {
 
 # Parameters for _mkdongle_swap_fs_type functions
 _mkdongle_swap_common() {
-    _name="dongle_swap"
-    _image_path="${dongle_swap_img}"
+    _name="$(_get_fs_name dongle_swap)"
+    _image_path="$(_get_fs_img dongle_swap)"
     # shellcheck disable=SC2154
-    _encryption_key="${dongle_swap_encryption_key}"
+    _encryption_key="$(_get_encryption_key dongle_swap)"
     _size="${dongle_swap_size}"
-    _epoch="$(_get_epoch "dongle_swap")"
+    _epoch="$(_get_epoch dongle_swap)"
     if [[ "${dongle_swap_image_type}" == *"luks" ]]; then
-        _label="${iso_label}_DONGLE_SWAP"
+        _label="$(_get_iso_partition_label dongle_swap)"
     else
         _label="${_name}"
     fi
@@ -1071,8 +1072,16 @@ _get_fs_ext() {
     fi
 }
 
+# Returns image filename/device mapper name for a given
+# file system image.
+# $1: a value in 'fs_images' array
+_get_fs_name() {
+    local _image="${1}"
+    echo "$(echo "${_fs_image}" | tr -d '_')"
+}
+
 # Returns image extension for a given file system image
-# $1: a value in 'fs_images' (airootfs, persistent, ...)
+# $1: a value in the 'fs_images' array
 _get_fs_type() {
     local _image="${1}"
     local _no_luks
@@ -1080,29 +1089,45 @@ _get_fs_type() {
     echo "${_no_luks##*"+"}"
 }
 
-# Returns work directory path for a given file system image
+# Returns path for a given file system image in work directory
+# $1: value in fs_images
 _get_fs_img() {
     local _fs_image="${1}"
     local _img_name="$(echo "${_fs_image}" | tr -d '_')"
     echo "${work_dir}/${_img_name}.$(_get_fs_ext ${_fs_image})"
 }
 
+# Returns value for a given file system encryption key variable
+# $1: value in fs_images
+_get_fs_encryption_key() {
+    local _name="${1}"
+    echo "echo \${${_name}_encryption_key}"
+}
+
+# Returns partition label for a physical partition
+# $1: value in fs_images
+_get_iso_partition_label() {
+    local _image="${1}"
+    local _suffix="$(echo "${_image}" | tr a-z A-Z)"
+    echo "${iso_label}_${_suffix}" 
+}
 # Returns internal size for an internal partition from the outer image size
 # $1: outer partition size
 _get_internal_size() {
-    local _size="${1}"
-    if [[ "${_size}" -lt $((50 * 1000)) ]]; then
-        ratio=60
-    elif [[ "${_size}" -gt $((50 * 1000)) ]] && [[ "${_size}" -lt $((200 * 1000)) ]]; then
-        ratio=70
-    elif [[ "${_size}" -gt $((200 * 1000)) ]] && [[ "${_size}" -lt $((1000 * 1000)) ]]; then
-        ratio=75
-    elif [[ "${_size}" -gt $((200 * 1000)) ]] && [[ "${_size}" -lt $((5000000)) ]]; then
-        ratio=80
+    local _size="${1}" _ratio
+    local _s=50 _S=200 _l=1000 _L=5000
+    if [[ "${_size}" -lt $((_s * 1000)) ]]; then
+        _ratio=60
+    elif [[ "${_size}" -gt $((_s * 1000)) ]] && [[ "${_size}" -lt $((_S * 1000)) ]]; then
+        _ratio=70
+    elif [[ "${_size}" -gt $((_S * 1000)) ]] && [[ "${_size}" -lt $((_m * 1000)) ]]; then
+        _ratio=75
+    elif [[ "${_size}" -gt $((_m * 1000)) ]] && [[ "${_size}" -lt $((_M * 1000)) ]]; then
+        _ratio=80
     else
-        ratio=85
+        _ratio=85
     fi
-    echo $(((_size * ratio)/100))
+    echo $(((_size * _ratio)/100))
 }
 
 # Helper function to run functions only one time.
@@ -2872,7 +2897,7 @@ _add_xorrisofs_options_boot() {
     local _img _xorrisofs_options=("$@")
     boot_guid="${luks_guid}"
     if [[ "${buildmode}" == "dongle" ]]; then
-        _img="${dongle_boot_img}"
+        _img="$(_get_fs_img dongle_boot)"
     else
         _img="${boot_img}"
     fi
@@ -3311,7 +3336,7 @@ _build_dongle_image() {
         '-joliet'
         '-joliet-long'
         '-rational-rock'
-        '-volid' "${iso_label}_DONGLE"
+        '-volid' "$(_get_iso_partition_label "dongle")"
         '-appid' "\"${iso_application} dongle CD\""
         '-publisher' "\"${iso_publisher}\"" 
         '-preparer' "\"prepared by ${app_name}\""
