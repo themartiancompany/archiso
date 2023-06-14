@@ -1077,7 +1077,7 @@ _get_fs_ext() {
 # $1: a value in 'fs_images' array
 _get_fs_name() {
     local _image="${1}"
-    echo "$(echo "${_fs_image}" | tr -d '_')"
+    echo "${_fs_image}" | tr -d '_'
 }
 
 # Returns image extension for a given file system image
@@ -2670,7 +2670,7 @@ _validate_requirements_persistent_image_type_ext4() {
     fi
     if [ ! -e "${dongle_persistent_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${dongle_persistent_image_type}' for dongle persistent partition: udev rule not found!" 0
+        _msg_error "Validating '$(_get_fs_image_type dongle_persistent)' for dongle persistent partition: udev rule not found!" 0
     fi
 }
 
