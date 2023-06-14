@@ -1108,7 +1108,7 @@ _get_fs_encryption_key() {
 # Returns value for a given file system image type variable
 _get_fs_image_type() {
     local _name="${1}"
-    echo "echo \${${_name}_encryption_key}"
+    eval "echo \${${_name}_image_type}"
 }
 
 # Returns partition label for a physical partition
@@ -1116,7 +1116,7 @@ _get_fs_image_type() {
 _get_iso_partition_label() {
     local _image="${1}"
     local _suffix
-    _suffix="$(echo "${_image}" | tr a-z A-Z)"
+    _suffix="$(echo "${_image}" | tr '[:lower:]' '[:upper:]')"
     echo "${iso_label}_${_suffix}" 
 }
 
@@ -1190,6 +1190,7 @@ _make_custom_airootfs() {
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             _resolve_secondary_encryption_key "keys"
             if [[ "${airootfs_image_type}" == *luks ]]; then
+                # shellcheck disable=SC2034
                 dongle_boot_encryption_key="$(_get_fs_encryption_key keys)"
                 cp "${_etc}/mkinitcpio.conf" \
                    "${_etc}/mkinitcpio.dongle_boot.conf"
@@ -2551,6 +2552,7 @@ _copy_custom_files() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
+    local _img_type
     local pacstrap_dir="${work_dir}/${arch}/airootfs"
     local persistent_dir="${work_dir}/persistent"
     local persistent_dir_size persistent_epoch persistent_uuid
@@ -2578,9 +2580,11 @@ _prepare_persistent_image() {
         _run_once "_mkpersistent_common"
         _run_once "_mkpersistent_${persistent_image_type}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            [ "${dongle_persistent_size}" = "" ] && dongle_persistent_size="${persistent_size}"
+            [ "${dongle_persistent_size}" = "" ] && \
+                dongle_persistent_size="${persistent_size}"
             _run_once "_mkdongle_persistent_common"
-            _run_once "_mkdongle_persistent_${dongle_persistent_image_type}"
+            _img_type="$(_get_fs_image_type dongle_persistent)"
+            _run_once "_mkdongle_persistent_${_img_type}"
         fi
     fi
 }

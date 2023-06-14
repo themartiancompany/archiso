@@ -61,8 +61,7 @@ print_section_end() {
   # https://docs.gitlab.com/ee/ci/jobs/#custom-collapsible-sections
   local _section
   _section="${1}"
-  local _Section_end="\e[0Ksection_end:%(%s)T:%s\r\e[0K\n"
-  printf "${_section_end}" '-1' "${_section}"
+  printf "\e[0Ksection_end:%(%s)T:%s\r\e[0K\n" '-1' "${_section}"
 }
 
 # Cleans up temporary directories
