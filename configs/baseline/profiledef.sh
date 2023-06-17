@@ -8,10 +8,6 @@ iso_application="Arch Linux baseline"
 iso_version="$(date +%Y.%m.%d)"
 install_dir="arch"
 buildmodes=('iso' 'dongle')
-images=(["cdr"]="700000:iso:1"
-	["dvd"]="4200000:iso:1"
-	["ssd"]="120000000:iso:1"
-	["usb"]="64000000:dongle:1")
 bootmodes=('bios.grub.mbr'
            'bios.grub.eltorito'
            'uefi-ia32.grub.esp'
@@ -23,11 +19,11 @@ pacman_conf="pacman.conf"
 airootfs_image_type="erofs"
 airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 airootfs_encryption_key="auto"
-persistent_size=200000
+persistent_size=200000 # 200MB
 persistent_image_type="ext4+luks"
 persistent_encryption_key="auto"
 dongle_persistent_encryption_key="auto"
-swap_size=250000
+swap_size=250000 # 250MB
 swap_image_type="swap+luks"
 keys_image_type="erofs+luks"
 keys_encryption_key="auto"
