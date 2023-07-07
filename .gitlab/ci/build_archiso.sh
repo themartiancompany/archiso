@@ -250,7 +250,7 @@ setup_repo() {
       		          "${_src_profile}/pacman.conf" \
       		          "${_profile}/pacman.conf"
     pacman --config "${_profile}/pacman.conf" -Sy
-    pacman --config "${_profile}/pacman.conf" -Sdd "${_packages[@]}" # --noconfirm
+    pacman --config "${_profile}/pacman.conf" -Sdd "${_packages[@]}" --noconfirm
   fi
   print_section_end "setup_repo"
 }
