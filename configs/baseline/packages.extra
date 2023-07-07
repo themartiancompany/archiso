@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+_packages=(
+    "mkinitcpio-archiso-encryption-git"
+    "cryptsetup-nested-cryptkey"
+    "archiso-encryption-git")

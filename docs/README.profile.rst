@@ -175,6 +175,12 @@ and blank lines are ignored.
 This file is required when generating ISO images using the ``iso`` or
 ``netboot`` build modes.
 
+packages.extra
+=============
+
+Packages which are needed to build the ISO and are still not present
+in main repositories.
+
 pacman.conf
 ===========
 
