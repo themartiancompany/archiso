@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
 _setup_user() {
-  useradd user
-  mkdir -p /home/user
-  chown -R user /home/user
-  chmod 700 /home/user
+  local _user="${1}"
+  local _home="/home/${_user}"
+  useradd "${_user}"
+  mkdir -p "${_home}"
+  chown -R "${_user}" "${_home}"
+  chmod 700 "${_home}"
 }
 
-_setup_user
+_user="${1}"
+
+_setup_user "${_user}"
