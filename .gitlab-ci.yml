@@ -26,7 +26,8 @@ check:
   before_script:
     - >
       pacman -Sy --needed --noconfirm archlinux-keyring
-      
+    
+    - >  
       pacman -Syu --needed --noconfirm arch-install-scripts
                                        bash
                                        dosfstools
@@ -45,6 +46,7 @@ check:
                                        zsync
 
       # Extra packages dependencies
+    - >
       pacman -Syu --needed --noconfirm asciidoctor
                                        fakeroot
                                        gcc
