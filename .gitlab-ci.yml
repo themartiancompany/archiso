@@ -46,15 +46,22 @@ check:
       squashfs-tools
       zsync
 
-      # Extra packages dependencies
+    # Extra packages dependencies
+    # archiso-encryption-git
     - >
       pacman -Syu --needed --noconfirm
       asciidoctor
       fakeroot
-      gcc
       make
       shellcheck
       shfmt
+
+      # cryptsetup-sigfile
+    - >
+      pacman -Syu --needed --noconfirm
+      gcc
+      json-c
+ 
   script:
     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
   stage: build
