@@ -236,7 +236,6 @@ setup_repo() {
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
   _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
   print_section_start "setup_repo" "${_setup_repo_msg}"
-  "${_setup_user}" "${_user}"
   # shellcheck disable=SC1091
   if [ -e "${_packages_extra}" ]; then
     source "${_packages_extra}"
@@ -244,6 +243,7 @@ setup_repo() {
   if [[ "${_packages[*]}" != "" ]] ; then
     cp -r "${_src_profile}" "${_home}"
     chown -R "${_user}" "${_profile}"
+    "${_setup_user}" "${_user}"
     su user -c "${_build_repo_cmd}"
     #shellcheck disable=SC1091
     # source "${_packages_extra}"
