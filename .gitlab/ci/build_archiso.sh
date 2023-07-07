@@ -205,9 +205,11 @@ create_ephemeral_keys() {
 
 setup_repo() {
   local _build_repo_options=() \
+	_ci_bin \
 	_home \
         _packages=() \
 	_packages_extra \
+	_profile \
 	_repo \
         _server="/tmp/archiso-profiles/${profile}" \
         _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
@@ -220,11 +222,13 @@ setup_repo() {
     "${_server}"
   )
   _home="/home/${_user}"
-  _src_path="$(pwd)"
-  _packages_extra="${_src}/configs/${profile}/packages.extra" \
-  _build_repo="${_src}/.gitlab/ci/build_repo.sh"
-  _setup_user="${_src}/.gitlab/ci/setup_user.sh"
-  _gen_pacman_conf="${_src}/.gitlab/ci/set_custom_repo.sh"
+  _src="$(pwd)"
+  _ci_bin="${_src}/.gitlab/ci"
+  _profile="${_src}/configs/${profile}"
+  _packages_extra="${_profile}/packages.extra"
+  _build_repo="${_ci_bin}/build_repo.sh"
+  _setup_user="${_ci_bin}/setup_user.sh"
+  _gen_pacman_conf="${_ci_bin}/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
@@ -233,14 +237,11 @@ setup_repo() {
   "${_setup_user}" "${_user}"
   # debug
   # shellcheck disable=SC1091
-  ls
-  cat "${_packages_extra}"
-  echo "${_packages_extra}"
   if [ -e "${_packages_extra}" ]; then
     source "${_packages_extra}"
   fi
   if [[ "${_packages[*]}" != "" ]] ; then
-    cp -r "${profile}" "${_home}"
+    cp -r "${_profile}" "${_home}"
     chown -R "${_user}" "${_home}/${profile}"
     su user -c "${_build_repo_cmd}"
     #shellcheck disable=SC1091
