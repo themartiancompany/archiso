@@ -248,7 +248,7 @@ setup_repo() {
 }
 
 run_mkarchiso() {
-  local _mkarchiso="./config/mkarchiso"
+  local _mkarchiso="./archiso/mkarchiso"
   local _archiso_options=()
   mkdir -p "${output}/" "${tmpdir}/"
   create_ephemeral_keys
