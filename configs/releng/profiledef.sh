@@ -42,6 +42,7 @@ file_permissions=(
   ["/usr/local/bin/choose-mirror"]="0:0:755"
   ["/usr/local/bin/Installation_guide"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
+  ["/usr/local/bin/missing-dongle"]="0:0:755"
   ["/usr/local/bin/setup-persistent-storage"]="0:0:755"
   ["/usr/local/bin/user-setup"]="0:0:755"
   ["/usr/local/bin/resolve-dev-mapper-donglepersistent"]="0:0:755"
