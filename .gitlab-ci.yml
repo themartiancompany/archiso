@@ -13,7 +13,7 @@ check:
     # keyring for longer:
     # https://gitlab.archlinux.org/archlinux/archlinux-keyring/-/issues/4
     - pacman -Sy --needed --noconfirm archlinux-keyring
-    - pacman --noconfirm -Syu --needed gcc make shellcheck
+    - pacman --noconfirm -Syu --needed make shellcheck
   script:
     - make check
   stage: check
@@ -26,7 +26,8 @@ check:
   before_script:
     - pacman -Sy --needed --noconfirm archlinux-keyring
     - pacman -Syu --needed --noconfirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils qemu-headless squashfs-tools zsync
-    - pacman -Syu --needed --noconfirm fakeroot
+    # Extra packages dependencies
+    - pacman -Syu --needed --noconfirm gcc fakeroot
   script:
     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
   stage: build
