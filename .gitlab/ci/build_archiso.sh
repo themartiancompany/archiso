@@ -207,7 +207,7 @@ setup_repo() {
   local _build_repo_options=() \
 	_home \
         _packages=() \
-	_packages_extra="${profile}/packages.extra"
+	_packages_extra="${profile}/packages.extra" \
 	_repo \
         _server="/tmp/archiso-profiles/${profile}" \
         _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
@@ -229,9 +229,6 @@ setup_repo() {
   print_section_start "setup_repo" "${_setup_repo_msg}"
   "${_setup_user}" "${_user}"
   # debug
-  echo $(pwd)
-  echo "${_packages_extra}"
-  cat "${_packages_extra}"
   # shellcheck disable=SC1091
   if [ -e "${_packages_extra}" ]; then
     source "${_packages_extra}"
