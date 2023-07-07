@@ -2,5 +2,5 @@
 
 _packages=(
     "mkinitcpio-archiso-encryption-git"
-    "cryptsetup-nested-cryptkey"
+    "cryptsetup-sigfile"
     "archiso-encryption-git")
