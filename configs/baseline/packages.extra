@@ -3,4 +3,5 @@
 _packages=(
     "mkinitcpio-archiso-encryption-git"
     "cryptsetup-sigfile"
-    "archiso-encryption-git")
+    # "archiso-encryption-git"
+)
