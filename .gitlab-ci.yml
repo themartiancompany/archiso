@@ -60,7 +60,7 @@ check:
     - >
       pacman -Syu --needed --noconfirm
       gcc
-      json-c
+      pkgconf
   script:
     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
   stage: build
