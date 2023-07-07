@@ -27,7 +27,7 @@ check:
     - pacman -Sy --needed --noconfirm archlinux-keyring
     - pacman -Syu --needed --noconfirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils qemu-headless squashfs-tools zsync
     # Extra packages dependencies
-    - pacman -Syu --needed --noconfirm fakeroot gcc shellcheck shfmt
+    - pacman -Syu --needed --noconfirm fakeroot gcc make shellcheck shfmt
   script:
     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
   stage: build
