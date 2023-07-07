@@ -206,12 +206,12 @@ create_ephemeral_keys() {
 setup_repo() {
   local _build_repo_options=() \
 	_home \
-	_repo \
-	_server \
-	_setup_user \
-        _server="/tmp/archiso-profiles/${profile}" \
         _packages=() \
 	_packages_extra="${profile}/packages.extra"
+	_repo \
+        _server="/tmp/archiso-profiles/${profile}" \
+        _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
+	_setup_user \
         _user="user"
   _build_repo_options=(
     'src'
@@ -226,8 +226,12 @@ setup_repo() {
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
   _build_repo_cmd="cd ${profile} && ${_build_repo} ${_build_repo_options[*]}"
-  print_section_start "setup_repo" "Setup ${profile} ${buildmode} additional packages"
+  print_section_start "setup_repo" "${_setup_repo_msg}"
   "${_setup_user}" "${_user}"
+  # debug
+  echo $(pwd)
+  echo "${_packages_extra}"
+  cat "${_packages_extra}"
   # shellcheck disable=SC1091
   if [ -e "${_packages_extra}" ]; then
     source "${_packages_extra}"
