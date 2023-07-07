@@ -205,6 +205,7 @@ create_ephemeral_keys() {
 
 setup_repo() {
   local _build_repo_options=() \
+	_build_repo_cmd \
 	_ci_bin \
 	_home \
         _packages=() \
@@ -248,8 +249,8 @@ setup_repo() {
     # source "${_packages_extra}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
-      		    "${profile}/pacman.conf" \
-      		    "${profile}/pacman.conf"
+      		          "${profile}/pacman.conf" \
+      		          "${profile}/pacman.conf"
     pacman --config "${profile}/pacman.conf" -Sy "${_packages[@]}"
   fi
   print_section_end "setup_repo"
