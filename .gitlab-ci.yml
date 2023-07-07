@@ -13,7 +13,7 @@ check:
     # keyring for longer:
     # https://gitlab.archlinux.org/archlinux/archlinux-keyring/-/issues/4
     - pacman -Sy --needed --noconfirm archlinux-keyring
-    - pacman --noconfirm -Syu --needed make shellcheck
+    - pacman --noconfirm -Syu --needed gcc make shellcheck
   script:
     - make check
   stage: check
