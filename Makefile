@@ -9,7 +9,8 @@ PROFILE_DIR=$(DESTDIR)$(PREFIX)/share/archiso
 
 DOC_FILES=$(wildcard docs/*) $(wildcard *.rst)
 SCRIPT_FILES=$(wildcard archiso/*) $(wildcard scripts/*.sh) $(wildcard .gitlab/ci/*.sh) \
-             $(wildcard configs/*/profiledef.sh) $(wildcard configs/*/airootfs/usr/local/bin/*)
+             $(wildcard configs/*/profiledef.sh) $(wildcard configs/*/airootfs/usr/local/bin/*) \
+             $(wildcard configs/*/packages.extra)
 
 all:
 
