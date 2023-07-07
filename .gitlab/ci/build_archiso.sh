@@ -236,8 +236,8 @@ setup_repo() {
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
   _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
   print_section_start "setup_repo" "${_setup_repo_msg}"
-  # shellcheck disable=SC1091
   if [ -e "${_packages_extra}" ]; then
+    #shellcheck disable=SC1091
     source "${_packages_extra}"
   fi
   if [[ "${_packages[*]}" != "" ]] ; then
@@ -245,8 +245,6 @@ setup_repo() {
     cp -r "${_src_profile}" "${_home}"
     chown -R "${_user}" "${_profile}"
     su user -c "${_build_repo_cmd}"
-    #shellcheck disable=SC1091
-    # source "${_packages_extra}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
       		          "${_src_profile}/pacman.conf" \
