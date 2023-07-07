@@ -237,7 +237,7 @@ setup_repo() {
   _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
   print_section_start "setup_repo" "${_setup_repo_msg}"
   if [ -e "${_packages_extra}" ]; then
-    #shellcheck disable=SC1091
+    #shellcheck disable=SC1090
     source "${_packages_extra}"
   fi
   if [[ "${_packages[*]}" != "" ]] ; then
