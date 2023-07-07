@@ -22,7 +22,7 @@ _build_pkg() {
     local _mode="${2}"
     local _pwd
     _pwd="$(pwd)"
-
+    echo "building ${_pkgname}"
     if [ "${_mode}" = "src" ]; then
         _makepkg "${_pkgname}"
     elif [ "${_mode}" = "fakepkg" ]; then
