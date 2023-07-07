@@ -241,9 +241,9 @@ setup_repo() {
     source "${_packages_extra}"
   fi
   if [[ "${_packages[*]}" != "" ]] ; then
+    "${_setup_user}" "${_user}"
     cp -r "${_src_profile}" "${_home}"
     chown -R "${_user}" "${_profile}"
-    "${_setup_user}" "${_user}"
     su user -c "${_build_repo_cmd}"
     #shellcheck disable=SC1091
     # source "${_packages_extra}"
