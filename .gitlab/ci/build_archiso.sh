@@ -249,7 +249,7 @@ setup_repo() {
                           "${_server}" \
       		          "${_src_profile}/pacman.conf" \
       		          "${_profile}/pacman.conf"
-    pacman --config "${_profile}/pacman.conf" --noconfirm -Sddy "${_packages[@]}"
+    pacman --config "${_profile}/pacman.conf" -Sddy "${_packages[@]}" --noconfirm
   fi
   print_section_end "setup_repo"
 }
