@@ -31,6 +31,7 @@ codesigning_dir=""
 codesigning_cert=""
 codesigning_key=""
 pgp_key_id=""
+pgp_sender=""
 
 signature_info() {
   sig_country="DE"
