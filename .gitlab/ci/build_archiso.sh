@@ -233,7 +233,7 @@ setup_repo() {
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
-  _build_repo_cmd="cd ${_home}/${profile} && ${_build_repo} ${_build_repo_options[*]}"
+  _build_repo_cmd="cd ${_home}/${_profile} && ${_build_repo} ${_build_repo_options[*]}"
   print_section_start "setup_repo" "${_setup_repo_msg}"
   "${_setup_user}" "${_user}"
   # shellcheck disable=SC1091
@@ -248,9 +248,9 @@ setup_repo() {
     # source "${_packages_extra}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
-      		          "${profile}/pacman.conf" \
-      		          "${profile}/pacman.conf"
-    pacman --config "${profile}/pacman.conf" -Sy "${_packages[@]}"
+      		          "${_profile}/pacman.conf" \
+      		          "${_home}${profile}/pacman.conf"
+    pacman --config "${_home}/${profile}/pacman.conf" -Sy "${_packages[@]}"
   fi
   print_section_end "setup_repo"
 }
