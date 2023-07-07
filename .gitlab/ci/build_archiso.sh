@@ -210,12 +210,12 @@ setup_repo() {
 	_home \
         _packages=() \
 	_packages_extra \
-	_profile \
 	_repo \
         _server="/tmp/archiso-profiles/${profile}" \
         _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
 	_setup_user \
 	_src \
+	_src_profile \
         _user="user"
   _build_repo_options=(
     'src'
@@ -223,17 +223,18 @@ setup_repo() {
     "${_server}"
   )
   _home="/home/${_user}"
+  _profile="${_home}/${profile}"
   _src="$(pwd)"
   _ci_bin="${_src}/.gitlab/ci"
-  _profile="${_src}/configs/${profile}"
-  _packages_extra="${_profile}/packages.extra"
+  _src_profile="${_src}/configs/${profile}"
+  _packages_extra="${_src_profile}/packages.extra"
   _build_repo="${_ci_bin}/build_repo.sh"
   _setup_user="${_ci_bin}/setup_user.sh"
   _gen_pacman_conf="${_ci_bin}/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
-  _build_repo_cmd="cd ${_home}/${_profile} && ${_build_repo} ${_build_repo_options[*]}"
+  _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
   print_section_start "setup_repo" "${_setup_repo_msg}"
   "${_setup_user}" "${_user}"
   # shellcheck disable=SC1091
@@ -241,16 +242,16 @@ setup_repo() {
     source "${_packages_extra}"
   fi
   if [[ "${_packages[*]}" != "" ]] ; then
-    cp -r "${_profile}" "${_home}"
-    chown -R "${_user}" "${_home}/${profile}"
+    cp -r "${_src_profile}" "${_home}"
+    chown -R "${_user}" "${_profile}"
     su user -c "${_build_repo_cmd}"
     #shellcheck disable=SC1091
     # source "${_packages_extra}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
-      		          "${_profile}/pacman.conf" \
-      		          "${_home}${profile}/pacman.conf"
-    pacman --config "${_home}/${profile}/pacman.conf" -Sy "${_packages[@]}"
+      		          "${_src_profile}/pacman.conf" \
+      		          "${_profile}/pacman.conf"
+    pacman --config "${_profile}/pacman.conf" -Sy "${_packages[@]}"
   fi
   print_section_end "setup_repo"
 }
