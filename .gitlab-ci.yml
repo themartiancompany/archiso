@@ -56,12 +56,11 @@ check:
       shellcheck
       shfmt
 
-      # cryptsetup-sigfile
+    # cryptsetup-sigfile
     - >
       pacman -Syu --needed --noconfirm
       gcc
       json-c
- 
   script:
     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
   stage: build
