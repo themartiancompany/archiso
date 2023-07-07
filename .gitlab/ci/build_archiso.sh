@@ -207,11 +207,12 @@ setup_repo() {
   local _build_repo_options=() \
 	_home \
         _packages=() \
-	_packages_extra="${profile}/packages.extra" \
+	_packages_extra \
 	_repo \
         _server="/tmp/archiso-profiles/${profile}" \
         _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
 	_setup_user \
+	_src \
         _user="user"
   _build_repo_options=(
     'src'
@@ -219,9 +220,11 @@ setup_repo() {
     "${_server}"
   )
   _home="/home/${_user}"
-  _build_repo="$(pwd)/.gitlab/ci/build_repo.sh"
-  _setup_user="$(pwd)/.gitlab/ci/setup_user.sh"
-  _gen_pacman_conf="$(pwd)/.gitlab/ci/set_custom_repo.sh"
+  _src_path="$(pwd)"
+  _packages_extra="${_src}/configs/${profile}/packages.extra" \
+  _build_repo="${_src}/.gitlab/ci/build_repo.sh"
+  _setup_user="${_src}/.gitlab/ci/setup_user.sh"
+  _gen_pacman_conf="${_src}/.gitlab/ci/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
