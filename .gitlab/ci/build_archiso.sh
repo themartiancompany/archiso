@@ -230,6 +230,9 @@ setup_repo() {
   "${_setup_user}" "${_user}"
   # debug
   # shellcheck disable=SC1091
+  ls
+  cat "${_packages_extra}"
+  echo "${_packages_extra}"
   if [ -e "${_packages_extra}" ]; then
     source "${_packages_extra}"
   fi
