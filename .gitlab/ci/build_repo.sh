@@ -56,7 +56,8 @@ _build_repo() {
     cd repo || exit
     gpg --recv-keys "D9B0577BD93E98FC" # cryptsetup
     # shellcheck disable=SC2154
-    for _pkg in "${packages[@]}"; do
+    echo "building ${_packages[@]}"
+    for _pkg in "${_packages[@]}"; do
         _build_pkg "${_pkg}" "${_mode}"
     done
     cd ..
