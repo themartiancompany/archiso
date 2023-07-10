@@ -204,7 +204,8 @@ create_ephemeral_keys() {
 }
 
 setup_repo() {
-  local _build_repo \
+  local _awk_split_cmd \
+	_build_repo \
 	_build_repo_options=() \
 	_build_repo_cmd \
 	_ci_bin \
@@ -230,6 +231,7 @@ setup_repo() {
     'packages.extra'
     "${_server}"
   )
+  _awk_split_cmd='{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }'
   _home="/home/${_user}"
   _profile="${_home}/${profile}"
   _pacman_conf="${_profile}/pacman.conf"
@@ -264,9 +266,12 @@ setup_repo() {
     pacman "${_pacman_opts[@]}" -Sy
     for _pkg in "${_packages[@]}"; do
       echo "Removing conflicts for ${_pkg}"
-      _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}" | grep Conflicts)"
-      _conflicts=("$(echo ${_conflicts_line##*:} \
-	          | awk '{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }')")
+      _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}" \
+	                 | grep Conflicts)"
+      _conflicts=(
+        "$(echo ${_conflicts_line##*:} \
+	   | awk "${_awk_split_cmd}")"
+      )
       for _conflict in "${_conflicts[@]}"; do
 	echo "Removing ${_conflict}"
         pacman "${_pacman_opts[@]}" -Rdd "${_conflict}" || true
