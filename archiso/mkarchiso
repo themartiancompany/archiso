@@ -3492,6 +3492,7 @@ _validate_options() {
 _set_no_override() {
     local _var="${1}"
     local _value="${2}"
+    _msg_info "Setting ${_var} to ${_value}"
     eval "[[ -n \$${_var} ]] || ${_var}=${_value}"
 }
 
