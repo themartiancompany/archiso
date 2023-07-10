@@ -16,7 +16,8 @@ _makepkg() {
     fi
     git clone "${_url}/${_pkgname}"
     cd "${_pkgname}" || exit
-    _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" 'PGBUILD'))
+    _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" \
+	                 'PKGBUILD'))
     echo "Downloading keys: '${_keys}'"
     gpg --recv-keys "${_validgpgkeys[@]}"
     makepkg
