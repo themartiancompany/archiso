@@ -5,7 +5,8 @@ unset mode
 _makepkg() {
     local _pkgname="${1}" \
           _repo="${2}" \
-          _user="${3}" \
+          _user="${3}"
+    local _awk_gpgkeys_cmd='/validgpgkeys=/{flag=1;next}/\)/flag' \
           _validgpgkeys
     if [[ "${_repo}" == "" ]] || [[ "${_repo}" == "aur" ]] ; then
         _url="https://aur.archlinux.org"
@@ -14,7 +15,7 @@ _makepkg() {
     fi
     git clone "${_url}/${_pkgname}"
     cd "${_pkgname}" || exit
-    _validgpgkeys=($(awk '/validgpgkeys=/{flag=1;next}/\)/flag' 'PGBUILD')
+    _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" 'PGBUILD')
     echo "Downloading keys: '${_keys}'"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
