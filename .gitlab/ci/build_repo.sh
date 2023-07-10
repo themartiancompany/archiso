@@ -18,12 +18,15 @@ _makepkg() {
 }
 
 _build_pkg() {
-    local _pkgname="${1}"
-    local _mode="${2}"
-    local _pwd
+    local _pkgname="${1}" \
+          _mode="${2}"  \
+          _keys \
+          _pwd
     _pwd="$(pwd)"
     echo "building ${_pkgname}"
     if [ "${_mode}" = "src" ]; then
+	_validgpgkeys=($(awk '/validgpgkeys=/{flag=1;next}/\)/flag' 'PGBUILD')
+	echo "Downloading keys: '${_keys}'"
         _makepkg "${_pkgname}"
     elif [ "${_mode}" = "fakepkg" ]; then
         cd "${_server}" || exit
