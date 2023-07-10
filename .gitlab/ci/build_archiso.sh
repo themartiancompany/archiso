@@ -204,12 +204,19 @@ create_ephemeral_keys() {
 }
 
 setup_repo() {
-  local _build_repo_options=() \
+  local _build_repo \
+	_build_repo_options=() \
 	_build_repo_cmd \
 	_ci_bin \
+	_conflicts=() \
+	_conflicts_line \
+	_gen_pacman_conf \
 	_home \
         _packages=() \
 	_packages_extra \
+	_pacman_conf \
+	_pacman_opts=() \
+	_pkg \
 	_repo \
         _server="/tmp/archiso-profiles/${profile}" \
         _setup_repo_msg="Setup ${profile} ${buildmode} additional packages" \
@@ -224,6 +231,9 @@ setup_repo() {
   )
   _home="/home/${_user}"
   _profile="${_home}/${profile}"
+  _pacman_conf="${_profile}/pacman.conf"
+  _pacman_opts+=(--config "${_pacman_conf}"
+                 --noconfirm)
   _src="$(pwd)"
   _ci_bin="${_src}/.gitlab/ci"
   _src_profile="${_src}/configs/${profile}"
@@ -235,6 +245,7 @@ setup_repo() {
   [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
   [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
   _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
+
   print_section_start "setup_repo" "${_setup_repo_msg}"
   if [ -e "${_packages_extra}" ]; then
     #shellcheck disable=SC1090
@@ -248,9 +259,15 @@ setup_repo() {
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
       		          "${_src_profile}/pacman.conf" \
-      		          "${_profile}/pacman.conf"
-    pacman --config "${_profile}/pacman.conf" -Sy
-    yes 2|pacman --config "${_profile}/pacman.conf" -Sdd "${_packages[@]}" --noconfirm
+      		          "${_pacman_conf}"
+    pacman "${_pacman_opts[@]}" -Sy
+    for _pkg in "${_packages[@]}"; do
+      _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}") | grep Conflicts"
+      _conflicts=("$(echo ${_conflicts_line##*:} \
+	          | awk '{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }')")
+      pacman "${_pacman_opts[@]}" -Rdd "${_conflicts[@]}"
+    done
+    pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}"
   fi
   print_section_end "setup_repo"
 }
