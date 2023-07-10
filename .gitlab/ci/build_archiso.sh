@@ -208,6 +208,7 @@ setup_repo() {
 	_build_repo_options=() \
 	_build_repo_cmd \
 	_ci_bin \
+	_conflict \
 	_conflicts=() \
 	_conflicts_line \
 	_gen_pacman_conf \
@@ -266,7 +267,9 @@ setup_repo() {
       _conflicts=("$(echo ${_conflicts_line##*:} \
 	          | awk '{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }')")
       # pacman "${_pacman_opts[@]}" -Rdd "${_conflicts[@]}" || true
-      pacman -Rdd "${_conflicts[@]}" || true
+      for _conflict in "${_conflicts[@]}"; do
+        pacman -Rdd "${_conflict}" || true
+      done
     done
     pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}"
   fi
