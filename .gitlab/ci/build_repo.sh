@@ -59,7 +59,6 @@ _build_repo() {
     chown "$(id -u):$(id -g)" "${_server}"
     chmod 700 "${_server}" 
     cd repo || exit
-    gpg --recv-keys "D9B0577BD93E98FC" # cryptsetup
     # shellcheck disable=SC2154
     echo "building ${_packages[*]}"
     for _pkg in "${_packages[@]}"; do
