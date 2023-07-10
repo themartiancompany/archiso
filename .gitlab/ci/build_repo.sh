@@ -3,9 +3,10 @@
 unset mode
 
 _makepkg() {
-    local _pkgname="${1}"
-    local _repo="${2}"
-    local _user="${3}"
+    local _pkgname="${1}" \
+          _repo="${2}" \
+          _user="${3}" \
+          _validgpgkeys
     if [[ "${_repo}" == "" ]] || [[ "${_repo}" == "aur" ]] ; then
         _url="https://aur.archlinux.org"
     elif [ "${_repo}" == "archlinux" ]; then
@@ -22,7 +23,6 @@ _makepkg() {
 _build_pkg() {
     local _pkgname="${1}" \
           _mode="${2}"  \
-          _keys \
           _pwd
     _pwd="$(pwd)"
     echo "building ${_pkgname}"
