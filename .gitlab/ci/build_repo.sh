@@ -13,6 +13,8 @@ _makepkg() {
     fi
     git clone "${_url}/${_pkgname}"
     cd "${_pkgname}" || exit
+    _validgpgkeys=($(awk '/validgpgkeys=/{flag=1;next}/\)/flag' 'PGBUILD')
+    echo "Downloading keys: '${_keys}'"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
 }
@@ -25,8 +27,6 @@ _build_pkg() {
     _pwd="$(pwd)"
     echo "building ${_pkgname}"
     if [ "${_mode}" = "src" ]; then
-	_validgpgkeys=($(awk '/validgpgkeys=/{flag=1;next}/\)/flag' 'PGBUILD')
-	echo "Downloading keys: '${_keys}'"
         _makepkg "${_pkgname}"
     elif [ "${_mode}" = "fakepkg" ]; then
         cd "${_server}" || exit
