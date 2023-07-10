@@ -16,10 +16,8 @@ _makepkg() {
     fi
     git clone "${_url}/${_pkgname}"
     cd "${_pkgname}" || exit
-    _validpgpkeys=($(awk "${_awk_pgpkeys_cmd}" \
-	                 'PKGBUILD'))
-    echo "Downloading keys: '${_validpgpkeys[@]}'"
-    gpg --recv-keys "${_validpgpkeys[@]}"
+    source 'PKGBUILD'
+    gpg --recv-keys "${validpgpkeys[@]}"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
 }
