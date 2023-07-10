@@ -18,9 +18,7 @@ _makepkg() {
     cd "${_pkgname}" || exit
     _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" 'PGBUILD'))
     echo "Downloading keys: '${_keys}'"
-    for _key in "${_validgpgkeys[@]}"; do
-
-    done
+    gpg --recv-keys "${_validgpgkeys[@]}"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
 }
