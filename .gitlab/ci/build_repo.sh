@@ -7,7 +7,7 @@ _makepkg() {
           _repo="${2}" \
           _user="${3}"
     local _key \
-	  _awk_gpgkeys_cmd='/validgpgkeys=/{flag=1;next}/\)/flag' \
+	  _awk_gpgkeys_cmd='/validgpgkeys=/{flag=1;next}/\)/{flag=0}flag' \
           _validgpgkeys
     if [[ "${_repo}" == "" ]] || [[ "${_repo}" == "aur" ]] ; then
         _url="https://aur.archlinux.org"
@@ -18,7 +18,7 @@ _makepkg() {
     cd "${_pkgname}" || exit
     _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" \
 	                 'PKGBUILD'))
-    echo "Downloading keys: '${_keys}'"
+    echo "Downloading keys: '${_validgpgkeys}'"
     gpg --recv-keys "${_validgpgkeys[@]}"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
