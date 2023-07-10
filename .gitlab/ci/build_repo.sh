@@ -7,8 +7,8 @@ _makepkg() {
           _repo="${2}" \
           _user="${3}"
     local _key \
-	  _awk_gpgkeys_cmd='/validgpgkeys=/{flag=1;next}/\)/{flag=0}flag' \
-          _validgpgkeys
+	  _awk_pgpkeys_cmd='/validpgpkeys=/{flag=1;next}/\)/{flag=0}flag' \
+          _validpgpkeys
     if [[ "${_repo}" == "" ]] || [[ "${_repo}" == "aur" ]] ; then
         _url="https://aur.archlinux.org"
     elif [ "${_repo}" == "archlinux" ]; then
@@ -16,10 +16,10 @@ _makepkg() {
     fi
     git clone "${_url}/${_pkgname}"
     cd "${_pkgname}" || exit
-    _validgpgkeys=($(awk "${_awk_gpgkeys_cmd}" \
+    _validpgpkeys=($(awk "${_awk_pgpkeys_cmd}" \
 	                 'PKGBUILD'))
-    echo "Downloading keys: '${_validgpgkeys}'"
-    gpg --recv-keys "${_validgpgkeys[@]}"
+    echo "Downloading keys: '${_validpgpkeys[@]}'"
+    gpg --recv-keys "${_validpgpkeys[@]}"
     makepkg
     mv "${_pkgname}"*".pkg.tar."* "${_server}"
 }
