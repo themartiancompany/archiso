@@ -265,7 +265,8 @@ setup_repo() {
       _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}" | grep Conflicts)"
       _conflicts=("$(echo ${_conflicts_line##*:} \
 	          | awk '{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }')")
-      pacman "${_pacman_opts[@]}" -Rdd "${_conflicts[@]}" || true
+      # pacman "${_pacman_opts[@]}" -Rdd "${_conflicts[@]}" || true
+      pacman -Rdd "${_conflicts[@]}" || true
     done
     pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}"
   fi
