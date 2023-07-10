@@ -263,13 +263,16 @@ setup_repo() {
       		          "${_pacman_conf}"
     pacman "${_pacman_opts[@]}" -Sy
     for _pkg in "${_packages[@]}"; do
+      echo "Removing conflicts for ${_pkg}"
       _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}" | grep Conflicts)"
       _conflicts=("$(echo ${_conflicts_line##*:} \
 	          | awk '{split($0,pkgs," "); for (pkg in pkgs) { print pkgs[pkg] } }')")
       for _conflict in "${_conflicts[@]}"; do
+	echo "Removing ${_conflict}"
         pacman "${_pacman_opts[@]}" -Rdd "${_conflict}" || true
       done
     done
+    echo "Installing ${_packages[@]}"
     pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}"
   fi
   print_section_end "setup_repo"
