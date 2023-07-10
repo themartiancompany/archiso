@@ -235,8 +235,7 @@ setup_repo() {
   _home="/home/${_user}"
   _profile="${_home}/${profile}"
   _pacman_conf="${_profile}/pacman.conf"
-  _pacman_opts+=(--config "${_pacman_conf}"
-                 --noconfirm)
+  _pacman_opts+=(--config "${_pacman_conf}")
   _src="$(pwd)"
   _ci_bin="${_src}/.gitlab/ci"
   _src_profile="${_src}/configs/${profile}"
@@ -274,11 +273,11 @@ setup_repo() {
       )
       for _conflict in "${_conflicts[@]}"; do
 	echo "Removing '${_conflict}'"
-        pacman -Rdd "${_conflict}" || true
+        pacman -Rdd "${_conflict}" --noconfirm || true
       done
     done
     echo "Installing ${_packages[@]}"
-    pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}"
+    pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}" --noconfirm
   fi
   print_section_end "setup_repo"
 }
