@@ -3507,7 +3507,7 @@ _set_overrides() {
                                   "swap"
                                   "dongle_swap"
                                   "recovery")
-     local no_override_vars=(
+     declare -A no_override_vars=(
          ["airootfs_image_type"]="squashfs"
          ["boot_image_type"]="ext4+luks"
          ["keys_image_type"]="squashfs+luks"
