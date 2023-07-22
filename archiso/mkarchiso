@@ -3499,32 +3499,37 @@ _set_no_override() {
 # Set defaults and, if present, overrides from mkarchiso command line option parameters
 _set_overrides() {
     local _var _img
-    local _no_override_fs_images=("efi_boot"
-                                  "persistent"
-                                  "dongle"
-                                  "dongle_boot"
-                                  "dongle_persistent"
-                                  "swap"
-                                  "dongle_swap"
-                                  "recovery")
-     declare -A no_override_vars=(
-         ["airootfs_image_type"]="squashfs"
-         ["boot_image_type"]="ext4+luks"
-         ["keys_image_type"]="squashfs+luks"
-         ["persistent_image_type"]="ext4+luks"
-         ["recovery_image_type"]="ext4+luks"
-         ["dongle_boot_image_type"]="ext4+luks"
-         ["dongle_persistent_image_type"]="ext4+luks"
-         ["swap_image_type"]="swap+luks"
-         ["dongle_swap_image_type"]="swap+luks"
-         ["dongle_persistent_encryption_key"]="auto"
-         ["keys_encryption_key"]="auto"
-         ["recovery_encryption_key"]="auto"
-         ["recovery"]="false"
-         ["iso_name"]="${app_name}"
-         ["isofs_dir"]="${work_dir}/iso"
-         ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
-         ["dongle_isofs_dir"]="${work_dir}/dongle_iso")
+    local _no_override_fs_images=(
+        "boot"
+        "efi_boot"
+        "dongle_boot"
+        "dongle_persistent"
+        "dongle_swap"
+        "persistent"
+        "recovery"
+        "swap"
+    )
+    declare -A no_override_vars=(
+        ["airootfs_image_type"]="squashfs"
+        ["boot_image_type"]="ext4+luks"
+        ["dongle_boot_image_type"]="ext4+luks"
+        ["dongle_persistent_image_type"]="ext4+luks"
+        ["dongle_swap_image_type"]="swap+luks"
+        ["keys_image_type"]="squashfs+luks"
+        ["persistent_image_type"]="ext4+luks"
+        ["recovery_image_type"]="ext4+luks"
+        ["swap_image_type"]="swap+luks"
+        ["dongle_persistent_encryption_key"]="auto"
+        ["dolge_swap_encryption_key"]="auto"
+        ["keys_encryption_key"]="auto"
+        ["recovery_encryption_key"]="auto"
+        ["swap_encryption_key"]="auto"
+        ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
+        ["isofs_dir"]="${work_dir}/iso"
+        ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+        ["recovery"]="false"
+        ["iso_name"]="${app_name}"
+    )
 
     # Set variables that have command line overrides
     [[ ! -v override_buildmodes ]] || buildmodes=("${override_buildmodes[@]}")
@@ -3586,7 +3591,7 @@ _set_overrides() {
 
     # Set variables that do not have overrides
     for _img in "${_no_override_fs_images[@]}"; do
-        _msg_info "Setting ${_img} to $(_get_fs_img ${_img})"
+        _msg_info "Setting ${_img} image to $(_get_fs_img ${_img})"
         no_override_vars["${_img}"]="$(_get_fs_img "${_img}")"
     done
     for _var in "${!no_override_vars[@]}"; do
