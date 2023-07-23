@@ -2690,25 +2690,35 @@ _is_file_in_work_paths() {
 _validate_file() {
     local _filename="${1}"
     local _storage="${2}"
-    local pacstrap_dir="${work_dir}/${arch}/airootfs"
-    local persistent_dir="${work_dir}/persistent"
+    local _msg \
+          _on_storage="${_storage}${_filename}" \
+          pacstrap_dir="${work_dir}/${arch}/airootfs" \
+          persistent_dir="${work_dir}/persistent"
     _validate_file_result="false"
-    _validate_file_err="" _validate_file_warn=""
+    _validate_file_err=""
+    _validate_file_warn=""
     _is_file_in_work_paths "${_filename}"
     if [[ "${_pass}" != "" ]]; then
-        _validate_file_err="Cannot change permissions of '${_filename}'. The file or directory does not exist."
+        _msg=("Cannot change permissions of '${_filename}'."
+              "The file or directory does not exist.")
+        _validate_file_err="${_msg[*]}"
         return
     fi
-    if [[ ! -e "${_storage}${_filename}" ]]; then
-        _validate_file_warn="Cannot change permissions of '${_storage}${_filename}'. The file or directory does not exist on this storage."
-    elif [[ "$(realpath -q -- "${_storage}${_filename}")" != "${_storage}"* ]]; then
-        _validate_file_err="Failed to set permissions on '${_storage}${_filename}'. Outside of valid path."
+    if [[ ! -e "${_on_storage}" ]]; then
+        _msg=("Cannot change permissions of '${_on_storage}'."
+              "The file or directory does not exist on this storage.")
+        _validate_file_warn="${_msg[*]}"
+    elif [[ "$(realpath -q -- "${_on_storage}")" != "${_storage}"* ]]; then
+        _msg=("Failed to set permissions on '${_on_storage}'."
+              "Outside of valid path.")
+        _validate_file_err="${_msg[*]}"
     else
         _validate_file_result=""
     fi
 }
 
-# Copies custom files onto an image, reading and applying permissions from a file
+# Copies custom files onto an image, reading and 
+# applying permissions from a file
 # $1: destination image name (airootfs, persistent)
 # $2: output directory
 _copy_custom_files() {
@@ -2717,54 +2727,82 @@ _copy_custom_files() {
     local _error_code _msg=()
     local _opts=('-f') _chmod_opts=() _recur=()
     _msg_info "Copying custom ${_dest} files..."
-    cp -af --no-preserve=ownership,mode -- "${profile}/${_dest}/." "${_out_dir}"
+    cp -af \
+       --no-preserve=ownership,mode -- \
+       "${profile}/${_dest}/." \
+       "${_out_dir}"
     for filename in "${!file_permissions[@]}"; do
-        IFS=':' read -ra permissions <<< "${file_permissions["${filename}"]}"
-        _user="${permissions[0]}" _group="${permissions[1]}" _perm="${permissions[2]}"
+        IFS=':' \
+          read -ra permissions <<< \
+            "${file_permissions["${filename}"]}"
+        _user="${permissions[0]}"
+        _group="${permissions[1]}"
+        _perm="${permissions[2]}"
         _recur=()
-        _validate_file_err="" _validate_file_warn="" _validate_file_result=""
+        _validate_file_err=""
+        _validate_file_warn=""
+        _validate_file_result=""
         _validate_file "${filename}" "${_out_dir}"
         if [[ "${_validate_file_result}" == "" ]]; then
-            _msg=("Setting" "${_perm} permissions for ${_user}:${_group} on ${filename}")
+            _msg=("Setting" "${_perm} permissions for"
+                  "${_user}:${_group} on ${filename}")
             if [[ "${filename: -1}" == "/" ]]; then
                 _recur+=('-R')
                 _msg+=("recursively")
             fi
-            [[ "${quiet}" != "y" ]] && _msg_info "${_msg[*]}"
-            _chown_opts=("${_opts[@]}" '-h' "${_recur[@]}")
-            _chmod_opts=("${_opts[@]}" "${_recur[@]}")
-            chown "${_chown_opts[@]}" -- "${_user}:${_group}" "${_out_dir}${filename}"
-            chmod "${_chmod_opts[@]}" -- "${_perm}" "${_out_dir}${filename}"
-         else
+            [[ "${quiet}" != "y" ]] && \
+              _msg_info "${_msg[*]}"
+            _chown_opts=(
+              "${_opts[@]}"
+              '-h'
+              "${_recur[@]}")
+            _chmod_opts=(
+              "${_opts[@]}"
+              "${_recur[@]}")
+            chown "${_chown_opts[@]}" -- \
+                  "${_user}:${_group}" \
+                  "${_out_dir}${filename}"
+            chmod "${_chmod_opts[@]}" -- \
+                  "${_perm}" \
+                  "${_out_dir}${filename}"
+        else
              _msg_type="warning"
-	     if [ "${_validate_file_err}" != "" ]; then
-	         _msg_type="error"
-	         _error_code=1
-	     fi
-             [[ "${_validate_file_err}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_err}" "${_error_code}"
-             [[ "${quiet}" != "y" ]] && [[ "${_validate_file_warn}" != "" ]] && "_msg_${_msg_type}" "${_validate_file_warn}"
-         fi
+	         if [ "${_validate_file_err}" != "" ]; then
+	             _msg_type="error"
+	             _error_code=1
+	         fi
+             [[ "${_validate_file_err}" != "" ]] && \
+               "_msg_${_msg_type}" "${_validate_file_err}" \
+                                   "${_error_code}"
+             [[ "${quiet}" != "y" ]] && \
+             [[ "${_validate_file_warn}" != "" ]] && \
+               "_msg_${_msg_type}" "${_validate_file_warn}"
+        fi
     done
 }
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _img_type
-    local pacstrap_dir="${work_dir}/${arch}/airootfs"
-    local persistent_dir="${work_dir}/persistent"
-    local persistent_dir_size persistent_epoch persistent_uuid
-    local crypttab="${profile}/airootfs/etc/crypttab"
+    local _img_type \
+          _udev_rules="${pacstrap_dir}/etc/udev/rules.d" \
+          crypttab="${profile}/airootfs/etc/crypttab" \
+          pacstrap_dir="${work_dir}/${arch}/airootfs" \
+          persistent_dir="${work_dir}/persistent" \
+          persistent_dir_size \
+          persistent_epoch \
+          persistent_uuid
     persistent_epoch="$(_get_epoch "persistent")"
     persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
     # dongle_persistent_epoch=$(_get_epoch "dongle_persistent")
     dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
 
-    local persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/98_persistent.rules"
-    local dongle_persistent_ro_udev_rule="${pacstrap_dir}/etc/udev/rules.d/99_donglepersistent.rules"
+    local persistent_ro_udev_rule="${_udev_rules}/98_persistent.rules"
+    local dongle_persistent_ro_udev_rule="${_udev_rules}/99_donglepersistent.rules"
     if [ -d "${profile}/persistent" ]; then
         _copy_custom_files "persistent" "${persistent_dir}"
         persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
-        persistent_size=$(( persistent_dir_size > persistent_size ? persistent_dir_size : persistent_size ))
+        persistent_size=$(( persistent_dir_size > persistent_size ? \
+                            persistent_dir_size : persistent_size ))
         _msg_info "Done!"
     fi
     _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
@@ -2807,25 +2845,27 @@ _export_netboot_artifacts() {
 _sign_netboot_artifacts() {
     local _file _dir
     local _files_to_sign=()
+    local openssl_options=(
+      -sign
+      -binary
+      -noattr
+      -signer "${cert_list[0]}"
+      -inkey "${cert_list[1]}"
+      -outform DER)
     _msg_info "Signing netboot artifacts..."
     _dir="${isofs_dir}/${install_dir}/boot"
     for _file in "${ucodes[@]}"; do
-        if [[ -e "${_dir}/${_file}" ]]; then
-            _files_to_sign+=("${_dir}/${_file}")
-        fi
+        [[ -e "${_dir}/${_file}" ]] && \
+          _files_to_sign+=("${_dir}/${_file}")
     done
-    for _file in "${_files_to_sign[@]}" "${_dir}/${arch}/vmlinuz-"* "${_dir}/${arch}/initramfs-"*.img; do
-        openssl cms \
-            -sign \
-            -binary \
-            -noattr \
-            -in "${_file}" \
-            -signer "${cert_list[0]}" \
-            -inkey "${cert_list[1]}" \
-            -outform DER \
-            -out "${_file}".ipxe.sig
-        done
-        _msg_info "Done!"
+    for _file in "${_files_to_sign[@]}" \
+                 "${_dir}/${arch}/vmlinuz-"* \
+                 "${_dir}/${arch}/initramfs-"*.img; do
+        openssl cms "${opessl_options[@]}" \
+                    -in "${_file}" \
+                    -out "${_file}".ipxe.sig
+    done
+    _msg_info "Done!"
 }
 
 _validate_requirements_airootfs_image_type_squashfs() {
@@ -2850,8 +2890,8 @@ _validate_requirements_persistent_image_type_ext4() {
     _validate_requirements_airootfs_image_type_ext4
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
-              "Be sure not to put sensitive data "
-              "on it and write the resulting image "
+              "Be sure not to put sensitive data"
+              "on it and write the resulting image"
               "on a write-once device.")
         _msg_warning "${_msg[*]}"
     fi
@@ -2870,39 +2910,49 @@ _validate_requirements_persistent_image_type_ext4() {
 }
 
 _validate_requirements_persistent_image_type_ext4+luks() {
+    local _msg=()
     _validate_requirements_airootfs_image_type_luks
     _validate_requirements_persistent_image_type_ext4
     if [ ! -e "${profile}/airootfs/etc/crypttab" ]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${persistent_image_type}' for persistent partition: crypttab not found!" 0
+        _msg=("Validating '${persistent_image_type}'"
+              "for persistent partition: crypttab not found!")
+        _msg_error "${_msg[*]}" 0
     fi
 }
 
-# Generates an encryption key when the "auto" value has been specified for an
-# <image>_encryption_key variable in profiledef.sh
+# Generates an encryption key when the "auto" value
+# has been specified for an <image>_encryption_key
+# variable in profiledef.sh
 # $1: output file path
 # $2: mode (binary/random plain)
 _gen_key() {
     local _out="${1}"
     local _mode="${2}"
     if [ "${_mode}" == "binary" ]; then
-        dd if=/dev/random bs=512 count=1 of="${_out}" > /dev/null 2>&1
+        dd if=/dev/random \
+           bs=512 \
+           count=1 \
+           of="${_out}" > /dev/null 2>&1
     elif [ "${_mode}" == "plain" ]; then
-        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
+        printf "%s" \
+               "$(tr -dc A-Za-z0-9 </dev/urandom | \
+                    head -c 20 ; \
+                    echo '')" > "${_out}"
     fi
 }
 
 # Resolves the value of the airootfs image encryption key 
 _resolve_encryption_key(){
-    if [ ! -f "${airootfs_encryption_key}" ]; then
-        if [ "${airootfs_encryption_key}" = 'auto' ]; then
-            airootfs_encryption_key="${work_dir}/${iso_label}.key"
-            [ ! -d "${work_dir}" ] && install -d "${work_dir}"
-            _gen_key "${airootfs_encryption_key}" "binary"
-        elif [ "${airootfs_encryption_key}" != 'auto' ]; then
-            _msg_error "File '${airootfs_encryption_key}' does not exist." 0
-        fi
-    fi
+    [ ! -f "${airootfs_encryption_key}" ] && \
+      if [ "${airootfs_encryption_key}" = 'auto' ]; then
+          airootfs_encryption_key="${work_dir}/${iso_label}.key"
+          [ ! -d "${work_dir}" ] && \
+            install -d "${work_dir}"
+          _gen_key "${airootfs_encryption_key}" "binary"
+      elif [ "${airootfs_encryption_key}" != 'auto' ]; then
+          _msg_error "File '${airootfs_encryption_key}' does not exist." 0
+      fi
 }
 
 _validate_requirements_airootfs_image_type_squashfs+luks() {
@@ -2922,7 +2972,8 @@ _validate_requirements_airootfs_image_type_erofs() {
 
 _validate_requirements_airootfs_image_type_luks() {
     _validate_buildmode_missing_cmd "cryptsetup"
-    [[ -n "$airootfs_encryption_key" ]] && _resolve_encryption_key 
+    [[ -n "$airootfs_encryption_key" ]] && \
+      _resolve_encryption_key 
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -2938,9 +2989,9 @@ _validate_common_requirements_buildmode_all() {
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]] && \
        [[ "${persistent_image_type}" != *"luks" ]]; then
         _msg=("Validating build mode '${_buildmode}':"
-              "'dongle' build mode not selected; "
+              "'dongle' build mode not selected;"
               "persistent partition encryption disabled."
-              "Be sure to use the resulting image on a write-once "
+              "Be sure to use the resulting image on a write-once"
               "device to not be vulnerable to 'evil maids'.")
         _msg_warning "${_msg[*]}"
     fi
@@ -3009,12 +3060,12 @@ _validate_common_requirements_buildmode_iso_netboot() {
 
 _validate_requirements_buildmode_dongle() {
     _validate_common_requirements_buildmode_all
-    [[ -n "$airootfs_encryption_key" ]] && _resolve_encryption_key
-    if [[ ! "${airootfs_image_type}" == *luks ]]; then
-        _msg=("Dongle buildmode active but root file system "
-              "encryption disabled.")
-        _msg_warning "${_msg[*]}"
-    fi
+    [[ -n "$airootfs_encryption_key" ]] && \
+      _resolve_encryption_key
+    [[ ! "${airootfs_image_type}" == *luks ]] && \
+      _msg=("Dongle buildmode active but root file system "
+            "encryption disabled.") && \
+      _msg_warning "${_msg[*]}"
 }
 
 _validate_requirements_buildmode_iso() {
@@ -3073,7 +3124,8 @@ _validate_requirements_buildmode_netboot() {
         # Check if the certificate files exist
         for _cert in "${cert_list[@]}"; do
             if [[ -e "${_cert}" ]]; then
-                _override_cert_list+=("$(realpath -- "${_cert}")")
+                _override_cert_list+=(
+                  "$(realpath -- "${_cert}")")
             else
                 (( validation_error=validation_error+1 ))
                 _msg_error "File '${_cert}' does not exist." 0
@@ -3083,7 +3135,7 @@ _validate_requirements_buildmode_netboot() {
         # Check if there are at least two certificate files
         if (( ${#cert_list[@]} < 2 )); then
             (( validation_error=validation_error+1 ))
-            _msg=("Two certificates are required for codesigning, "
+            _msg=("Two certificates are required for codesigning,"
                   "but '${cert_list[*]}' is provided.")
             _msg_error "${_msg[*]}" 0
         fi
@@ -3098,28 +3150,27 @@ _validate_requirements_buildmode_netboot() {
 _add_xorrisofs_options_boot() {
     local _img _xorrisofs_options=("$@")
     boot_guid="${luks_guid}"
-    if [[ "${buildmode}" == "dongle" ]]; then
-        _img="$(_get_fs_img dongle_boot)"
-    else
-        _img="$(_get_fs_img boot)"
-    fi
+    _img="$(_get_fs_img boot)"
+    [[ "${buildmode}" == "dongle" ]] && \
+      _img="$(_get_fs_img dongle_boot)"
     _xorrisofs_options+=(
-        '-append_partition' '3'
-        "${boot_guid}"
-        "${_img}")
+      '-append_partition' '3'
+      "${boot_guid}"
+      "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
-# Add recovery partition options to a xorrisofs options array
+# Add recovery partition options to a
+# xorrisofs options array
 # $@: array
 _add_xorrisofs_options_recovery() {
     local _img _xorrisofs_options=("$@")
     recovery_guid="${luks_guid}"
     _img="$(_get_fs_img recovery)"
     _xorrisofs_options+=(
-        '-append_partition' '4'
-        "${recovery_guid}"
-        "${_img}")
+      '-append_partition' '4'
+      "${recovery_guid}"
+      "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -3128,36 +3179,31 @@ _add_xorrisofs_options_recovery() {
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
     _img="$(_get_fs_img swap)"
-    if [[ "${swap_image_type}" == *"luks" ]]; then
-        _swap_guid="${luks_guid}"
-    else
-        _swap_guid="${swap_guid}"
-    fi
+    _swap_guid="${swap_guid}"
+    [[ "${swap_image_type}" == *"luks" ]] && \
+      _swap_guid="${luks_guid}"
     _xorrisofs_options+=(
-        '-append_partition' '5'
-        "${_swap_guid}"
-        "${_img}")
+      '-append_partition' '5'
+      "${_swap_guid}"
+      "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
-# Add persistent partition options to a xorrisofs options array
+# Add persistent partition options to a
+# xorrisofs options array
 # $@: array
 _add_xorrisofs_options_persistent() {
     local _img _xorrisofs_options=("$@")
-    if [[ "${persistent_image_type}" == *"luks" ]]; then
-        persistent_guid="${luks_guid}"
-    else
-        persistent_guid="${linux_guid}"
-    fi
-    if [[ "${buildmode}" == "dongle" ]]; then
-        _img="$(_get_fs_img dongle_persistent)"
-    else
-        _img="$(_get_fs_img persistent)"
-    fi
+    persistent_guid="${linux_guid}"
+    [[ "${persistent_image_type}" == *"luks" ]] && \
+      persistent_guid="${luks_guid}"
+    _img="$(_get_fs_img persistent)"
+    [[ "${buildmode}" == "dongle" ]] && \
+      _img="$(_get_fs_img dongle_persistent)"
     _xorrisofs_options+=(
-        '-append_partition' '6'
-        "${persistent_guid}"
-        "${_img}")
+      '-append_partition' '6'
+      "${persistent_guid}"
+      "${_img}")
     echo "${_xorrisofs_options[@]}"
 }
 
@@ -3169,35 +3215,35 @@ _add_xorrisofs_options_bios.grub.mbr() {
     shift
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
-        # SYSLINUX MBR bootstrap code; does not work
-        # without "-eltorito-boot syslinux/isolinux.bin"
-        '--grub2-mbr' "${bootable_dir}/EFI/BOOT/boot_hybrid.img"
-        # When GPT is used, create an additional partition in the
-        # MBR (besides 0xEE) for sectors 0–1 (MBR
-        # bootstrap code area) and mark it as bootable
-        # May allow booting on some systems
-        # https://wiki.archlinux.org/title/Partitioning#Tricking_old_BIOS_into_booting_from_GPT
-        '--mbr-force-bootable'
-        # Move the first partition away from the start of the ISO
-        # to match the expectations of partition editors
-        # May allow booting on some systems
-        # https://dev.lovelyhq.com/libburnia/libisoburn/src/branch/master/doc/partition_offset.wiki
-        '-partition_offset' '16')
+      # SYSLINUX MBR bootstrap code; does not work
+      # without "-eltorito-boot syslinux/isolinux.bin"
+      '--grub2-mbr' "${bootable_dir}/EFI/BOOT/boot_hybrid.img"
+      # When GPT is used, create an additional partition in the
+      # MBR (besides 0xEE) for sectors 0–1 (MBR
+      # bootstrap code area) and mark it as bootable
+      # May allow booting on some systems
+      # https://wiki.archlinux.org/title/Partitioning#Tricking_old_BIOS_into_booting_from_GPT
+      '--mbr-force-bootable'
+      # Move the first partition away from the start of the ISO
+      # to match the expectations of partition editors
+      # May allow booting on some systems
+      # https://dev.lovelyhq.com/libburnia/libisoburn/src/branch/master/doc/partition_offset.wiki
+      '-partition_offset' '16')
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_bios.grub.mbr_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.grub.mbr \
-               "${isofs_dir}" \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.grub.mbr \
+             "${isofs_dir}" \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_bios.grub.mbr_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.grub.mbr \
-               "${dongle_isofs_dir}" \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.grub.mbr \
+             "${dongle_isofs_dir}" \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # Add GRUB El Torito options to a xorrisofs options array
@@ -3205,28 +3251,28 @@ _add_xorrisofs_options_bios.grub.mbr_dongle() {
 _add_xorrisofs_options_bios.grub.eltorito() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
-        # El Torito boot image for x86 BIOS
-        '-eltorito-boot' 'EFI/BOOT/BOOTIA32.ELTORITO'
-        # El Torito boot catalog file
-        '-eltorito-catalog' 'EFI/BOOT/boot.catalog'
-        # Required options to boot with GRUB
-        '-no-emul-boot'
-        '-boot-load-size' '4'
-        '-boot-info-table'
-        '--grub2-boot-info')
+      # El Torito boot image for x86 BIOS
+      '-eltorito-boot' 'EFI/BOOT/BOOTIA32.ELTORITO'
+      # El Torito boot catalog file
+      '-eltorito-catalog' 'EFI/BOOT/boot.catalog'
+      # Required options to boot with GRUB
+      '-no-emul-boot'
+      '-boot-load-size' '4'
+      '-boot-info-table'
+      '--grub2-boot-info')
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_bios.grub.eltorito_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.grub.eltorito \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.grub.eltorito \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_bios.grub.eltorito_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.grub.eltorito \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.grub.eltorito \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # Add SYSLINUX MBR (isohybrid) options to a xorrisofs options array
@@ -3237,36 +3283,36 @@ _add_xorrisofs_options_bios.syslinux.mbr() {
     shift
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
-        # SYSLINUX MBR bootstrap code; does not work 
-        # without "-eltorito-boot syslinux/isolinux.bin"
-        '-isohybrid-mbr' "${bootable_dir}/syslinux/isohdpfx.bin"
-        # When GPT is used, create an additional partition
-        # in the MBR (besides 0xEE) for sectors 0–1 (MBR
-        # bootstrap code area) and mark it as bootable
-        # May allow booting on some systems
-        # https://wiki.archlinux.org/title/Partitioning#Tricking_old_BIOS_into_booting_from_GPT
-        '--mbr-force-bootable'
-        # Move the first partition away from the start of
-        # the ISO to match the expectations of partition editors
-        # May allow booting on some systems
-        # https://dev.lovelyhq.com/libburnia/libisoburn/src/branch/master/doc/partition_offset.wiki
-        '-partition_offset' '16'
+      # SYSLINUX MBR bootstrap code; does not work 
+      # without "-eltorito-boot syslinux/isolinux.bin"
+      '-isohybrid-mbr' "${bootable_dir}/syslinux/isohdpfx.bin"
+      # When GPT is used, create an additional partition
+      # in the MBR (besides 0xEE) for sectors 0–1 (MBR
+      # bootstrap code area) and mark it as bootable
+      # May allow booting on some systems
+      # https://wiki.archlinux.org/title/Partitioning#Tricking_old_BIOS_into_booting_from_GPT
+      '--mbr-force-bootable'
+      # Move the first partition away from the start of
+      # the ISO to match the expectations of partition editors
+      # May allow booting on some systems
+      # https://dev.lovelyhq.com/libburnia/libisoburn/src/branch/master/doc/partition_offset.wiki
+      '-partition_offset' '16'
     )
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_bios.syslinux.mbr_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.syslinux.mbr \
-               "${isofs_dir}" \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.syslinux.mbr \
+             "${isofs_dir}" \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_bios.syslinux.mbr_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.syslinux.mbr \
-               "${dongle_isofs_dir}" \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.syslinux.mbr \
+             "${dongle_isofs_dir}" \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # Add SYSLINUX El Torito options to a xorrisofs options array
@@ -3274,25 +3320,25 @@ _add_xorrisofs_options_bios.syslinux.mbr_dongle() {
 _add_xorrisofs_options_bios.syslinux.eltorito() {
     local _xorrisofs_options=("$@")
     _xorrisofs_options+=(
-        # El Torito boot image for x86 BIOS
-        '-eltorito-boot' 'syslinux/isolinux.bin'
-        # El Torito boot catalog file
-        '-eltorito-catalog' 'syslinux/boot.cat'
-        # Required options to boot with ISOLINUX
-        '-no-emul-boot' '-boot-load-size' '4' '-boot-info-table')
+      # El Torito boot image for x86 BIOS
+      '-eltorito-boot' 'syslinux/isolinux.bin'
+      # El Torito boot catalog file
+      '-eltorito-catalog' 'syslinux/boot.cat'
+      # Required options to boot with ISOLINUX
+      '-no-emul-boot' '-boot-load-size' '4' '-boot-info-table')
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_bios.syslinux.eltorito_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.syslinux.eltorito \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.syslinux.eltorito \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_bios.syslinux.eltorito_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_bios.syslinux.eltorito \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_bios.syslinux.eltorito \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # GRUB in an attached EFI system partition
@@ -3302,51 +3348,49 @@ _add_xorrisofs_options_uefi-ia32.grub.esp() {
     # ${bootmodes[*]} tests in
     # _add_xorrisofs_options_uefi-x64.systemd-boot.esp etc?
     # shellcheck disable=SC2076
-    if [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]] && \
-       [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
-        # _add_xorrisofs_options_uefi-x64.systemd-boot.esp
-        _xorrisofs_options=(
-            "$(_add_xorrisofs_options_uefi-x64.grub.esp \
-                   "${_xorrisofs_options[@]}")")
-    fi
+    [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]] && \
+    [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]] && \
+      # _add_xorrisofs_options_uefi-x64.systemd-boot.esp
+      _xorrisofs_options=(
+        "$(_add_xorrisofs_options_uefi-x64.grub.esp \
+               "${_xorrisofs_options[@]}")")
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_uefi-ia32.grub.esp_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-ia32.grub.esp \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-ia32.grub.esp \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-ia32.grub.esp_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-ia32.grub.esp \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-ia32.grub.esp \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # GRUB via El Torito
 _add_xorrisofs_options_uefi-ia32.grub.eltorito() {
     local _xorrisofs_options=("$@")
     # shellcheck disable=SC2076
-    if [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]] && \
-       [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.grub.eltorito ' ]]; then
-        _xorrisofs_options=(
-            "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
-                   "${_xorrisofs_options[@]}")")
-    fi
+    [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]] && \
+    [[ ! " ${bootmodes[*]} " =~ ' uefi-x64.grub.eltorito ' ]] && \
+      _xorrisofs_options=(
+        "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
+               "${_xorrisofs_options[@]}")")
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_uefi-ia32.grub.eltorito_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-ia32.grub.eltorito \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-ia32.grub.eltorito \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-ia32.grub.eltorito_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-ia32.grub.eltorito \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-ia32.grub.eltorito \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # systemd-boot in an attached EFI system partition
@@ -3357,13 +3401,13 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
     # partition will not be mountable
     # shellcheck disable=SC2076
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || \
-        _xorrisofs_options+=('-partition_offset' '16')
+      _xorrisofs_options+=('-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its 
     # partition type to "EFI system partition"
     _xorrisofs_options+=(
-        '-append_partition' '2'
-        'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'
-        "${efi_boot_img}")
+      '-append_partition' '2'
+      'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'
+      "${efi_boot_img}")
     # Ensure GPT is used as some systems do not support 
     # UEFI booting without it
     # shellcheck disable=SC2076
@@ -3383,9 +3427,8 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
             # the appended EFI system partition will have the
             # Microsoft basic data type GUID in GPT.
             _opt="-isohybrid-gpt-basdat"
-            if [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]]; then
-                _xorrisofs_options+=("${_opt}")
-            fi
+            [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]] && \
+              _xorrisofs_options+=("${_opt}")
         fi
     else
         # Use valid GPT if BIOS booting support will not be required
@@ -3396,14 +3439,14 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.esp() {
 
 _add_xorrisofs_options_uefi-x64.systemd-boot.esp_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.systemd-boot.esp \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.systemd-boot.esp \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-x64.systemd-boot.esp_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.systemd-boot.esp \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.systemd-boot.esp \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # systemd-boot via El Torito
@@ -3417,13 +3460,13 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
        [[ " ${bootmodes[*]} " =~ ' uefi-ia32.grub.esp ' ]]; then
         # systemd-boot in an attached EFI system partition via El Torito
         _xorrisofs_options+=(
-            # Start a new El Torito boot entry for UEFI
-            '-eltorito-alt-boot'
-            # Set the second partition as the El Torito UEFI boot image
-            '-e' '--interval:appended_partition_2:all::'
-            # Boot image is not emulating floppy or hard disk;
-            # required for all known boot loaders
-            '-no-emul-boot')
+          # Start a new El Torito boot entry for UEFI
+          '-eltorito-alt-boot'
+          # Set the second partition as the El Torito UEFI boot image
+          '-e' '--interval:appended_partition_2:all::'
+          # Boot image is not emulating floppy or hard disk;
+          # required for all known boot loaders
+          '-no-emul-boot')
     # A valid GPT prevents BIOS booting on some systems,
     # use an invalid GPT instead.
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || \
@@ -3435,9 +3478,8 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
         # the appended EFI system partition will have the 
         # Microsoft basic data type GUID in GPT.
         _opt="-isohybrid-gpt-basdat"
-        if [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]]; then
-            _xorrisofs_options+=("${_opt}")
-        fi
+        [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]] && \
+          _xorrisofs_options+=("${_opt}")
     fi
     else
         # The ISO will not contain a GPT partition table,
@@ -3448,36 +3490,35 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
                  "${bootable_dir}/EFI/archiso/efiboot.img"
         # systemd-boot in an embedded efiboot.img via El Torito
         _xorrisofs_options+=(
-            # Start a new El Torito boot entry for UEFI
-            '-eltorito-alt-boot'
-            # Set efiboot.img as the El Torito UEFI boot image
-            '-e' 'EFI/archiso/efiboot.img'
-            # Boot image is not emulating floppy or hard disk;
-            # required for all known boot loaders
-            '-no-emul-boot')
+          # Start a new El Torito boot entry for UEFI
+          '-eltorito-alt-boot'
+          # Set efiboot.img as the El Torito UEFI boot image
+          '-e' 'EFI/archiso/efiboot.img'
+          # Boot image is not emulating floppy or hard disk;
+          # required for all known boot loaders
+          '-no-emul-boot')
     fi
     # Specify where to save the El Torito boot catalog
     # file in case it is not already set by bios.syslinux.eltorito
     # shellcheck disable=SC2076
     [[ " ${bootmodes[*]} " =~ ' bios.' ]] || \
-        _xorrisofs_options+=(
-            '-eltorito-catalog'
-            'EFI/boot.cat')
+      _xorrisofs_options+=(
+        '-eltorito-catalog' 'EFI/boot.cat')
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
-               "${isofs_dir}" \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
+             "${isofs_dir}" \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
-               "${dongle_isofs_dir}" \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
+             "${dongle_isofs_dir}" \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # GRUB in an attached EFI system partition.
@@ -3489,13 +3530,14 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
     # will not be mountable
     # shellcheck disable=SC2076
     [[ " ${_xorrisofs_options[*]} " =~ ' -partition_offset ' ]] || \
-        _xorrisofs_options+=('-partition_offset' '16')
+      _xorrisofs_options+=(
+        '-partition_offset' '16')
     # Attach efiboot.img as a second partition and set its partition
     # type to "EFI system partition"
     _xorrisofs_options+=(
-        '-append_partition' '2'
-        'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'
-        "${efi_boot_img}")
+      '-append_partition' '2'
+      'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'
+      "${efi_boot_img}")
     # Ensure GPT is used as some systems do not support UEFI booting without it
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' bios.syslinux.mbr ' ]] || \
@@ -3514,9 +3556,8 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
             # the appended EFI system partition will have
             # the Microsoft basic data type GUID in GPT.
             _opt="-isohybrid-gpt-basdat"
-            if [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]]; then
-                _xorrisofs_options+=("${_opt}")
-            fi
+            [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]] && \
+              _xorrisofs_options+=("${_opt}")
         fi
     else
         # Use valid GPT if BIOS booting support will not be required
@@ -3527,14 +3568,14 @@ _add_xorrisofs_options_uefi-x64.grub.esp() {
     
 _add_xorrisofs_options_uefi-x64.grub.esp_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.grub.esp \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.grub.esp \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-x64.grub.esp_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.grub.esp \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.grub.esp \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # GRUB via El Torito
@@ -3568,15 +3609,16 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
         # the appended EFI system partition will have the Microsoft
         # basic data type GUID in GPT.
         _opt="-isohybrid-gpt-basdat"
-        if [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]]; then
-            _xorrisofs_options+=("${_opt}")
-        fi
+        [[ ! " ${_xorrisofs_options[*]} " =~ " ${_opt} " ]] && \
+          _xorrisofs_options+=("${_opt}")
     fi
     else
         # The ISO will not contain a GPT partition table, so to be 
         # able to reference efiboot.img, place it as a
         # file inside the ISO 9660 file system
-        install -d -m 0755 -- "${bootable_dir}/EFI/archiso"
+        install -d \
+                -m 0755 -- \
+                "${bootable_dir}/EFI/archiso"
         cp -a -- "${efi_boot_img}" \
                  "${bootable_dir}/EFI/archiso/efiboot.img"
         # grub in an embedded efiboot.img via El Torito
@@ -3593,24 +3635,25 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
     # Specify where to save the El Torito boot catalog file in case 
     # it is not already set by bios.syslinux.eltorito
     # shellcheck disable=SC2076
-    [[ " ${bootmodes[*]} " =~ ' bios.' ]] || _xorrisofs_options+=(
-                                                 '-eltorito-catalog'
-                                                 'EFI/boot.cat')
+    [[ " ${bootmodes[*]} " =~ ' bios.' ]] || \
+      _xorrisofs_options+=(
+        '-eltorito-catalog'
+        'EFI/boot.cat')
     echo "${_xorrisofs_options[@]}"
 }
 
 _add_xorrisofs_options_uefi-x64.grub.eltorito_iso() {
     xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
-               "${isofs_dir}" \
-               "${xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
+             "${isofs_dir}" \
+             "${xorrisofs_options[@]}")")
 }
 
 _add_xorrisofs_options_uefi-x64.grub.eltorito_dongle() {
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
-               "${dongle_isofs_dir}" \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
+             "${dongle_isofs_dir}" \
+             "${dongle_xorrisofs_options[@]}")")
 }
 
 # Build bootstrap image
@@ -3618,7 +3661,8 @@ _build_bootstrap_image() {
     local _bootstrap_parent
     _bootstrap_parent="$(dirname -- "${pacstrap_dir}")"
 
-    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
+    [[ -d "${out_dir}" ]] || \
+      install -d -- "${out_dir}"
 
     cd -- "${_bootstrap_parent}"
 
@@ -3644,33 +3688,34 @@ _build_dongle_image() {
     done
 
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_boot \
+      "$(_add_xorrisofs_options_boot \
+             "${dongle_xorrisofs_options[@]}")")
+
+    [ "${persistent_size}" != "" ] && \
+      dongle_xorrisofs_options=(
+        "$(_add_xorrisofs_options_persistent \
                "${dongle_xorrisofs_options[@]}")")
 
-    if [ "${persistent_size}" != "" ]; then
-        dongle_xorrisofs_options=(
-            "$(_add_xorrisofs_options_persistent \
-                   "${dongle_xorrisofs_options[@]}")")
-    fi
-
-    if [ "${swap_size}" != "" ]; then
-        dongle_xorrisofs_options=(
-            "$(_add_xorrisofs_options_swap \
-                   "${dongle_xorrisofs_options[@]}")")
-    fi
+    [ "${swap_size}" != "" ] && \
+      dongle_xorrisofs_options=(
+        "$(_add_xorrisofs_options_swap \
+               "${dongle_xorrisofs_options[@]}")")
 
     dongle_xorrisofs_options=(
-        "$(_add_xorrisofs_options_recovery \
-               "${dongle_xorrisofs_options[@]}")")
+      "$(_add_xorrisofs_options_recovery \
+             "${dongle_xorrisofs_options[@]}")")
 
-    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
+    [[ -d "${out_dir}" ]] || \
+      install -d -- "${out_dir}"
 
-    if [[ "${quiet}" == "y" ]]; then
-        # The when xorriso is run in mkisofs compatibility mode (xorrisofs), the mkisofs option -quiet is interpreted
-        # too late (e.g. messages about SOURCE_DATE_EPOCH still get shown).
-        # Instead use native xorriso option to silence the output.
-        dongle_xorriso_options+=('-report_about' 'SORRY' "${dongle_xorriso_options[@]}")
-    fi
+    [[ "${quiet}" == "y" ]] && \
+      # The when xorriso is run in mkisofs compatibility mode (xorrisofs),
+      # the mkisofs option -quiet is interpreted too late
+      # (e.g. messages about SOURCE_DATE_EPOCH still get shown).
+      # Instead use native xorriso option to silence the output.
+      dongle_xorriso_options+=(
+        '-report_about' 'SORRY'
+        "${dongle_xorriso_options[@]}")
 
     # Update SORCE_DATE_EPOCH for dongle ISO UUID
     SOURCE_DATE_EPOCH="$(_get_epoch "dongle")"
@@ -3681,21 +3726,20 @@ _build_dongle_image() {
     _msg_info "xorrisofs options: ${dongle_xorrisofs_options[*]}"
     # shellcheck disable=SC2116
     dongle_xorriso_cmd_line=(
-        "${dongle_xorriso_options[@]}"
-        '-as' 'mkisofs'
-        '-iso-level' 3
-        '-full-iso9660-filenames'
-        '-joliet'
-        '-joliet-long'
-        '-rational-rock'
-        '-volid' "$(_get_iso_partition_label "dongle")"
-        '-appid' "\"${iso_application} dongle CD\""
-        '-publisher' "\"${iso_publisher}\"" 
-        '-preparer' "\"prepared by ${app_name}\""
-        "${dongle_xorrisofs_options[@]}"
-        '-output' "\"${out_dir}/${image_name}\""
-        "${dongle_isofs_dir}/"
-    )
+      "${dongle_xorriso_options[@]}"
+      '-as' 'mkisofs'
+      '-iso-level' 3
+      '-full-iso9660-filenames'
+      '-joliet'
+      '-joliet-long'
+      '-rational-rock'
+      '-volid' "$(_get_iso_partition_label "dongle")"
+      '-appid' "\"${iso_application} dongle CD\""
+      '-publisher' "\"${iso_publisher}\"" 
+      '-preparer' "\"prepared by ${app_name}\""
+      "${dongle_xorrisofs_options[@]}"
+      '-output' "\"${out_dir}/${image_name}\""
+      "${dongle_isofs_dir}/")
     eval "xorriso ${dongle_xorriso_cmd_line[*]}"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
@@ -3707,54 +3751,61 @@ _build_iso_image() {
     isofs_dir="${work_dir}/iso"
     local bootmode
 
-    [[ -d "${out_dir}" ]] || install -d -- "${out_dir}"
+    [[ -d "${out_dir}" ]] || \
+      install -d -- "${out_dir}"
 
-    if [[ "${quiet}" == "y" ]]; then
-        # The when xorriso is run in mkisofs compatibility mode (xorrisofs), the mkisofs option -quiet is interpreted
-        # too late (e.g. messages about SOURCE_DATE_EPOCH still get shown).
-        # Instead use native xorriso option to silence the output.
-        xorriso_options+=('-report_about' 'SORRY' "${xorriso_options[@]}")
-    fi
+    [[ "${quiet}" == "y" ]] && \
+      # The when xorriso is run in mkisofs compatibility mode (xorrisofs),
+      # the mkisofs option -quiet is interpreted too late
+      # (e.g. messages about SOURCE_DATE_EPOCH still get shown).
+      # Instead use native xorriso option to silence the output.
+      xorriso_options+=(
+        '-report_about' 'SORRY'
+        "${xorriso_options[@]}")
 
     # Add required xorrisofs options for each boot mode
     for bootmode in "${bootmodes[@]}"; do
         "_add_xorrisofs_options_${bootmode}_iso" 
     done
 
-    if [ "${persistent_size}" != "" ]; then
-        xorrisofs_options=("$(_add_xorrisofs_options_persistent "${xorrisofs_options[@]}")")
-    fi
+    [ "${persistent_size}" != "" ] && \
+      xorrisofs_options=(
+        "$(_add_xorrisofs_options_persistent \
+               "${xorrisofs_options[@]}")")
 
-    if [ "${swap_size}" != "" ]; then
-        xorrisofs_options=("$(_add_xorrisofs_options_swap "${xorrisofs_options[@]}")")
-    fi
+    [ "${swap_size}" != "" ] && \
+      xorrisofs_options=(
+        "$(_add_xorrisofs_options_swap \
+               "${xorrisofs_options[@]}")")
 
     rm -f -- "${out_dir}/${image_name}"
     # shellcheck disable=SC2116
     xorriso_cmd_line=(
-        "${xorriso_options[@]}" '-as' 'mkisofs'
-        '-iso-level' 3
-        '-full-iso9660-filenames'
-        '-joliet'
-        '-joliet-long'
-        '-rational-rock'
-        '-volid' "${iso_label}"
-        '-appid' "\"${iso_application}\""
-        '-publisher' "\"${iso_publisher}\""
-        '-preparer' "\"prepared by ${app_name}\""
-        "${xorrisofs_options[@]}"
-        '-output' "${out_dir}/${image_name}"
-        "${isofs_dir}/"
-    )
+      "${xorriso_options[@]}" '-as' 'mkisofs'
+      '-iso-level' 3
+      '-full-iso9660-filenames'
+      '-joliet'
+      '-joliet-long'
+      '-rational-rock'
+      '-volid' "${iso_label}"
+      '-appid' "\"${iso_application}\""
+      '-publisher' "\"${iso_publisher}\""
+      '-preparer' "\"prepared by ${app_name}\""
+      "${xorrisofs_options[@]}"
+      '-output' "${out_dir}/${image_name}"
+      "${isofs_dir}/")
     _msg_info "Creating ISO image..."
     _msg_info "xorriso args: ${xorriso_cmd_line[*]}"
     eval "xorriso ${xorriso_cmd_line[*]}"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 
-    if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        cp "${airootfs_encryption_key}" "${out_dir}"
-        cp "${persistent_encryption_key}" "${out_dir}"
+    if [[ "${airootfs_image_type}" == *"luks"* ]] && \
+       [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        cp "${airootfs_encryption_key}" \
+           "${out_dir}"
+        cp "${persistent_encryption_key}" \
+           "${out_dir}"
     fi
 }
 
@@ -3774,14 +3825,19 @@ _read_profile() {
         # shellcheck source=configs/releng/profiledef.sh
         . "${profile}/profiledef.sh"
 
-        # Resolve paths of files that are expected to reside in the profile's directory
-        [[ -n "$arch" ]] || arch="$(uname -m)"
-        [[ -n "$packages" ]] || packages="${profile}/packages.${arch}"
+        # Resolve paths of files that are expected to reside 
+        # in the profile's directory
+        [[ -n "$arch" ]] || \
+          arch="$(uname -m)"
+        [[ -n "$packages" ]] || \
+          packages="${profile}/packages.${arch}"
         packages="$(realpath -- "${packages}")"
         pacman_conf="$(realpath -- "${pacman_conf}")"
 
-        # Resolve paths of files that may reside in the profile's directory
-        if [[ -z "$bootstrap_packages" ]] && [[ -e "${profile}/bootstrap_packages.${arch}" ]]; then
+        # Resolve paths of files that may reside
+        # in the profile's directory
+        if [[ -z "$bootstrap_packages" ]] && \
+           [[ -e "${profile}/bootstrap_packages.${arch}" ]]; then
             bootstrap_packages="${profile}/bootstrap_packages.${arch}"
             bootstrap_packages="$(realpath -- "${bootstrap_packages}")"
             pacman_conf="$(realpath -- "${pacman_conf}")"
@@ -3793,8 +3849,13 @@ _read_profile() {
 
 # Validate set options
 _validate_options() {
-    local validation_error=0 _buildmode _msg=()
-
+    local _build \
+          _build_fun="_build_buildmode" \
+          _buildmode \
+          _msg=() \
+          _validate \
+          _validate_fun="_validate_requirements_buildmode" \
+          validation_error=0
     _msg_info "Validating options..."
 
     # Check if pacman configuration file exists
@@ -3805,12 +3866,15 @@ _validate_options() {
 
     # Check if the specified buildmodes are supported
     for _buildmode in "${buildmodes[@]}"; do
-        if typeset -f "_build_buildmode_${_buildmode}" &> /dev/null; then
-            if typeset -f "_validate_requirements_buildmode_${_buildmode}" &> /dev/null; then
-                "_validate_requirements_buildmode_${_buildmode}"
+        _build="${_build_fun}_${_buildmode}"
+        _validate="${_validate_fun}_${_buildmode}"
+        if typeset -f "${_build}" &> /dev/null; then
+            if typeset -f "${_validate}" &> /dev/null; then
+                "${_validate}"
             else
-                _msg=("Function '_validate_requirements_buildmode_${_buildmode}' does not exist."
-                     "Validating the requirements of '${_buildmode}' build mode will not be possible.")
+                _msg=("Function '${_validate}' does not exist."
+                      "Validating the requirements of '${_buildmode}'"
+                      "build mode will not be possible.")
                 _msg_warning "${_msg[*]}"
             fi
         else
@@ -3820,7 +3884,9 @@ _validate_options() {
     done
 
     if (( validation_error )); then
-        _msg_error "${validation_error} errors were encountered while validating the profile. Aborting." 1
+        _msg=("${validation_error} errors were encountered while"
+              "validating the profile. Aborting.")
+        _msg_error "${_msg[*]}" 1
     fi
     _msg_info "Done!"
 }
@@ -3835,43 +3901,45 @@ _set_no_override() {
     eval "[[ -n \$${_var} ]] || ${_var}=${_value}"
 }
 
-# Set defaults and, if present, overrides from mkarchiso command line option parameters
+# Set defaults and, if present, overrides from mkarchiso 
+# command line option parameters
 _set_overrides() {
     local _var _img
-    local _no_override_fs_images=(
-        "boot"
-        "efi_boot"
-        "dongle_boot"
-        "dongle_persistent"
-        "dongle_swap"
-        "persistent"
-        "recovery"
-        "swap"
+    local no_override_fs_images=(
+      "boot"
+      "efi_boot"
+      "dongle_boot"
+      "dongle_persistent"
+      "dongle_swap"
+      "persistent"
+      "recovery"
+      "swap"
     )
     declare -A no_override_vars=(
-        ["airootfs_image_type"]="squashfs"
-        ["boot_image_type"]="ext4+luks"
-        ["dongle_boot_image_type"]="ext4+luks"
-        ["dongle_persistent_image_type"]="ext4+luks"
-        ["dongle_swap_image_type"]="swap+luks"
-        ["keys_image_type"]="squashfs+luks"
-        ["persistent_image_type"]="ext4+luks"
-        ["recovery_image_type"]="ext4+luks"
-        ["swap_image_type"]="swap+luks"
-        ["dongle_persistent_encryption_key"]="auto"
-        ["dolge_swap_encryption_key"]="auto"
-        ["keys_encryption_key"]="auto"
-        ["recovery_encryption_key"]="auto"
-        ["swap_encryption_key"]="auto"
-        ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
-        ["isofs_dir"]="${work_dir}/iso"
-        ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
-        ["recovery"]="false"
-        ["iso_name"]="${app_name}"
+      ["airootfs_image_type"]="squashfs"
+      ["boot_image_type"]="ext4+luks"
+      ["dongle_boot_image_type"]="ext4+luks"
+      ["dongle_persistent_image_type"]="ext4+luks"
+      ["dongle_swap_image_type"]="swap+luks"
+      ["keys_image_type"]="squashfs+luks"
+      ["persistent_image_type"]="ext4+luks"
+      ["recovery_image_type"]="ext4+luks"
+      ["swap_image_type"]="swap+luks"
+      ["dongle_persistent_encryption_key"]="auto"
+      ["dolge_swap_encryption_key"]="auto"
+      ["keys_encryption_key"]="auto"
+      ["recovery_encryption_key"]="auto"
+      ["swap_encryption_key"]="auto"
+      ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
+      ["isofs_dir"]="${work_dir}/iso"
+      ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+      ["recovery"]="false"
+      ["iso_name"]="${app_name}"
     )
 
     # Set variables that have command line overrides
-    [[ ! -v override_buildmodes ]] || buildmodes=("${override_buildmodes[@]}")
+    [[ ! -v override_buildmodes ]] || \
+      buildmodes=("${override_buildmodes[@]}")
     if (( ${#buildmodes[@]} < 1 )); then
         buildmodes+=('iso')
     fi
@@ -3880,48 +3948,52 @@ _set_overrides() {
     elif [[ -z "$work_dir" ]]; then
         work_dir='./work'
     fi
-    work_dir="$(realpath -- "$work_dir")"
+    work_dir="$(realpath -- "${work_dir}")"
     if [[ -v override_out_dir ]]; then
-        out_dir="$override_out_dir"
-    elif [[ -z "$out_dir" ]]; then
+        out_dir="${override_out_dir}"
+    elif [[ -z "${out_dir}" ]]; then
         out_dir='./out'
     fi
     out_dir="$(realpath -- "$out_dir")"
     if [[ -v override_pacman_conf ]]; then
-        pacman_conf="$override_pacman_conf"
-    elif [[ -z "$pacman_conf" ]]; then
+        pacman_conf="${override_pacman_conf}"
+    elif [[ -z "${pacman_conf}" ]]; then
         pacman_conf="/etc/pacman.conf"
     fi
-    pacman_conf="$(realpath -- "$pacman_conf")"
-    [[ ! -v override_pkg_list ]] || pkg_list+=("${override_pkg_list[@]}")
+    pacman_conf="$(realpath -- "${pacman_conf}")"
+    [[ ! -v override_pkg_list ]] || \
+      pkg_list+=("${override_pkg_list[@]}")
     # TODO: allow overriding bootstrap_pkg_list
     if [[ -v override_iso_label ]]; then
-        iso_label="$override_iso_label"
-    elif [[ -z "$iso_label" ]]; then
+        iso_label="${override_iso_label}"
+    elif [[ -z "${iso_label}" ]]; then
         iso_label="${app_name^^}"
     fi
     if [[ -v override_iso_publisher ]]; then
-        iso_publisher="$override_iso_publisher"
-    elif [[ -z "$iso_publisher" ]]; then
+        iso_publisher="${override_iso_publisher}"
+    elif [[ -z "${iso_publisher}" ]]; then
         iso_publisher="${app_name}"
     fi
     if [[ -v override_iso_application ]]; then
-        iso_application="$override_iso_application"
-    elif [[ -z "$iso_application" ]]; then
+        iso_application="${override_iso_application}"
+    elif [[ -z "${iso_application}" ]]; then
         iso_application="${app_name} iso"
     fi
     if [[ -v override_install_dir ]]; then
-        install_dir="$override_install_dir"
-    elif [[ -z "$install_dir" ]]; then
+        install_dir="${override_install_dir}"
+    elif [[ -z "${install_dir}" ]]; then
         install_dir="${app_name}"
     fi
-    [[ ! -v override_gpg_key ]] || gpg_key="$override_gpg_key"
-    [[ ! -v override_gpg_sender ]] || gpg_sender="$override_gpg_sender"
-    [[ ! -v override_gpg_home ]] || gpg_home="$override_gpg_home"
-    if [[ -v override_cert_list ]]; then
-        sign_netboot_artifacts="y"
-    fi
-    [[ ! -v override_cert_list ]] || cert_list+=("${override_cert_list[@]}")
+    [[ ! -v override_gpg_key ]] || \
+      gpg_key="${override_gpg_key}"
+    [[ ! -v override_gpg_sender ]] || \
+      gpg_sender="${override_gpg_sender}"
+    [[ ! -v override_gpg_home ]] || \
+      gpg_home="${override_gpg_home}"
+    [[ -v override_cert_list ]] && \
+      sign_netboot_artifacts="y"
+    [[ ! -v override_cert_list ]] || \
+      cert_list+=("${override_cert_list[@]}")
     if [[ -v override_quiet ]]; then
         quiet="$override_quiet"
     elif [[ -z "$quiet" ]]; then
@@ -3929,30 +4001,36 @@ _set_overrides() {
     fi
 
     # Set variables that do not have overrides
-    for _img in "${_no_override_fs_images[@]}"; do
+    for _img in "${no_override_fs_images[@]}"; do
         _msg_info "Setting ${_img} image to $(_get_fs_img ${_img})"
         no_override_vars["${_img}"]="$(_get_fs_img "${_img}")"
     done
     for _var in "${!no_override_vars[@]}"; do
         _msg_info "Setting ${_var} to ${no_override_vars[${_var}]}"
-        _set_no_override "${_var}" "${no_override_vars[${_var}]}"
+        _set_no_override "${_var}" \
+                         "${no_override_vars[${_var}]}"
     done
 }
 
 _export_gpg_publickey() {
+    local gpg_options=(
+      --batch
+      --no-armor
+      --output "${work_dir}/pubkey.gpg"
+      --export "${gpg_key}")
+
     rm -f -- "${work_dir}/pubkey.gpg"
     if [ "${gpg_home}" != "" ]; then
-        GNUPGHOME="${gpg_home}" gpg --homedir "${gpg_home}" \
-                                    --batch --no-armor --output "${work_dir}/pubkey.gpg" \
-                                    --export "${gpg_key}"
+        gpg_options+=('--homedir' "${gpg_home}")
+        GNUPGHOME="${gpg_home}" \
+          gpg "${gpg_options[@]}"
     else
-        gpg --batch --no-armor --output "${work_dir}/pubkey.gpg" \
-            --export "${gpg_key}"
+        gpg "${gpg_options[@]}"
     fi
 }
 
 _make_version() {
-    local _os_release
+    local _msg _os_release
 
     _msg_info "Creating version files..."
     # Write version file to system installation dir
@@ -3960,49 +4038,75 @@ _make_version() {
     printf '%s\n' "${iso_version}" > "${pacstrap_dir}/version"
 
     if [[ "${buildmode}" == @("iso"|"netboot") ]]; then
-        install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+        install -d \
+                -m 0755 -- \
+                "${isofs_dir}/${install_dir}"
         # Write version file to ISO 9660
-        printf '%s\n' "${iso_version}" > "${isofs_dir}/${install_dir}/version"
+        printf '%s\n' \
+               "${iso_version}" > "${isofs_dir}/${install_dir}/version"
         # Write grubenv with version information to ISO 9660
-        printf '%.1024s' "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
-            "${iso_name}" "${iso_version}" "$(printf '%0.1s' "#"{1..1024})")" \
-            > "${isofs_dir}/${install_dir}/grubenv"
+        printf '%.1024s' \
+               "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
+                         "${iso_name}" \
+                         "${iso_version}" \
+                         "$(printf '%0.1s' \
+                                   "#"{1..1024})")" > \
+                 "${isofs_dir}/${install_dir}/grubenv"
     fi
 
     # Append IMAGE_ID & IMAGE_VERSION to os-release
     _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
-    if [[ ! -e "${pacstrap_dir}/etc/os-release" && -e "${pacstrap_dir}/usr/lib/os-release" ]]; then
-        _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
-    fi
+    [[ ! -e "${pacstrap_dir}/etc/os-release" ]] && \
+    [[ -e "${pacstrap_dir}/usr/lib/os-release" ]] && \
+      _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
     if [[ "${_os_release}" != "${pacstrap_dir}"* ]]; then
-        _msg_warning "os-release file '${_os_release}' is outside of valid path."
+        _msg="os-release file '${_os_release}' is outside of valid path."
+        _msg_warning "${_msg}"
     else
-        [[ ! -e "${_os_release}" ]] || sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' "${_os_release}"
-        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' "${iso_name}" "${iso_version}" >> "${_os_release}"
+        [[ ! -e "${_os_release}" ]] || \
+          sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' \
+              "${_os_release}"
+        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' \
+               "${iso_name}" \
+               "${iso_version}" >> "${_os_release}"
     fi
 
     # Touch /usr/lib/clock-epoch to give another hint on date and time
     # for systems with screwed or broken RTC.
-    touch -m -d"@${SOURCE_DATE_EPOCH}" -- "${pacstrap_dir}/usr/lib/clock-epoch"
+    touch -m \
+          -d"@${SOURCE_DATE_EPOCH}" -- \
+          "${pacstrap_dir}/usr/lib/clock-epoch"
 
     _msg_info "Done!"
 }
 
 _make_pkglist() {
+    local _bootstrap="${pacstrap_dir}/pkglist.${arch}.txt" \
+          _iso="${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
     _msg_info "Creating a list of installed packages on live-enviroment..."
     case "${buildmode}" in
         "bootstrap")
-            pacman -Q --sysroot "${pacstrap_dir}" > "${pacstrap_dir}/pkglist.${arch}.txt"
+            pacman -Q \
+                   --sysroot \
+                   "${pacstrap_dir}" > "${_bootstrap}"
             ;;
         "iso")
-            install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+            install -d \
+                    -m 0755 -- \
+                    "${isofs_dir}/${install_dir}"
             if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
-                pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
+                pacman -Q \
+                       --sysroot \
+                       "${pacstrap_dir}" > "${_iso}"
             fi
             ;;
         "netboot")
-            install -d -m 0755 -- "${isofs_dir}/${install_dir}"
-            pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
+            install -d \
+                    -m 0755 -- \
+                    "${isofs_dir}/${install_dir}"
+            pacman -Q \
+                   --sysroot \
+                   "${pacstrap_dir}" > "${_iso}"
             ;;
     esac
     _msg_info "Done!"
@@ -4015,23 +4119,31 @@ _build_dongle_base() {
     _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}"
     keys_dir="${work_dir}/keys"
 
-    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
-    [[ -d "${dongle_isofs_dir}" ]] || install -d -- "${dongle_isofs_dir}"
-    [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
-    [[ -d "${dongle_boot_dir}" ]] || install -d -- "${dongle_boot_dir}"
+    _setup_work_dir "keys"
+    _setup_work_dir "dongle_isofs"
+    _setup_work_dir "dongle_boot"
+    _setup_work_dir "dongle_persistent"
+    _setup_work_dir "dongle_boot"
 
-    if [ "${airootfs_encryption_key}" != "" ]; then
-        cp "${airootfs_encryption_key}" "${keys_dir}/airootfs.key"
-    fi
+    [ "${airootfs_encryption_key}" != "" ] && \
+      cp "${airootfs_encryption_key}" \
+         "${keys_dir}/airootfs.key"
 
-    if [[ "${airootfs_image_type}" == *"luks"* ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _run_once _prepare_keys_image
-    fi
+    [[ "${airootfs_image_type}" == *"luks"* ]] && \
+    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+      _run_once _prepare_keys_image
 
     _run_once _make_boot_on_dongle
     _make_bootmodes_dongle
 }
 
+# Create working directory
+# $1: value in fs_images
+_setup_work_dir() {
+    local _image="${1}"
+    [[ -d "$(_get_fs_dir "${_image}")" ]] || \
+      install -d -- "$(_get_fs_dir "${_image}")"
+}
 
 # build the base for an ISO and/or a netboot target
 _build_iso_base() {
@@ -4048,11 +4160,10 @@ _build_iso_base() {
     dongle_persistent_dir="${work_dir}/dongle_persistent"
     dongle_boot_dir="${work_dir}/dongle_boot"
 
-    # Create working directory
-    [[ -d "${airootfs_dir}" ]] || install -d -- "${airootfs_dir}"
-    [[ -d "${keys_dir}" ]] || install -d -- "${keys_dir}"
-    [[ -d "${persistent_dir}" ]] || install -d -- "${persistent_dir}"
-    [[ -d "${dongle_persistent_dir}" ]] || install -d -- "${dongle_persistent_dir}"
+    _setup_work_dir "airootfs"
+    _setup_work_dir "keys"
+    _setup_work_dir "persistent"
+    _setup_work_dir "dongle_persistent"
 
     # Write build date to file or if the file exists, read it from there
     if [[ -e "${work_dir}/build_date" ]]; then
@@ -4061,9 +4172,11 @@ _build_iso_base() {
         printf '%s\n' "$SOURCE_DATE_EPOCH" > "${work_dir}/build_date"
     fi
 
-    [[ "${quiet}" == "y" ]] || _show_config
+    [[ "${quiet}" == "y" ]] || \
+      _show_config
     _run_once _make_pacman_conf
-    [[ -z "${gpg_key}" ]] || _run_once _export_gpg_publickey
+    [[ -z "${gpg_key}" ]] || \
+      _run_once _export_gpg_publickey
     _run_once _make_custom_airootfs
     _run_once _make_packages
     _run_once _make_version
@@ -4085,18 +4198,20 @@ _build_iso_base() {
 
 # Build the bootstrap buildmode
 _build_buildmode_bootstrap() {
-    local image_name="${iso_name}-bootstrap-${iso_version}-${arch}.tar.gz"
-    local run_once_mode="${buildmode}"
-    local buildmode_packages="${bootstrap_packages}"
+    local image_name="${iso_name}-bootstrap-${iso_version}-${arch}.tar.gz" \
+          run_once_mode="${buildmode}" \
+          buildmode_packages="${bootstrap_packages}"
     # Set the package list to use
     local buildmode_pkg_list=("${bootstrap_pkg_list[@]}")
 
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/bootstrap/root.${arch}"
-    [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
+    [[ -d "${work_dir}" ]] || \
+      install -d -- "${work_dir}"
     install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
 
-    [[ "${quiet}" == "y" ]] || _show_config
+    [[ "${quiet}" == "y" ]] || \
+      _show_config
     _run_once _make_pacman_conf
     _run_once _make_packages
     _run_once _make_version
@@ -4108,18 +4223,16 @@ _build_buildmode_bootstrap() {
 # Build the netboot buildmode
 _build_buildmode_netboot() {
     local run_once_mode="${buildmode}"
-
     _build_iso_base
-    if [[ -v cert_list ]]; then
-        _run_once _sign_netboot_artifacts
-    fi
+    [[ -v cert_list ]] && \
+      _run_once _sign_netboot_artifacts
     _run_once _export_netboot_artifacts
 }
 
 # Build the ISO buildmode
 _build_buildmode_iso() {
-    local image_name="${iso_name}-${iso_version}-${arch}.iso"
-    local run_once_mode="${buildmode}"
+    local image_name="${iso_name}-${iso_version}-${arch}.iso" \
+          run_once_mode="${buildmode}"
     efi_boot_img="${work_dir}/efiboot.img"
     _build_iso_base
     _run_once _build_iso_image
