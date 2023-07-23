@@ -10,16 +10,19 @@ umask 0022
 export LC_ALL="C.UTF-8"
 if [[ -v LANGUAGE ]]; then
     # LC_ALL=C.UTF-8, unlike LC_ALL=C, does not override LANGUAGE.
-    # See https://sourceware.org/bugzilla/show_bug.cgi?id=16621 and https://savannah.gnu.org/bugs/?62815
+    # See https://sourceware.org/bugzilla/show_bug.cgi?id=16621 \
+    # and https://savannah.gnu.org/bugs/?62815
     unset LANGUAGE
 fi
-[[ -v SOURCE_DATE_EPOCH ]] || printf -v SOURCE_DATE_EPOCH '%(%s)T' -1
+[[ -v SOURCE_DATE_EPOCH ]] || \
+  printf -v SOURCE_DATE_EPOCH '%(%s)T' -1
 export SOURCE_DATE_EPOCH
 
 # Set application name from the script's file name
 app_name="${0##*/}"
 
-# Define global variables. All of them will be overwritten later
+# Define global variables.
+# All of them will be overwritten later
 pkg_list=()
 bootstrap_pkg_list=()
 quiet=""
@@ -53,25 +56,25 @@ sign_netboot_artifacts=""
 declare -A file_permissions=()
 declare -A images=()
 fs_images=(
-    'airootfs'
-    'persistent'
-    'keys'
-    'swap'
-    'dongle_boot'
-    'dongle_persistent'
-    'dongle_swap'
-    'recovery'
-    'efi_boot')
+  'airootfs'
+  'persistent'
+  'keys'
+  'swap'
+  'dongle_boot'
+  'dongle_persistent'
+  'dongle_swap'
+  'recovery'
+  'efi_boot')
 fs_images_str_vars=(
-    'dir'
-    'image_type'
-    'image_tool_options'
-    'img'
-    'size' # All sizes are in kib
-    'encryption_key')
+  'dir'
+  'image_type'
+  'image_tool_options'
+  'img'
+  'size' # All sizes are in kib
+  'encryption_key')
 fs_images_arr_vars=(
-    'files'
-    'image_tool_options')
+  'files'
+  'image_tool_options')
 _img=""
 for _img in "${fs_images[@]}"; do
     for _var in "${fs_images_str_vars[@]}"; do
@@ -81,8 +84,14 @@ for _img in "${fs_images[@]}"; do
         eval "${_img}_${_var}=()"
     done
 done
-# adapted from GRUB_EARLY_INITRD_LINUX_STOCK in https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
-readonly ucodes=('intel-uc.img' 'intel-ucode.img' 'amd-uc.img' 'amd-ucode.img' 'early_ucode.cpio' 'microcode.cpio')
+# adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
+# https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
+readonly ucodes=(
+  'intel-uc.img'
+  'intel-ucode.img'
+  'amd-uc.img'
+  'amd-ucode.img'
+  'early_ucode.cpio' 'microcode.cpio')
 
 # Constants
 epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
@@ -98,17 +107,25 @@ _dongle_const="${_EL}"
 _boot_const="${_RO}"
 _persistent_const="${_PI}"
 _swap_const="${_E}"
-_dongle_boot_const=$((_dongle_const + _boot_const))
-_dongle_persistent_const=$((_dongle_const + _persistent_const))
-_dongle_swap_const=$((_dongle_const + _swap_const))
-_keys_const=$((_dongle_const + _boot_const + _persistent_const))
-_recovery_const=$((_dongle_const + _boot_const + _keys_const))
+_dongle_boot_const=$((_dongle_const + \
+                      _boot_const))
+_dongle_persistent_const=$((_dongle_const + \
+                            _persistent_const))
+_dongle_swap_const=$((_dongle_const + \
+                      _swap_const))
+_keys_const=$((_dongle_const + \
+               _boot_const + \
+               _persistent_const))
+_recovery_const=$((_dongle_const + \
+                   _boot_const + \
+                   _keys_const))
 
 # Show an INFO message
 # $1: message string
 _msg_info() {
     local _msg="${1}"
-    [[ "${quiet}" == "y" ]] || printf '[%s] INFO: %s\n' "${app_name}" "${_msg}"
+    [[ "${quiet}" == "y" ]] || \
+      printf '[%s] INFO: %s\n' "${app_name}" "${_msg}"
 }
 
 # Show a WARNING message
@@ -217,21 +234,38 @@ _cleanup_pacstrap_dir() {
     # Move kernel, initramfs and microcodes for later usage
     install -d -m 0755 "${work_dir}/boot" 
     for _query in "${_images[@]}"; do
-        find "${_boot}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${work_dir}/boot" \; -quit
+        find "${_boot}" -iname "${_query}" \
+                        -exec cp "${_cp_opts[@]}" \
+                                 {} "${work_dir}/boot" \; -quit
     done
-    [[ -d "${_boot}" ]] && find "${_boot}" -maxdepth 1 -type f -delete
+    [[ -d "${_boot}" ]] && \
+      find "${_boot}" -maxdepth 1 \
+                      -type f \
+                      -delete
     # Delete pacman database sync cache files (*.tar.gz)
-    [[ -d "${_pacman_db}" ]] && find "${_pacman_db}" -maxdepth 1 -type f -delete
+    [[ -d "${_pacman_db}" ]] && \
+      find "${_pacman_db}" -maxdepth 1 \
+                           -type f \
+                           -delete
     # Delete pacman database sync cache
-    [[ -d "${_pacman_db}/sync" ]] && find "${_pacman_db}/sync" -delete
+    [[ -d "${_pacman_db}/sync" ]] && \
+      find "${_pacman_db}/sync" -delete
     # Delete pacman cache files
-    [[ -d "${_pacman_cache}" ]] && find "${_pacman_cache}" -type f -delete
+    [[ -d "${_pacman_cache}" ]] && \
+      find "${_pacman_cache}" -type f -delete
     # Delete all log files, keeps empty dirs.
-    [[ -d "${_log}" ]] && find "${_log}" -type f -delete
+    [[ -d "${_log}" ]] && \
+      find "${_log}" -type f \
+                     -delete
     # Delete all temporary files and dirs
-    [[ -d "${_tmp}" ]] && find "${_tmp}" -mindepth 1 -delete
+    [[ -d "${_tmp}" ]] && \
+      find "${_tmp}" -mindepth 1 \
+                     -delete
     # Delete package pacman related files.
-    find "${work_dir}" \( -name '*.pacnew' -o -name '*.pacsave' -o -name '*.pacorig' \) -delete
+    find "${work_dir}" \( -name '*.pacnew' \
+                          -o -name '*.pacsave' \
+                          -o -name '*.pacorig' \) \
+                       -delete
     if [[ "${persistent_size}" != "" ]]; then
         dbus-uuidgen --ensure="${_machine_id}"
     else
@@ -242,19 +276,30 @@ _cleanup_pacstrap_dir() {
     _msg_info "Done!"
 }
 
-# Creates a squashfs image from a file system image or directory.
+# Creates a squashfs image from a
+# file system image or directory.
 # $1: directory or a file system image
 # $2: path of the result image
 _run_mksquashfs() {
-    local _directory_or_fs="${1}"
-    local _image_path="${2}"
-    local mksquashfs_options=("${_mkfs_options[@]}")
-    [[ ! "${quiet}" == "y" ]] || mksquashfs_options+=('-no-progress' '-quiet')
-    _msg_info "Creating SQUASHFS image, this may take some time..."
-    mksquashfs "${_directory_or_fs}" "${_image_path}" -noappend "${mksquashfs_options[@]}"
+    local _directory_or_fs="${1}" \
+          _image_path="${2}" \
+          _msg=() \
+          mksquashfs_options=("${_mkfs_options[@]}")
+    [[ ! "${quiet}" == "y" ]] || \
+      mksquashfs_options+=(
+        '-no-progress'
+        '-quiet')
+    _msg=("Creating SQUASHFS image,"
+          "this may take some time...")
+    _msg_info "${_msg[*]}"
+    mksquashfs "${_directory_or_fs}" \
+               "${_image_path}" \
+               -noappend \
+               "${mksquashfs_options[@]}"
 }
 
-# Creates an ext4 image of given size from a directory with the same name in the same path.
+# Creates an ext4 image of given size 
+# from a directory with the same name in the same path.
 # $1: directory to put into the image
 # $2: size of the resulting image
 # $3: UNIX time (to generate a date-based uuid)
@@ -263,11 +308,13 @@ _run_mksquashfs() {
 _run_mkext4() {
     local _dir="${1}"
     local _image_path="${1}.img"
-    local _size="${2}"
-    local _epoch="${3}"
-    local _label="${4}"
-    local _writable="${5}"
-    local ext4_hash_seed _fsuuid mkfs_ext4_options=()
+    local _size="${2}" \
+          _epoch="${3}" \
+          _label="${4}" \
+          _writable="${5}" \
+          _fsuuid \
+          ext4_hash_seed \
+          mkfs_ext4_options=()
     _fsuuid="$(_epoch_to_uuid "${_epoch}")"
 
     _msg_info "Creating ext4 image"
@@ -281,24 +328,40 @@ _run_mkext4() {
     ext4_hash_seed="$(uuidgen --sha1 \
                               --namespace ${epoch_namespace} \
                               --name "${_epoch} ext4 hash seed")"
-    mkfs_ext4_options=('-d' "${_dir}"
-                       '-O' '^has_journal,^resize_inode'
-                       '-E' "lazy_itable_init=0,root_owner=0:0,hash_seed=${ext4_hash_seed}"
-                       '-m' '0'
-                       '-F'
-                       '-b' 4096
-                       '-U' 'clear')
-    [[ "${_label}" != "" ]] && mkfs_ext4_options+=('-L' "${_label}")
-    [[ ! "${quiet}" == "y" ]] || mkfs_ext4_options+=('-q')
+    _ext_opts=(
+      "lazy_itable_init=0"
+      "root_owner=0:0"
+      "hash_seed=${ext4_hash_seed}")
+    mkfs_ext4_options=(
+      '-d' "${_dir}"
+      '-O' '^has_journal,^resize_inode'
+      '-E' "$(IFS=, ; echo ${_ext_opts[*]})"
+      '-m' '0'
+      '-F'
+      '-b' 4096
+      '-U' 'clear')
+    [[ "${_label}" != "" ]] && \
+      mkfs_ext4_options+=('-L' "${_label}")
+    [[ ! "${quiet}" == "y" ]] || \
+      mkfs_ext4_options+=('-q')
     rm -f -- "${_image_path}"
     if [[ ! "${quiet}" == "y" ]]; then
-        E2FSPROGS_FAKE_TIME="${_epoch}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K"
+        E2FSPROGS_FAKE_TIME="${_epoch}" \
+          mkfs.ext4 "${mkfs_ext4_options[@]}" -- \
+                    "${_image_path}" \
+                    "${_size}K"
     else
-        E2FSPROGS_FAKE_TIME="${_epoch}" mkfs.ext4 "${mkfs_ext4_options[@]}" -- "${_image_path}" "${_size}K" > /dev/null 2>&1
+        E2FSPROGS_FAKE_TIME="${_epoch}" \
+          mkfs.ext4 "${mkfs_ext4_options[@]}" -- \
+                    "${_image_path}" \
+                    "${_size}K" > /dev/null 2>&1
     fi
-    tune2fs -c 0 -i 0 -- "${_image_path}" > /dev/null
+    tune2fs -c 0 \
+            -i 0 -- \
+            "${_image_path}" > /dev/null
     if [ "${_writable}" != "true" ]; then
-        tunefs -O read-only "${_image_path}"
+        tunefs -O read-only \
+               "${_image_path}"
     fi
     _msg_info "Done!"
 }
@@ -313,14 +376,19 @@ _run_mkerofs() {
     local _epoch="${3}"
     local fsuuid
     fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
-    [[ ! "${quiet}" == "y" ]] || mkfs_erofs_options+=('--quiet')
+    [[ ! "${quiet}" == "y" ]] || \
+      mkfs_erofs_options+=('--quiet')
     _msg_info "Creating EROFS image"
     _msg_info "Directory: ${_dir}"
     _msg_info "Image path: ${_image_path}"
     _msg_info "UUID: ${fsuuid}"
     _msg_info "this may take a while..."
-    mkfs_erofs_options+=('-U' "${fsuuid}" "${_mkfs_options[@]}")
-    mkfs.erofs "${mkfs_erofs_options[@]}" -- "${_image_path}" "${_dir}"
+    mkfs_erofs_options+=(
+      '-U' "${fsuuid}"
+      "${_mkfs_options[@]}")
+    mkfs.erofs "${mkfs_erofs_options[@]}" -- \
+               "${_image_path}" \
+               "${_dir}"
     _msg_info "Done!"
 }
 
@@ -336,10 +404,15 @@ _run_mkswap() {
     local _label="${4}"
     local _fsuuid
     _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
-    dd if=/dev/zero of="${_image_path}" bs=1K count="${_size}" status=progress
+    dd if=/dev/zero \
+       of="${_image_path}" \
+       bs=1K count="${_size}" \
+       status=progress
     chmod 0600 "${_image_path}"
     sync
-    mkswap -L "${_label}" -U "${_fsuuid}" "${_image_path}"
+    mkswap -L "${_label}" \
+           -U "${_fsuuid}" \
+           "${_image_path}"
 }
 
 # Creates and opens a RAID device
@@ -359,35 +432,48 @@ _run_mkraid() {
           "${_devices[@]}"
 }
 
-# Creates and opens a LUKS image of the size of the pacstrap directory plus 200MB.
+# Creates and opens a LUKS image of the size
+# of the pacstrap directory plus 200MB.
 # $1: image to write on
 # $2: partition size
 # $3: encryption key
 # $4: UNIX time (to generate a date-based uuid)
 # $5: partition label
 # $6: if true, the partition will be writable
-# $7: if true, dm-verity layer will be disabled to be able to be opened by GRUB
+# $7: if true, dm-verity layer will be disabled
+#     to be able to be opened by GRUB
 _run_mkluks() {
-    local _image_path="${1}"
-    local _size="${2}"
-    local _encryption_key="${3}"
-    local _epoch="${4}"
-    local _label="${5}"
-    local _writable="${6}"
-    local _grub="${7}"
-    local _fsuuid
-    local _fallocate_opts=('--length' "${_size}K")
-    local _activation_opts=() _format_opts=() _fallocate_msg="" _key_msg="" _mapper
-    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported" 
-    local _key_size='512'
-    local _sector_size='4096'
-    local _pbkdf_memory='256'
-    local _cryptsetup_opts=('--type' 'luks2'
-                            '--timeout=69042')
+    local _image_path="${1}" \
+          _size="${2}" \
+          _encryption_key="${3}" \
+          _epoch="${4}" \
+          _label="${5}" \
+          _writable="${6}" \
+          _grub="${7}"
+    local _activation_cmd=() \
+          _activation_opts=() \
+          _config_cmd=() \
+          _cryptsetup_opts=(
+            '--type' 'luks2'
+            '--timeout=69042') \
+          _fallocate_opts=(
+            '--length'
+            "${_size}K") \
+          _format_opts=() \
+          _format_cmd=() \
+          _fsuuid \
+          _key_msg="" \
+          _key_opts=() \
+          _key_size='512'
+          _mapper \
+          _msg=() \
+          _pbkdf_memory='256' \
+          _sector_size='4096' \
+          _uuid_set_cmd=()
+
+    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
     _mapper=$(basename "${_image_path}")".map"
     image_device="/dev/mapper/${_mapper}"
-    _key_opts=()
-    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
 
     if [[ "${_encryption_key}" != "" ]]; then
         _key_opts=("--key-file=${_encryption_key}")
@@ -396,47 +482,70 @@ _run_mkluks() {
     fi
 
     _activation_opts+=("${_cryptsetup_opts[@]}")
-    _format_opts+=("${_cryptsetup_opts[@]}" \
-        '--sector-size' "${_sector_size}" \
-        '--key-size' "${_key_size}")
+    _format_opts+=(
+      "${_cryptsetup_opts[@]}"
+      '--sector-size' "${_sector_size}"
+      '--key-size' "${_key_size}")
 
     # Remove as soon as gcrypt adds support for argon2i
     # and GRUB for the dm-integrity layer
     if [ "${_grub}" == "true" ]; then
-        _format_opts+=('--pbkdf' 'pbkdf2')
+        _format_opts+=(
+          '--pbkdf' 'pbkdf2')
     else
-        _format_opts+=('--pbkdf-memory' "${_pbkdf_memory}"
-                       '--integrity' 'hmac-sha512')
+        _format_opts+=(
+          '--pbkdf-memory' "${_pbkdf_memory}"
+          '--integrity' 'hmac-sha512')
     fi
 
     if [ "${_writable}" != "true" ]; then
         _msg_info "Integrity journal disabled"
-        _activation_opts+=('--persistent' \
-                           '--integrity-no-journal' \
-                           '--key-size' "${_key_size}")
+        _activation_opts+=(
+          '--persistent' \
+          '--integrity-no-journal' \
+          '--key-size' "${_key_size}")
     fi
-
-    _msg_info "Creating LUKS image $(basename "${_image_path}") with cryptsetup (${_size}KB) ${_key_msg}"
-    _fallocate_opts+=("$(_validate_fallocate_opts "${_image_path}")")
-    fallocate "${_fallocate_opts[@]}" "${_image_path}"
-    while ! eval "cryptsetup -q -y luksFormat ${_format_opts[*]} ${_image_path}"; do
+    _msg=("Creating LUKS image $(basename "${_image_path}")"
+          "with cryptsetup (${_size}KB) ${_key_msg}")
+    _msg_info "${_msg[*]}"
+    _fallocate_opts+=(
+      "$(_validate_fallocate_opts "${_image_path}")")
+    fallocate "${_fallocate_opts[@]}" \
+              "${_image_path}"
+    _format_cmd=(
+      "cryptsetup" "-q"
+                   "-y" "luksFormat" "${_format_opts[*]}"
+                                     "${_image_path}")
+    while ! eval "${_format_cmd[*]}"; do
         sleep 1
     done
 
     _msg_info "Setting label ${_label}"
-    while ! eval "cryptsetup config ${_cryptsetup_opts[*]} ${_image_path} --label ${_label}"; do
+    _config_cmd=("cryptsetup" "config" "${_cryptsetup_opts[*]}"
+                                       "${_image_path}"
+                                         "--label" "${_label}")
+    while ! eval "${_config_cmd[*]}"; do
         _close_luks_device "${image_device}"
     done
 
     _msg_info "Setting UUID ${_fsuuid}"
-    while ! eval "cryptsetup -q -y luksUUID --uuid ${_fsuuid} ${_image_path}"; do
+    _uuid_set_cmd=(
+      "cryptsetup" "-q"
+                   "-y"
+                   "luksUUID" "--uuid ${_fsuuid}"
+                              "${_image_path}")
+    while ! eval "${_uuid_set_cmd[*]}"; do
         _close_luks_device "${image_device}"
     done
 
     _close_luks_device "${image_device}"
 
     _msg_info "Opening device on mapper ${_mapper}"
-    while ! eval "cryptsetup ${_activation_opts[*]} open ${_image_path} ${_mapper}"; do
+    _activation_cmd=(
+      "cryptsetup" "${_activation_opts[*]}"
+                   "open" "${_image_path}"
+                          "${_mapper}")
+    while ! eval "${_activation_cmd[*]}"; do
         _close_luks_device "${image_device}"
     done
     _msg_info "Done!"
@@ -446,14 +555,17 @@ _run_mkluks() {
 # $1: path of the fallocate resulting image to verify options for
 _validate_fallocate_opts() {
     local _image_path="${1}"
-    local _fallocate_posix_error="fallocate: fallocate failed: Operation not supported"
-    local _fallocate_msg
-    _fallocate_msg="$(fallocate -l "100K" "${_image_path}.test" 2>&1)" 
-    if [ "${_fallocate_msg}" == "${_fallocate_posix_error}" ]; then
+    local _posix_error=("fallocate:"
+                        "fallocate failed:"
+                        "Operation not supported")
+    local _msg
+    _msg="$(fallocate -l "100K" \
+                      "${_image_path}.test" 2>&1)" 
+    if [ "${_msg}" == "${_posix_error[*]}" ]; then
         rm "${_image_path}.test"
         echo '--posix' 
-    elif [ "${_fallocate_msg}" != "" ]; then
-        _msg_error "${_fallocate_msg}" 1
+    elif [ "${_msg}" != "" ]; then
+        _msg_error "${_msg}" 1
     fi
 }
 
@@ -463,7 +575,8 @@ _close_luks_device() {
     local _device="${1}"
     local _mapper
     _mapper=$(basename "${_device}")
-    blockdev --flushbufs "${_device}" > /dev/null 2>&1 || true
+    blockdev --flushbufs \
+             "${_device}" > /dev/null 2>&1 || true
     cryptsetup luksClose "${_mapper}" > /dev/null 2>&1 || true
     if [ -e "${_device}" ]; then
         dmsetup remove "${_device}" > /dev/null 2>&1 || true
@@ -475,30 +588,41 @@ _close_luks_device() {
 # $1: partition name
 # $2: partition label
 _ask_passwd() {
-    local _name="${1}"
-    local _label="${2}"
-    local _prompt_cmd _mismatch_cmd="echo"
-    local _ask_passwd_opts=("--timeout=69042")
-    local _ask_passwd_msg="Insert new passphrase for ${_name} (${_label}): "
-    local _ask_passwd_confirm_msg="Confirm: "
-    local _mismatch_opts=()
-    local _mismatch_msg="Passwords mismatch."
-    local _confirm
-    if command -v zenity &> /dev/null && [ -n "${DISPLAY}" ]; then
-        _prompt_cmd=$(which zenity)
+    local _name="${1}" \
+          _label="${2}" \
+          _prompt=() \
+          _prompt_cmd \
+          _mismatch \
+          _mismatch_cmd="echo" \
+          _opts=("--timeout=69042")
+    local _msg=("Insert new passphrase"
+                "for ${_name} (${_label}): ") \
+          _confirm_msg="Confirm: " \
+          _mismatch_opts=() \
+          _mismatch_msg="Passwords mismatch." \
+          _confirm
+    if command -v zenity &> /dev/null && \
+       [ -n "${DISPLAY}" ]; then
+        _prompt_cmd="$(which zenity)"
         _mismatch_cmd="${_prompt_cmd}"
-        _ask_passwd_opts+=("--password")
-        _mismatch_opts+=("--info" "--icon" "dialog-password" "--text")
+        _opts+=(
+          "--password")
+        _mismatch_opts+=(
+          "--info"
+          "--icon" "dialog-password"
+          "--text")
     else
         _prompt_cmd=$(which systemd-ask-password)
     fi
-    local _prompt=("${_prompt_cmd}" "${_ask_passwd_opts[@]}")
-    local _mismatch=("${_mismatch_cmd}" "${_mismatch_opts[@]}" "${_mismatch_msg}")
+    _prompt=("${_prompt_cmd}" "${_opts[@]}")
+    _mismatch=("${_mismatch_cmd}" "${_mismatch_opts[@]}"
+                                  "${_mismatch_msg}")
     while true; do
-        _passphrase=$("${_prompt[@]}" "${_ask_passwd_msg}")
-        echo "${_ask_passwd_confirm_msg}"
-        _confirm=$("${_prompt[@]}" "${_ask_passwd_confirm_msg}")
-        [[ "${_passphrase}" == "${_confirm}" ]] && break
+        _passphrase=$("${_prompt[@]}" "${_msg[*]}")
+        echo "${_confirm_msg}"
+        _confirm=$("${_prompt[@]}" "${_confirm_msg}")
+        [[ "${_passphrase}" == "${_confirm}" ]] && \
+          break
         "${_mismatch[@]}"
     done
 }
@@ -508,16 +632,18 @@ _ask_passwd() {
 # $2: an encryption key (prompts for one if empty)
 # $3: partition label
 _mkluks_common() {
-    local _name="${1}"
-    local _key="${2}"
-    local _label="${3}"
+    local _name="${1}" \
+          _key="${2}" \
+          _label="${3}"
     local _out="${work_dir}/${_label}.key"
     if [ "${_key}" = "" ]; then
         _ask_passwd "${_name}" "${_label}"
         printf "%s" "${_passphrase}" > "${_out}"
         _encryption_key="${_out}"
     elif [ "${_key}" = "auto" ]; then
-        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')" > "${_out}"
+        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | \
+                         head -c 20 ; \
+                       echo '')" > "${_out}"
         _encryption_key="${_out}"
     fi
 }
@@ -528,11 +654,7 @@ _mkluks_common() {
 # $3: UNIX time (for a date-based uuid)
 # $4: partition label
 _mkimg_swap() {
-    local _image_path="${1}"
-    local _size="${2}"
-    local _epoch="${3}"
-    local _label="${4}"
-    _run_mkswap "${_image_path}" "${_size}" "${_epoch}""${_label}"
+    _run_mkswap "${@}"
 }
 
 # Creates a swap partition inside a LUKS container image file.
@@ -552,10 +674,20 @@ _mkimg_swap+luks() {
     local _label="${6}"
     local _grub="${7}"
     local _writable="true"
-    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkswap "${image_device}" "$(_get_internal_size "${_size}")" "${_epoch}" "${_name}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkswap "${image_device}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -574,8 +706,11 @@ _mkimg_ext4() {
     local _epoch="${4}"
     local _label="${5}"
     local _writable="true"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
-                "${_epoch}" "${_label}" "${_writable}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}"
     mv "${_dir}.img" "${_image_path}"
     sync
     _msg_info "Done!"
@@ -600,12 +735,23 @@ _mkimg_ext4+luks() {
     local _label="${7}"
     local _grub="${8}"
     local _writable="true"
-    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
-                "${_epoch}" "${_name}" "${_writable}"
-    dd if="${_dir}.img" of="${image_device}" > /dev/null 2>&1
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    dd if="${_dir}.img" \
+       of="${image_device}" > /dev/null 2>&1
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -633,9 +779,16 @@ _mkimg_ext4+raid1+luks() {
   local _image
   for _image in "${_images[@]}"; do
       echo "${_device}"
-      _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-      _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                  "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+      _mkluks_common "${_name}" \
+                     "${_encryption_key}" \
+                     "${_label}"
+      _run_mkluks "${_image_path}" \
+                  "${_size}" \
+                  "${_encryption_key}" \
+                  "${_epoch}" \
+                  "${_label}" \
+                  "${_writable}" \
+                  "${_grub}"
   done
 
   for _device in "${_devices[@]}"; do
@@ -666,7 +819,8 @@ _mkimg+ext4+raid() {
 # $6: UNIX time (for a datetime-based uuid)
 # $7: partition label
 # $8: if true, the image will be writable
-# $9: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
+# $9: if true, the dm-verity layer will be disabled 
+#     so that the image can be opened from GRUB
 _mkimg_ext4+squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -677,12 +831,23 @@ _mkimg_ext4+squashfs+luks() {
     local _label="${7}"
     local _writable="${8}"
     local _grub="${9}"
-    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
-                "${_epoch}" "${_name}" "${_writable}"
-    _run_mksquashfs "${_dir}.img" "${image_device}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    _run_mksquashfs "${_dir}.img" \
+                    "${image_device}"
     sync
     _close_luks_device "${image_device}"
     _msg_info "Done!"
@@ -698,7 +863,8 @@ _mkimg_ext4+squashfs+luks() {
 # $6: UNIX time (for a datetime-based uuid)
 # $7: partition label
 # $8: if true, the image will be writable
-# $9: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
+# $9: if true, the dm-verity layer will be disabled 
+#     so that the image can be opened from GRUB
 _mkimg_squashfs+luks() {
     local _name="${1}"
     local _dir="${2}"
@@ -709,10 +875,18 @@ _mkimg_squashfs+luks() {
     local _label="${7}"
     local _writable="${8}"
     local _grub="${9}"
-    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
-    _run_mksquashfs "${_dir}" "${image_device}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mksquashfs "${_dir}" \
+                    "${image_device}"
     sync
     _close_luks_device "${image_device}"
 }
@@ -730,9 +904,13 @@ _mkimg_ext4+squashfs() {
     local _size="${4}"
     local _epoch="${5}"
     local _writable="false"
-    _run_mkext4 "${_dir}" "$(_get_internal_size "${_size}")" \
-                "${_epoch}" "${_name}" "${_writable}"
-    _run_mksquashfs "${_dir}.img" "${_image_path}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    _run_mksquashfs "${_dir}.img" \
+                    "${_image_path}"
     _msg_info "Done!"
     rm -- "${_dir}.img"
 }
@@ -743,7 +921,8 @@ _mkimg_ext4+squashfs() {
 _mkimg_squashfs() {
     local _dir="${1}"
     local _image_path="${2}"
-    _run_mksquashfs "${_dir}" "${_image_path}"
+    _run_mksquashfs "${_dir}" \
+                    "${_image_path}"
 }
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
@@ -754,7 +933,9 @@ _mkimg_erofs() {
     local _image_path="${1}"
     local _dir="${2}"
     local _epoch="${3}"
-    _run_mkerofs "${_image_path}" "${_dir}" "${_epoch}"
+    _run_mkerofs "${_image_path}" \
+                 "${_dir}" \
+                 "${_epoch}"
     _msg_info "Done!"
 }
 
@@ -781,23 +962,36 @@ _mkimg_erofs+luks() {
     local _tmp_img="${work_dir}/tmp.erofs" _tmp_size
     if [[ "${_size}" == "" ]]; then
 	_msg_info "Running mkerofs in advance to determine LUKS partition size"
-        _run_mkerofs "${_tmp_img}" "${_dir}" "${_epoch}"
+        _run_mkerofs "${_tmp_img}" \
+                     "${_dir}" \
+                     "${_epoch}"
         _tmp_size=$(du -s "${_tmp_img}" | cut -f 1)
         _size=$(( 69420 + _tmp_size * 12 / 10))
     fi
-    _mkluks_common "${_name}" "${_encryption_key}" "${_label}"
-    _run_mkluks "${_image_path}" "${_size}" "${_encryption_key}" \
-                "${_epoch}" "${_label}" "${_writable}" "${_grub}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
     if [[ "${_tmp_size}" != "" ]]; then
         _msg_info "Copying erofs image"
 	if [[ "${quiet}" == "y" ]]; then
-            dd if="${_tmp_img}" of="${image_device}" > /dev/null 2>&1
+            dd if="${_tmp_img}" \
+               of="${image_device}" > /dev/null 2>&1
 	else
-            dd if="${_tmp_img}" of="${image_device}"
+            dd if="${_tmp_img}" \
+               of="${image_device}"
 	fi
     else
 	msg_info "Writing erofs image"
-        _run_mkerofs "${image_device}" "${_dir}" "${_epoch}"
+        _run_mkerofs "${image_device}" \
+                     "${_dir}" \
+                     "${_epoch}"
     fi 
     sync
     _close_luks_device "${image_device}"
@@ -881,49 +1075,46 @@ for _img in "${fs_images[@]}"; do
                                "\${_grub}; }"
 done
 
+# Parameters for _mk<fs_image>_<fs_type> functions
+# $1: value in fs_images
+_mkfs_common() {
+    local _image="${1}"
+    _name="$(_get_fs_name "${_image}")"
+    _dir="$(_get_fs_dir "${_image}")"
+    _epoch="$(_get_epoch "${_image}")"
+    _encryption_key="$(_get_fs_encryption_key "${_image}")"
+    _label="$(_get_iso_partition_label "${_image}")"
+    _size="$(_get_fs_size "${_image}")"
+    _image_path="$(_get_fs_img "${_image}")"
+    _grub="false"
+    _writable="false"
+}
+
 # Parameters for _mkairootfs_fs_type functions
 _mkairootfs_common() {
+    _mkfs_common "airootfs"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _name="$(_get_fs_name airootfs)"
     _dir="${pacstrap_dir}"
-    _image_path="${airootfs_dir}/${_name}.$(_get_fs_ext airootfs)"
-    _size="${airootfs_size}"
-    _encryption_key="$(_get_fs_encryption_key airootfs)"
-    _epoch="$(_get_epoch airootfs)"
-    _label="${iso_label}"
-    _writable=false
-    _grub=false
+    _image_path="$(_get_airootfs_img)"
     _auto_size=""
     rm -f -- "${_image_path}"
-    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
+    [[ -e "${_dir}" ]] || \
+      _msg_error "The path '${_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_dir}"
 }
 
 # Parameters for _mkkeys_fs_type functions
 _mkkeys_common() {
+    _mkfs_common "keys"
     _mkfs_options=("${keys_image_tool_options[@]}")
-    _name="$(_get_fs_name keys)"
-    _dir="${keys_dir}"
-    _image_path="${dongle_isofs_dir}/${_name}.$(_get_fs_ext keys)"
-    _encryption_key="$(_get_fs_encryption_key keys)"
-    _size="${keys_size}"
-    _epoch="$(_get_epoch keys)"
-    _label="$(_get_iso_partition_label keys)"
-    _writable="false"
-    _grub="false"
+    _image_path="$(_get_keys_img)"
     _auto_size=""
     rm -f -- "${_image_path}"
 }
 
 # Parameters for _mkpersistent_fs_type functions
 _mkpersistent_common() {
-    _name="$(_get_fs_name persistent)"
-    _dir="${persistent_dir}"
-    _image_path="$(_get_fs_img persistent)"
-    _encryption_key="$(_get_fs_encryption_key persistent)"
-    _size="${persistent_size}"
-    _epoch="$(_get_epoch persistent)"
-    _label="$(_get_iso_partition_label persistent)"
+    _mkfs_common "persistent"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _grub="false"
@@ -937,85 +1128,44 @@ _mkpersistent_common() {
 
 # Parameters for _mkdongle_boot_fs_type functions
 _mkdongle_boot_common() {
-    _name="$(_get_fs_name dongle_boot)"
-    _dir="${dongle_boot_dir}"
-    _image_path="$(_get_fs_img dongle_boot)"
-    _encryption_key="$(_get_fs_encryption_key dongle_boot)"
-    _size="${dongle_boot_size}"
-    _epoch=$(_get_epoch dongle_boot)
-    _label="$(_get_iso_partition_label dongle_boot)"
-    _writable="false"
+    _mkfs_common "dongle_boot"
     _grub="true"
     rm -f -- "${_image_path}"
 }
 
-# Parameters for _mkdongle_persistent_fs_type functions
+# Parameters for _mkdongle_persistent_<fs_type> functions
 _mkdongle_persistent_common() {
-    _name="donglepersistent"
-    _dir="${dongle_persistent_dir}"
-    _image_path="$(_get_fs_img dongle_persistent)"
-    _encryption_key="$(_get_fs_encryption_key dongle_persistent)"
-    _size="${dongle_persistent_size}"
-    _epoch="$(_get_epoch dongle_persistent)"
-    _label="$(_get_iso_partition_label dongle_persistent)"
+    _mkfs_common "dongle_persistent"
     _writable="true"
-    _grub="false"
     rm -f -- "${_image_path}"
 }
 
-# Parameters for _mkswap_fs_type functions
+# Parameters for _mkswap_<fs_type> functions
 _mkswap_common() {
-    _name="$(_get_fs_name swap)"
-    _image_path="$(_get_fs_img swap)"
-    # shellcheck disable=SC2154
-    _encryption_key="$(_get_fs_encryption_key swap)"
-    _size="${swap_size}"
-    _epoch=$(_get_epoch "swap")
-    if [[ "${swap_image_type}" == *"luks" ]]; then
-        _label="$(_get_iso_partition_label swap)"
-    else
-        _label="${_name}"
-    fi
+    _mkfs_common "swap"
     _writable="true"
-    _grub="false"
     _auto_size=""
     rm -f -- "${_image_path}"
 }
 
-# Parameters for _mkdongle_swap_fs_type functions
+# Parameters for _mkdongle_swap_<fs_type> functions
 _mkdongle_swap_common() {
-    _name="$(_get_fs_name dongle_swap)"
-    _image_path="$(_get_fs_img dongle_swap)"
-    # shellcheck disable=SC2154
-    _encryption_key="$(_get_encryption_key dongle_swap)"
-    _size="${dongle_swap_size}"
-    _epoch="$(_get_epoch dongle_swap)"
-    if [[ "$(_get_fs_image_type dongle_swap)" == *"luks" ]]; then
-        _label="$(_get_iso_partition_label dongle_swap)"
-    else
-        _label="${_name}"
-    fi
+    _mkfs_common "dongle_swap"
     _writable="true"
-    _grub="false"
     _auto_size=""
     rm -f -- "${_image_path}"
 }
 
-# Parameters for _mkrecovery_fs_type functions
+# Parameters for _mkrecovery_<fs_type> functions
 _mkrecovery_common() {
+    _mkfs_common "recovery"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _name="recovery"
     _dir="${pacstrap_dir}"
-    _image_path="$(_get_fs_img recovery)"
-    _size="${recovery_size}"
-    _encryption_key="$(_get_fs_encryption_key recovery)"
-    _epoch="$(_get_epoch recovery)"
-    _label="$(_get_iso_partition_label recovery)"
-    _writable=false
     _grub=true
     _auto_size=""
     rm -f -- "${_image_path}"
-    [[ -e "${_dir}" ]] || _msg_error "The path '${_dir}' does not exist" 1
+    [[ -e "${_dir}" ]] || \
+      _msg_error "The path '${_dir}' does not exist" 1
 }
 
 # Create checksum for a given file.
@@ -1038,24 +1188,30 @@ _mkchecksum() {
 # GPG sign a file.
 _mksignature() {
     local _file="${1}"
-    local gpg_options=()
     rm -f -- "${_file}.sig"
+    local gpg_options=(
+      --batch
+      --no-armor
+      --no-include-key-block
+      --output "${_file}.sig"
+      --detach-sign
+      --default-key "${gpg_key}")
     # Add gpg sender option if the value is provided
-    [[ -z "${gpg_sender}" ]] || gpg_options+=('--sender' "${gpg_sender}")
+    [[ -z "${gpg_sender}" ]] || \
+      gpg_options+=('--sender' "${gpg_sender}")
     if [ -e "${_file}" ]; then
         _msg_info "Signing $(basename "${_file}")..."
         # always use the .sig file extension, as that is what 
         # mkinitcpio-archiso's hooks expect
         _msg_info "GPG home: ${gpg_home}"
         if [ "${gpg_home}" != "" ]; then
-            GNUPGHOME="${gpg_home}" gpg --batch --no-armor --no-include-key-block \
-                                        --output "${_file}.sig" --detach-sign \
-                                        --homedir "${gpg_home}" \
-                                        --default-key "${gpg_key}" "${gpg_options[@]}" "${_file}"
+            gpg_options+=('--homedir' "${gpg_home}")
+            GNUPGHOME="${gpg_home}" \
+              gpg "${gpg_options[@]}" \
+                  "${_file}"
         else
-            gpg --batch --no-armor --no-include-key-block \
-                --output "${_file}.sig" --detach-sign \
-                --default-key "${gpg_key}" "${gpg_options[@]}" "${_file}"
+            gpg "${gpg_options[@]}" \
+                "${_file}"
         fi
     fi
     _msg_info "Done!"
@@ -1079,7 +1235,7 @@ _get_fs_ext() {
 # $1: a value in 'fs_images' array
 _get_fs_name() {
     local _image="${1}"
-    echo "${_fs_image}" | tr -d '_'
+    echo "${_image}" | tr -d '_'
 }
 
 # Returns image extension for a given file system image
@@ -1100,6 +1256,20 @@ _get_fs_img() {
     echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
 }
 
+# Returns value for a given file system size variable
+# $1: value in fs_images
+_get_fs_size() {
+    local _name="${1}"
+    eval "echo \${${_name}_size}"
+}
+
+# Returns value for a given file system directory variable
+# $1: value in fs_images
+_get_fs_dir() {
+    local _name="${1}"
+    eval "echo \${${_name}_dir}"
+}
+
 # Returns value for a given file system encryption key variable
 # $1: value in fs_images
 _get_fs_encryption_key() {
@@ -1116,24 +1286,34 @@ _get_fs_image_type() {
 # Returns partition label for a physical partition
 # $1: value in fs_images
 _get_iso_partition_label() {
-    local _image="${1}"
-    local _suffix
-    _suffix="$(echo "${_image}" | tr '[:lower:]' '[:upper:]')"
-    echo "${iso_label}_${_suffix}" 
+    local _image="${1}" \
+          _label=("${iso_label}") \
+          _suffix
+    _suffix="$(echo "${_image}" | \
+                 tr '[:lower:]' '[:upper:]')"
+    [[ "${_suffix}" != "" ]] && \
+    [[ "${_suffix}" != "airootfs" ]] && \
+      _label+=("${_suffix}")
+    echo "$(IFS=, ; \
+            +echo "${_label[*]}")" 
 }
 
-# Returns internal size for an internal partition from the outer image size
+# Returns internal size for an internal partition 
+# from the outer image size
 # $1: outer partition size
 _get_internal_size() {
     local _size="${1}" _ratio
     local _s=50 _S=200 _l=1000 _L=5000
     if [[ "${_size}" -lt $((_s * 1000)) ]]; then
         _ratio=60
-    elif [[ "${_size}" -gt $((_s * 1000)) ]] && [[ "${_size}" -lt $((_S * 1000)) ]]; then
+    elif [[ "${_size}" -gt $((_s * 1000)) ]] && \
+         [[ "${_size}" -lt $((_S * 1000)) ]]; then
         _ratio=70
-    elif [[ "${_size}" -gt $((_S * 1000)) ]] && [[ "${_size}" -lt $((_l * 1000)) ]]; then
+    elif [[ "${_size}" -gt $((_S * 1000)) ]] && \
+         [[ "${_size}" -lt $((_l * 1000)) ]]; then
         _ratio=75
-    elif [[ "${_size}" -gt $((_l * 1000)) ]] && [[ "${_size}" -lt $((_L * 1000)) ]]; then
+    elif [[ "${_size}" -gt $((_l * 1000)) ]] && \
+         [[ "${_size}" -lt $((_L * 1000)) ]]; then
         _ratio=80
     else
         _ratio=85
@@ -1162,7 +1342,7 @@ _make_pacman_conf() {
 
     # Only use the profile's CacheDir, if it is not the default and not the same as the system cache dir.
     if [[ "${_profile_cache_dirs}" != "/var/cache/pacman/pkg" ]] && \
-        [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
+       [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
         _cache_dirs="${_profile_cache_dirs}"
     else
         _cache_dirs="${_system_cache_dirs}"
@@ -1170,7 +1350,8 @@ _make_pacman_conf() {
 
     _msg_info "Copying custom pacman.conf to work directory..."
     _msg_info "Using pacman CacheDir: ${_cache_dirs}"
-    # take the profile pacman.conf and strip all settings that would break in chroot when using pacman -r
+    # take the profile pacman.conf and strip all settings 
+    # that would break in chroot when using pacman -r.
     # append CacheDir and HookDir to [options] section
     # HookDir is *always* set to the airootfs' override directory
     # see `man 8 pacman` for further info
@@ -1186,7 +1367,11 @@ _make_custom_airootfs() {
     local filename permissions
     local _etc="${profile}/airootfs/etc"
 
-    install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
+    install -d \
+            -m 0755 \
+            -o 0 \
+            -g 0 -- \
+            "${pacstrap_dir}"
 
     if [[ -d "${profile}/airootfs" ]]; then
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -2151,7 +2336,7 @@ _validate_buildmode_missing_cmd() {
     [[ "${_pkg}" == "" ]] && _pkg="${_cmd}"
     if ! command -v "${_cmd}" &> /dev/null; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating build mode '${_buildmode}': "
+        _msg=("Validating build mode '${_buildmode}':"
               "${_cmd} is not available on this host. Install '${_pkg}'!"
         _msg_error "${_msg[*]}" 0
     fi
@@ -2407,6 +2592,11 @@ _get_airootfs_img(){
     echo "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
 }
 
+# Returns workdir airootfs image path
+_get_keys_img(){
+    echo "${dongle_isofs_dir}/${_name}.$(_get_fs_ext "keys")"
+}
+
 # Builds airootfs filesystem image
 _prepare_airootfs_image() {
     local _sig_dir _pacstrap_size
@@ -2436,9 +2626,9 @@ _prepare_keys_image() {
     _run_once "_mkkeys_common"
     _run_once "_mkkeys_${keys_image_type}"
 
-    _mkchecksum "${dongle_isofs_dir}/keys.$(_get_fs_ext "keys")"
+    _mkchecksum "$(_get_keys_img)"
     if [[ -n "${gpg_key}" ]]; then
-        _mksignature "${dongle_isofs_dir}/keys.$(_get_fs_ext "keys")"
+        _mksignature "$(_get_keys_img)"
     fi
 }
 
