@@ -464,7 +464,7 @@ _run_mkluks() {
           _fsuuid \
           _key_msg="" \
           _key_opts=() \
-          _key_size='512'
+          _key_size='512' \
           _mapper \
           _msg=() \
           _pbkdf_memory='256' \
