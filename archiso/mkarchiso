@@ -78,10 +78,10 @@ fs_images_arr_vars=(
 _img=""
 for _img in "${fs_images[@]}"; do
     for _var in "${fs_images_str_vars[@]}"; do
-        eval "${_img}_${_var}=''"
+        printf -v "${_img}_${_var}" ""
     done
     for _var in "${fs_images_arr_vars[@]}"; do
-        eval "${_img}_${_var}=()"
+        declare -a "${_img}_${_var}"
     done
 done
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
