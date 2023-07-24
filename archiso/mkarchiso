@@ -76,6 +76,7 @@ fs_images_arr_vars=(
   'files'
   'image_tool_options')
 _img=""
+
 for _img in "${fs_images[@]}"; do
     for _var in "${fs_images_str_vars[@]}"; do
         printf -v "${_img}_${_var}" ""
@@ -102,23 +103,28 @@ _PI=$((3 * 1415))
 _E=$((2 * 71828))
 _EL=$((42 * 69))
 _RO=$((16 * 1803))
-_airootfs_const=0
-_dongle_const="${_EL}"
-_boot_const="${_RO}"
-_persistent_const="${_PI}"
-_swap_const="${_E}"
-_dongle_boot_const=$((_dongle_const + \
-                      _boot_const))
-_dongle_persistent_const=$((_dongle_const + \
-                            _persistent_const))
-_dongle_swap_const=$((_dongle_const + \
-                      _swap_const))
-_keys_const=$((_dongle_const + \
-               _boot_const + \
-               _persistent_const))
-_recovery_const=$((_dongle_const + \
-                   _boot_const + \
-                   _keys_const))
+airootfs_const=0
+dongle_const="${_EL}"
+boot_const="${_RO}"
+persistent_const="${_PI}"
+swap_const="${_E}"
+dongle_boot_const=$((
+  dongle_const + \
+  boot_const))
+dongle_persistent_const=$((
+  dongle_const + \
+  persistent_const))
+dongle_swap_const=$((
+  dongle_const + \
+  swap_const))
+keys_const=$((
+  dongle_const + \
+  boot_const + \
+  persistent_const))
+recovery_const=$((
+  dongle_const + \
+  boot_const + \
+  keys_const))
 
 # Show an INFO message
 # $1: message string
@@ -1080,11 +1086,14 @@ done
 _mkfs_common() {
     local _image="${1}"
     _name="$(_get_fs_name "${_image}")"
-    _dir="$(_get_fs_dir "${_image}")"
+    _dir="$(_get_fs_var "${_image}" \
+                        "dir")"
     _epoch="$(_get_epoch "${_image}")"
-    _encryption_key="$(_get_fs_encryption_key "${_image}")"
+    _encryption_key="$(_get_fs_var "${_image}" \
+                                   "encryption_key")"
     _label="$(_get_iso_partition_label "${_image}")"
-    _size="$(_get_fs_size "${_image}")"
+    _size="$(_get_fs_var "${_image}" \
+                         "size")"
     _image_path="$(_get_fs_img "${_image}")"
     _grub="false"
     _writable="false"
@@ -1238,13 +1247,36 @@ _get_fs_name() {
     echo "${_image}" | tr -d '_'
 }
 
-# Returns image extension for a given file system image
+# Returns an attribute variable value for a 
+# given file system image
+# $1: a value in the 'fs_images' array
+# $2: a value in a 'fs_images_<type>_vars' array
+_get_fs_var() {
+    local _image="${1}" \
+          _var="${2}" \
+          _no_luks
+    _ref="${_image}_${_var}"
+    printf %s "${!_ref}"
+}
+
+# Sets file system image variables
+_set_fs_var() {
+    local _fs_image="${1}" \
+          _var="${2}" \
+          _value="${3}"
+    printf -v "${_fs_image}_${_var}" \
+              "${_value}"
+}
+
+# Returns the outest file system type for
+# a given file system image, ignoring LUKS
 # $1: a value in the 'fs_images' array
 _get_fs_type() {
-    local _image="${1}"
-    local _no_luks
-    _no_luks=$(eval echo \$"{${_image}_image_type%%+luks}")
-    echo "${_no_luks##*"+"}"
+    local _fs_image="${1}" _tmp
+    _tmp="$(_get_fs_var "${_fs_image}" \
+                        "image_type")"
+    _tmp="${_tmp%%+luks}"
+    echo "${_tmp##*"+"}"
 }
 
 # Returns path for a given file system image in work directory
@@ -1252,35 +1284,9 @@ _get_fs_type() {
 _get_fs_img() {
     local _fs_image="${1}"
     local _img_name
-    _img_name="$(echo "${_fs_image}" | tr -d '_')"
+    _img_name="$(echo "${_fs_image}" | \
+                   tr -d '_')"
     echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
-}
-
-# Returns value for a given file system size variable
-# $1: value in fs_images
-_get_fs_size() {
-    local _name="${1}"
-    eval "echo \${${_name}_size}"
-}
-
-# Returns value for a given file system directory variable
-# $1: value in fs_images
-_get_fs_dir() {
-    local _name="${1}"
-    eval "echo \${${_name}_dir}"
-}
-
-# Returns value for a given file system encryption key variable
-# $1: value in fs_images
-_get_fs_encryption_key() {
-    local _name="${1}"
-    eval "echo \${${_name}_encryption_key}"
-}
-
-# Returns value for a given file system image type variable
-_get_fs_image_type() {
-    local _name="${1}"
-    eval "echo \${${_name}_image_type}"
 }
 
 # Returns partition label for a physical partition
@@ -1325,7 +1331,7 @@ _get_internal_size() {
 # $1: function name
 _run_once() {
     if [[ ! -e "${work_dir}/${run_once_mode}.${1}" ]]; then
-        "$1"
+        "${1}"
         touch "${work_dir}/${run_once_mode}.${1}"
     else
         if [ "${quiet}" != "y"  ]; then
@@ -1336,12 +1342,19 @@ _run_once() {
 
 # Sets up custom pacman.conf with custom cache and pacman hook directories.
 _make_pacman_conf() {
-    local _cache_dirs _system_cache_dirs _profile_cache_dirs
-    _system_cache_dirs="$(pacman-conf CacheDir| tr '\n' ' ')"
-    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" CacheDir| tr '\n' ' ')"
+    local _cache_dirs \
+          _default_cache="/var/cache/pacman/pkg" \
+          _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
+          _profile_cache_dirs \
+          _system_cache_dirs
+    _system_cache_dirs="$(pacman-conf CacheDir| \
+                            tr '\n' ' ')"
+    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" CacheDir| \
+                             tr '\n' ' ')"
 
-    # Only use the profile's CacheDir, if it is not the default and not the same as the system cache dir.
-    if [[ "${_profile_cache_dirs}" != "/var/cache/pacman/pkg" ]] && \
+    # Only use the profile's CacheDir, if it is not the
+    # default and not the same as the system cache dir.
+    if [[ "${_profile_cache_dirs}" != "${_default_cache}" ]] && \
        [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
         _cache_dirs="${_profile_cache_dirs}"
     else
@@ -1357,7 +1370,8 @@ _make_pacman_conf() {
     # see `man 8 pacman` for further info
     pacman-conf --config "${pacman_conf}" | \
         sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
-             /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" > "${work_dir}/${buildmode}.pacman.conf"
+             /\[options\]/a HookDir = ${_hooks}/" > \
+          "${work_dir}/${buildmode}.pacman.conf"
 }
 
 # Prepares working directory and copies custom root file system files.
@@ -1378,7 +1392,8 @@ _make_custom_airootfs() {
             _resolve_secondary_encryption_key "keys"
             if [[ "${airootfs_image_type}" == *luks ]]; then
                 # shellcheck disable=SC2034
-                dongle_boot_encryption_key="$(_get_fs_encryption_key keys)"
+                dongle_boot_encryption_key="$(_get_fs_var "keys" \
+                                                          "encryption_key")"
                 cp "${_etc}/mkinitcpio.conf" \
                    "${_etc}/mkinitcpio.dongle_boot.conf"
                 _build_archiso_mkinitcpio_conf \
@@ -1389,7 +1404,8 @@ _make_custom_airootfs() {
                    "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
                 _build_archiso_mkinitcpio_conf \
                     "${_etc}/mkinitcpio.recovery.conf" \
-                    "$(_get_fs_encryption_key recovery)"
+                    "$(_get_fs_var "recovery" \
+                                   "encryption_key")"
             fi
         fi
         _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" 
@@ -1551,7 +1567,7 @@ _build_archiso_mkinitcpio_conf() {
 # $1: value in fs_images
 _get_epoch() {
     local _name="${1}"
-    eval "echo \$((SOURCE_DATE_EPOCH + _${_name}_const))"
+    echo $((SOURCE_DATE_EPOCH + "${_name}_const"))
 }
 
 # Returns an unique uuid given a datetime in UNIX time
@@ -1920,12 +1936,14 @@ _build_bootloader_config() {
 _build_crypttab() {
     local _template="${1}"
     local _out="${2}"
-    if [[ "$(_get_fs_image_type persistent)" == *"luks" ]]; then
+    if [[ "$(_get_fs_var "persistent" \
+                         "image_type")" == *"luks" ]]; then
         sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
     else
         sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
     fi
-    if [[ "$(_get_fs_image_type dongle_persistent)" == *"luks" ]]; then
+    if [[ "$(_get_fs_var "dongle_persistent" \
+                         "image_type")" == *"luks" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_out}"
     else
         sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
@@ -2590,12 +2608,14 @@ _get_airootfs_path(){
 
 # Returns workdir airootfs image path
 _get_airootfs_img(){
-    echo "${airootfs_dir}/airootfs.$(_get_fs_ext "airootfs")"
+    echo "$(_get_fs_var "airootfs" \
+                         "dir")/airootfs.$(_get_fs_ext "airootfs")"
 }
 
 # Returns workdir airootfs image path
 _get_keys_img(){
-    echo "${dongle_isofs_dir}/${_name}.$(_get_fs_ext "keys")"
+    echo "$(_get_fs_var "dongle_isofs" \
+                         "dir")/${_name}.$(_get_fs_ext "keys")"
 }
 
 # Builds airootfs filesystem image
@@ -2667,7 +2687,8 @@ _prepare_recovery_image() {
             recovery_size="${airootfs_size}"
         fi
         _run_once "_mkrecovery_common"
-        _run_once "_mkrecovery_$(_get_fs_image_type recovery)"
+        _run_once "_mkrecovery_$(_get_fs_var "recovery" \
+                                             "image_type")"
     fi
 }
 
@@ -2821,7 +2842,8 @@ _prepare_persistent_image() {
             [ "${dongle_persistent_size}" = "" ] && \
                 dongle_persistent_size="${persistent_size}"
             _run_once "_mkdongle_persistent_common"
-            _img_type="$(_get_fs_image_type dongle_persistent)"
+            _img_type="$(_get_fs_var "dongle_persistent" \
+                                     "image_type")"
             _run_once "_mkdongle_persistent_${_img_type}"
         fi
     fi
@@ -2831,7 +2853,8 @@ _prepare_dongle_boot_image() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         dongle_boot_size=169042 # 169.042 MB
         _run_once "_mkdongle_boot_common"
-        _run_once "_mkdongle_boot_$(_get_fs_image_type dongle_boot)"
+        _run_once "_mkdongle_boot_$(_get_fs_var "dongle_boot" \
+                                                "image_type")"
     fi
 }
 
@@ -2906,7 +2929,8 @@ _validate_requirements_persistent_image_type_ext4() {
     fi
     if [ ! -e "${dongle_persistent_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '$(_get_fs_image_type dongle_persistent)' "
+        _msg=("Validating '$(_get_fs_var "dongle_persistent" \
+                                         "image_type")' "
               "for dongle persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
@@ -2945,16 +2969,34 @@ _gen_key() {
     fi
 }
 
-# Resolves the value of the airootfs image encryption key 
-_resolve_encryption_key(){
-    [ ! -f "${airootfs_encryption_key}" ] && \
-      if [ "${airootfs_encryption_key}" = 'auto' ]; then
-          airootfs_encryption_key="${work_dir}/${iso_label}.key"
-          [ ! -d "${work_dir}" ] && \
-            install -d "${work_dir}"
-          _gen_key "${airootfs_encryption_key}" "binary"
-      elif [ "${airootfs_encryption_key}" != 'auto' ]; then
-          _msg_error "File '${airootfs_encryption_key}' does not exist." 0
+# Parse encryption key variable value for a
+# file system image.
+# If the variable is set to "auto" it will
+# generate a key at a selected location
+# $1: a value in fs_images
+# $2: auto-generated output key path
+_resolve_fs_encryption_key(){
+    local _fs_image="${1}" \
+          _auto_key_path="${2}"
+    local _encryption_key \
+          _msg=() \
+          _out_dir
+    _encryption_key="$(_get_fs_var "${fs_image}" \
+                                   "encryption_key")"
+    _outdir="$(dirname "${_auto_key_path}")"
+    [ ! -f "${_encryption_key}" ] && \
+      if [ "${_encryption_key}" = 'auto' ]; then
+          _set_fs_var "${_fs_image}" \
+                      "encryption_key" \
+                      "${_auto_key_path}"
+          [ ! -d "${_out_dir}" ] && \
+            install -d "${_out_dir}"
+          _gen_key "${_auto_key_path}" \
+                   "binary"
+      elif [ "${_encryption_key}" != 'auto' ]; then
+          _msg=("File '${_encryption_key}'"
+                "does not exist.")
+          _msg_error "${_msg[*]}" 0
       fi
 }
 
@@ -2975,8 +3017,10 @@ _validate_requirements_airootfs_image_type_erofs() {
 
 _validate_requirements_airootfs_image_type_luks() {
     _validate_buildmode_missing_cmd "cryptsetup"
-    [[ -n "$airootfs_encryption_key" ]] && \
-      _resolve_encryption_key 
+    [[ -n "$(_get_fs_var "airootfs" \
+                         "encryption_key")" ]] && \
+      _resolve_fs_encryption_key "airootfs" \
+                                 "${airootfs_encryption_key_auto}"
 }
 
 _validate_requirements_airootfs_image_type_erofs+luks() {
@@ -2990,7 +3034,8 @@ _validate_common_requirements_buildmode_all() {
     _validate_buildmode_missing_cmd "find" "findutils"
     _validate_buildmode_missing_cmd "gzip"
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       [[ "${persistent_image_type}" != *"luks" ]]; then
+       [[ "$(_get_fs_var "persistent" \
+                         "image_type")" != *"luks" ]]; then
         _msg=("Validating build mode '${_buildmode}':"
               "'dongle' build mode not selected;"
               "persistent partition encryption disabled."
@@ -3025,6 +3070,55 @@ _validate_requirements_buildmode_bootstrap() {
     _validate_buildmode_missing_cmd "bsdtar" "libarchive"
 }
 
+# Check whether the specified file system type
+# is supported for a given file system image
+# $1: a value in fs_images
+_validate_requirements() {
+    local _action="${1}" \
+          _object="${2}" \
+          _value=${3} \
+          _error_msg="${4}" \
+          _validate_fun_error_msg="${5}"
+    local _msg=() \
+          _validate_fun
+    _validate_fun="validate_requirements_${_object}_${_value}"
+    if typeset -f "${_action}" &> \
+         /dev/null; then
+        if typeset -f "${_validate_fun}" &> /dev/null; then
+            "${_validate_fun}"
+        else
+            _msg=("Function '${_validate_fun}' does not exist."
+                  "${_validate_fun_error_msg}")
+            _msg_warning "${_msg[*]}"
+        fi
+    else
+        (( validation_error=validation_error+1 ))
+        _msg_error "${_error_msg}" 0
+    fi
+}
+
+# Check whether the specified file system type
+# is supported for a given file system image
+# $1: a value in fs_images
+_validate_requirements_fs_image_type() {
+    local _fs_image="${1}"
+    local _error_msg \
+          _image_type
+          _validate_fun_error_msg=()
+    _image_type="$(_get_fs_var "${_fs_image}" \
+                               "image_type")"
+    _error_msg="Unsupported image type: '${_image_type}'"
+    _validate_fun_error_msg=(
+      "Validating the requirements"
+      "of '${_image_type}' for ${_fs_image}"
+      "image type will not be possible.")
+    _validate_requirements "_mk${_fs_image}_${_image_type}" \
+                           "${_fs_image}_image_type" \
+                           "${_image_type}" \
+                           "${_error_msg}" \
+                           "${_validate_fun_error_msg[*]}"
+}
+
 _validate_common_requirements_buildmode_iso_netboot() {
     local bootmode \
           pkg_list_from_file=() \
@@ -3044,27 +3138,12 @@ _validate_common_requirements_buildmode_iso_netboot() {
     fi
 
     # Check if the specified airootfs_image_type is supported
-    if typeset -f "_mkairootfs_${airootfs_image_type}" &> /dev/null; then
-        _validate_fun="_validate_requirements_airootfs_image_type"
-        _fun="${_validate_fun}_${_airootfs_image_type}"
-        if typeset -f "${_fun}" &> /dev/null; then
-            "${_fun}"
-        else
-            _msg=("Function '${_fun}' does not exist."
-                  "Validating the requirements of '${airootfs_image_type}' "
-                  "airootfs image type will not be possible.")
-            _msg_warning "${_msg[*]}"
-        fi
-    else
-        (( validation_error=validation_error+1 ))
-        _msg_error "Unsupported image type: '${airootfs_image_type}'" 0
-    fi
+    _validate_requirements_fs_image_type "airootfs"
 }
 
 _validate_requirements_buildmode_dongle() {
     _validate_common_requirements_buildmode_all
-    [[ -n "$airootfs_encryption_key" ]] && \
-      _resolve_encryption_key
+    _validate_requirements_airootfs_image_type_luks() {
     [[ ! "${airootfs_image_type}" == *luks ]] && \
       _msg=("Dongle buildmode active but root file system "
             "encryption disabled.") && \
@@ -3072,52 +3151,35 @@ _validate_requirements_buildmode_dongle() {
 }
 
 _validate_requirements_buildmode_iso() {
-    local _fun _msg=() _validate_fun
+    local _error_msg \
+          _msg=()
+          _validate_fun_error_msg=()
     _validate_common_requirements_buildmode_iso_netboot
     _validate_common_requirements_buildmode_all
     # Check if the specified bootmodes are supported
     if (( ${#bootmodes[@]} < 1 )); then
         (( validation_error=validation_error+1 ))
-        _msg_error "No boot modes specified in '${profile}/profiledef.sh'." 0
+        _msg=("No boot modes specified in"
+              "'${profile}/profiledef.sh'.")
+        _msg_error "${_msg[*]}" 0
     fi
     for bootmode in "${bootmodes[@]}"; do
-        if typeset -f "_make_bootmode_${bootmode}" &> /dev/null; then
-            _fun="_validate_requirements_bootmode_${bootmode}"
-            if typeset -f "${_fun}" &> /dev/null; then
-                "${_fun}"
-            else
-                _msg=("Function '${_fun}' does not exist."
-                      "Validating the requirements of '${bootmode}' "
-                      "boot mode will not be possible.")
-                _msg_warning "${_msg[*]}"
-            fi
-        else
-            (( validation_error=validation_error+1 ))
-            _msg_error "${bootmode} is not a valid boot mode!" 0
-        fi
+        _error_msg="${bootmode} is not a valid boot mode!"
+        _validate_fun_error_msg=(
+          "Validating the requirements of '${bootmode}' "
+          "boot mode will not be possible.")
+        _validate_requirements "make_bootmode_${bootmode}" \
+                               "bootmode" \
+                               "${bootmode}" \
+                               "${_error_msg}" \
+                               "${_validate_fun_error_msg[*]}"
     done
 
     _validate_buildmode_missing_cmd "awk"
 
-    # Check if the profile supports the specified persistent_image_type
-    if typeset -f "_mkpersistent_${persistent_image_type}" &> /dev/null; then
-        _validate_fun="_validate_requirements_persistent_image_type"
-        _fun="${_validate_fun}_${persistent_image_type}"
-        if typeset -f "${_fun}" &> /dev/null; then
-            "${_fun}"
-        else
-            _msg=("Function '${_validate_fun}_${persistent_image_type}' "
-                  "does not exist. Validating the requirements of "
-                  "'${persistent_image_type}' persistent image type "
-                  "will not be possible.")
-            _msg_warning "${_msg[*]}"
-        fi
-    else
-        (( validation_error=validation_error+1 ))
-        _msg=("Unsupported image type for persistent partition: "
-              "'${persistent_image_type}'")
-        _msg_error "${_msg[*]}" 0
-    fi
+    # Check if the profile supports
+    # the specified persistent_image_type
+    _validate_requirements_fs_image_type "persistent"
 }
 
 _validate_requirements_buildmode_netboot() {
@@ -3803,9 +3865,11 @@ _build_iso_image() {
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 
-    if [[ "${airootfs_image_type}" == *"luks"* ]] && \
+    if [[ "$(_get_fs_var "airootfs" \
+                         "image_type")" == *"luks"* ]] && \
        [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        cp "${airootfs_encryption_key}" \
+        cp "$(_get_fs_var "airootfs" \
+                          "encryption_key")" \
            "${out_dir}"
         cp "${persistent_encryption_key}" \
            "${out_dir}"
@@ -3852,12 +3916,8 @@ _read_profile() {
 
 # Validate set options
 _validate_options() {
-    local _build \
-          _build_fun="_build_buildmode" \
-          _buildmode \
+    local _buildmode \
           _msg=() \
-          _validate \
-          _validate_fun="_validate_requirements_buildmode" \
           validation_error=0
     _msg_info "Validating options..."
 
@@ -3869,21 +3929,15 @@ _validate_options() {
 
     # Check if the specified buildmodes are supported
     for _buildmode in "${buildmodes[@]}"; do
-        _build="${_build_fun}_${_buildmode}"
-        _validate="${_validate_fun}_${_buildmode}"
-        if typeset -f "${_build}" &> /dev/null; then
-            if typeset -f "${_validate}" &> /dev/null; then
-                "${_validate}"
-            else
-                _msg=("Function '${_validate}' does not exist."
-                      "Validating the requirements of '${_buildmode}'"
-                      "build mode will not be possible.")
-                _msg_warning "${_msg[*]}"
-            fi
-        else
-            (( validation_error=validation_error+1 ))
-            _msg_error "${_buildmode} is not a valid build mode!" 0
-        fi
+        _error_msg="${_buildmode} is not a valid build mode!"
+        _validate_fun_error_msg=(
+          "Validating the requirements of '${_buildmode}'"
+          "build mode will not be possible.")
+        _validate_requirements "build_buildmode_${_buildmode}" \
+                               "buildmode" \
+                               "${_buildmode}" \
+                               "${_error_msg}" \
+                               "${_validate_fun_error_msg}"
     done
 
     if (( validation_error )); then
@@ -3909,7 +3963,7 @@ _set_no_override() {
 # command line option parameters
 _set_overrides() {
     local _var _img
-    local no_override_fs_images=(
+    local no_override_fs_images=()
       "boot"
       "efi_boot"
       "dongle_boot"
@@ -3930,11 +3984,11 @@ _set_overrides() {
       ["recovery_image_type"]="ext4+luks"
       ["swap_image_type"]="swap+luks"
       ["dongle_persistent_encryption_key"]="auto"
-      ["dolge_swap_encryption_key"]="auto"
+      ["dongle_swap_encryption_key"]="auto"
       ["keys_encryption_key"]="auto"
       ["recovery_encryption_key"]="auto"
       ["swap_encryption_key"]="auto"
-      ["airootfs_dir"]="${isofs_dir}/${install_dir}/${arch}"
+      ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
       ["isofs_dir"]="${work_dir}/iso"
       ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
       ["recovery"]="false"
@@ -4005,6 +4059,37 @@ _set_overrides() {
     fi
 
     # Set variables that do not have overrides
+    no_override_fs_images=()
+      "boot"
+      "efi_boot"
+      "dongle_boot"
+      "dongle_persistent"
+      "dongle_swap"
+      "persistent"
+      "recovery"
+      "swap")
+    declare -A no_override_vars=(
+      ["airootfs_image_type"]="squashfs"
+      ["boot_image_type"]="ext4+luks"
+      ["dongle_boot_image_type"]="ext4+luks"
+      ["dongle_persistent_image_type"]="ext4+luks"
+      ["dongle_swap_image_type"]="swap+luks"
+      ["keys_image_type"]="squashfs+luks"
+      ["persistent_image_type"]="ext4+luks"
+      ["recovery_image_type"]="ext4+luks"
+      ["swap_image_type"]="swap+luks"
+      ["airootfs_encryption_key_auto"]="${work_dir}/${iso_label}.key"
+      ["dongle_persistent_encryption_key"]="auto"
+      ["dongle_swap_encryption_key"]="auto"
+      ["keys_encryption_key"]="auto"
+      ["recovery_encryption_key"]="auto"
+      ["swap_encryption_key"]="auto"
+      ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
+      ["isofs_dir"]="${work_dir}/iso"
+      ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+      ["recovery"]="false"
+      ["iso_name"]="${app_name}")
+
     for _img in "${no_override_fs_images[@]}"; do
         _msg_info "Setting ${_img} image to $(_get_fs_img ${_img})"
         no_override_vars["${_img}"]="$(_get_fs_img "${_img}")"
@@ -4146,8 +4231,10 @@ _build_dongle_base() {
 # $1: value in fs_images
 _setup_work_dir() {
     local _image="${1}"
-    [[ -d "$(_get_fs_dir "${_image}")" ]] || \
-      install -d -- "$(_get_fs_dir "${_image}")"
+    [[ -d "$(_get_fs_var "${_image}" \
+                         "dir")" ]] || \
+      install -d -- "$(_get_fs_var "${_image}" \
+                                   "dir")"
 }
 
 # build the base for an ISO and/or a netboot target
