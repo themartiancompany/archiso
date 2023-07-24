@@ -2575,7 +2575,8 @@ _resolve_secondary_encryption_key() {
             install -D -m400 "${_encryption_key}" "${_install_dir}"
         else
             _msg=("Rootfs encryption and dongle buildmode disabled."
-                  "You will be prompted to insert a password for the ${_name} partition.")
+                  "You will be prompted to insert a password for"
+                  "the ${_name} partition.")
             _msg_warning "${_msg[*]}"
             eval "${_name}_encryption_key="
         fi
@@ -2627,14 +2628,14 @@ _prepare_keys_image() {
     _run_once "_mkkeys_${keys_image_type}"
 
     _mkchecksum "$(_get_keys_img)"
-    if [[ -n "${gpg_key}" ]]; then
-        _mksignature "$(_get_keys_img)"
-    fi
+    [[ -n "${gpg_key}" ]] \
+      _mksignature "$(_get_keys_img)"
 }
 
 # Builds swap filesystem image
 _prepare_swap_image() {
-    if [ "${swap_size}" != "" ] || [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${swap_size}" != "" ] || \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "swap"
         _run_once "_mkswap_common"
         _run_once "_mkswap_${swap_image_type}"
@@ -2643,7 +2644,8 @@ _prepare_swap_image() {
 
 # Builds dongle swap filesystem image
 _prepare_dongle_swap_image() {
-    if [ "${swap_size}" != "" ] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    if [ "${swap_size}" != "" ] && \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "dongle_swap"
         if [[ "${dongle_swap_size}" == "" ]]; then
             dongle_swap_size="${swap_size}"
@@ -2669,7 +2671,8 @@ _prepare_recovery_image() {
     fi
 }
 
-# Checks whether an image's file system path is present in the profile directories
+# Checks whether an image's file system path
+# is present in the profile directories
 # $1: file system path
 _is_file_in_work_paths() {
     local _filename="${1}"
@@ -2688,8 +2691,8 @@ _is_file_in_work_paths() {
 # $1: filename path
 # $2: image name (airootfs, persistent)
 _validate_file() {
-    local _filename="${1}"
-    local _storage="${2}"
+    local _filename="${1}" \
+          _storage="${2}"
     local _msg \
           _on_storage="${_storage}${_filename}" \
           pacstrap_dir="${work_dir}/${arch}/airootfs" \
@@ -3897,8 +3900,9 @@ _validate_options() {
 _set_no_override() {
     local _var="${1}"
     local _value="${2}"
-    _msg_info "Setting ${_var} to ${_value}"
-    eval "[[ -n \$${_var} ]] || ${_var}=${_value}"
+    ([[ "${!_var}" == "" ]] || \
+     (! declare -p "${_var}" &> /dev/null)) && \
+      printf -v "${_var}" "${_value}"
 }
 
 # Set defaults and, if present, overrides from mkarchiso 
@@ -4081,8 +4085,9 @@ _make_version() {
 }
 
 _make_pkglist() {
-    local _bootstrap="${pacstrap_dir}/pkglist.${arch}.txt" \
-          _iso="${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
+    local _pkglist="pkglist.${arch}.txt"
+    local _bootstrap="${pacstrap_dir}/${_pkglist}" \
+          _iso="${isofs_dir}/${install_dir}/${_pkglist}"
     _msg_info "Creating a list of installed packages on live-enviroment..."
     case "${buildmode}" in
         "bootstrap")
@@ -4169,7 +4174,8 @@ _build_iso_base() {
     if [[ -e "${work_dir}/build_date" ]]; then
         SOURCE_DATE_EPOCH="$(<"${work_dir}/build_date")"
     else
-        printf '%s\n' "$SOURCE_DATE_EPOCH" > "${work_dir}/build_date"
+        printf '%s\n' \
+               "$SOURCE_DATE_EPOCH" > "${work_dir}/build_date"
     fi
 
     [[ "${quiet}" == "y" ]] || \
@@ -4198,11 +4204,17 @@ _build_iso_base() {
 
 # Build the bootstrap buildmode
 _build_buildmode_bootstrap() {
-    local image_name="${iso_name}-bootstrap-${iso_version}-${arch}.tar.gz" \
+    local _image_name=(
+      "${iso_name}"
+      "bootstrap"
+      "${iso_version}"
+      "${arch}") \
+    local buildmode_packages="${bootstrap_packages}" \
+          # Set the package list to use
+          buildmode_pkg_list=("${bootstrap_pkg_list[@]}") \
+          image_name="$(IFS="-" ; \
+                        echo "${_image_name[*]}").tar.gz" \
           run_once_mode="${buildmode}" \
-          buildmode_packages="${bootstrap_packages}"
-    # Set the package list to use
-    local buildmode_pkg_list=("${bootstrap_pkg_list[@]}")
 
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/bootstrap/root.${arch}"
@@ -4231,7 +4243,12 @@ _build_buildmode_netboot() {
 
 # Build the ISO buildmode
 _build_buildmode_iso() {
-    local image_name="${iso_name}-${iso_version}-${arch}.iso" \
+    local _image_name=(
+      "${iso_name}"
+      "${iso_version}"
+      "${arch}")
+    local image_name="$(IFS="-" ;
+                       echo "${_image_name[*]}.iso")" \
           run_once_mode="${buildmode}"
     efi_boot_img="${work_dir}/efiboot.img"
     _build_iso_base
