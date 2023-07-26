@@ -280,6 +280,16 @@ _get_epoch_fsuuid() {
             --name "${_epoch}"
 }
 
+# Gets an ext4-compatible uuid from a date
+# $1: datetime in UNIX time
+_epoch_to_uuid() {
+    local _epoch="${1}"
+    local _uuid
+    TZ=UTC printf -v _uuid '%(%F-%H-%M-%S-00)T' "${_epoch}"
+    echo "${_uuid}"
+}
+
+
 ## EROFS
 
 # Creates an EROFS image given a directory.
@@ -356,7 +366,6 @@ _run_mkext4() {
       mkfs_ext4_options+=('-L' "${_label}")
     [[ ! "${quiet}" == "y" ]] || \
       mkfs_ext4_options+=('-q')
-    rm -f -- "${_image_path}"
     if [[ ! "${quiet}" == "y" ]]; then
         E2FSPROGS_FAKE_TIME="${_epoch}" \
           mkfs.ext4 "${mkfs_ext4_options[@]}" -- \
@@ -376,6 +385,57 @@ _run_mkext4() {
                "${_image_path}"
     fi
     _msg_info "Done!"
+}
+
+## FAT
+
+# Creates a FAT image 
+# $1: image path
+# $2: image size in bytes
+_run_mkfat() {
+    local _image_path="${1}" \
+          _size_bytes=${2} \
+          _label="${3}" \
+          _deps=() \
+          _mkfs_fat_options=() \
+          _fun \
+          _size_kib="0" \
+          _msg=()
+    _deps=(
+      'function ceil(x){return int(x)+(x>int(x))}'
+      'function byte_to_kib(x){return x/1024}'
+      'function mib_to_kib(x){return x*1024}')
+    _fun='mib_to_kib(ceil((byte_to_kib($1)+1024)/1024))'
+    (( _size_bytes < 2*1024*1024 )) && \
+      _msg=("Image size is ${_size_bytes} bytes,"
+            "less than 2 MiB! Bumping up to 2 MiB") \
+      _msg_info "${_msg[*]}" && \
+      _size_bytes=$((20*1024*1024))
+    # Where it spills?
+    _size_bytes=$((_size_bytes * 10))
+    # Convert from bytes to KiB and round up to the next full MiB
+    # with an additional MiB for reserved sectors.
+    _size_kib="$(awk "${_deps[*]} END {print ${_fun}}" <<< \
+                   "${_size_bytes}")"
+    # The FAT image must be created with mkfs.fat, not mformat,
+    # as some systems have issues with mformat made images:
+    # https://lists.gnu.org/archive/html/grub-devel/2019-04/msg00099.html
+    _mkfs_fat_options=(
+      -C
+      -n "${_label}")
+    _msg_info "Creating FAT image of size: ${_size_kib} KiB..."
+    if [[ "${quiet}" == "y" ]]; then
+        # mkfs.fat does not have a -q/--quiet option, so
+        # redirect stdout to /dev/null instead
+        # https://github.com/dosfstools/dosfstools/issues/103
+        mkfs.fat "${_mkfs_fat_options[@]}" \
+                 "${_image_path}" \
+                 "${_size_kib}" > /dev/null
+    else
+        mkfs.fat "${_mkfs_fat_options[@]}" \
+                 "${_image_path}" \
+                 "${_size_kib}"
+    fi
 }
 
 ## LUKS
@@ -2122,6 +2182,8 @@ _cleanup_pacstrap_dir() {
 # UUID getters
 ################
 
+### Constant UUIDs
+
 ## Main ISO
 
 # Returns UUID for the GRUB plain mount
@@ -2167,9 +2229,23 @@ _get_dongle_swap_uuid() {
     _get_epoch_fsuuid "${_epoch}"
 }
 
+## Variable UUIDs
+
+# Boot device UUID
+
+# Returns ISO image uuid for current buildmode
+_get_bootable_uuid() {
+    local _uuid
+    _uuid="$(_get_archiso_uuid)"
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _uuid=$(_get_dongle_uuid)
+    fi
+    echo "${_uuid}"
+}
+
 # Encrypted boot
 
-# Returns UUID for the GRUB cryptomount 
+# Converts UUID in a format compatible with GRUB cryptomount 
 _get_cryptomount_uuid() {
     local _epoch
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -2181,47 +2257,170 @@ _get_cryptomount_uuid() {
 }
 
 ###############################################
-# Bootmodes functions (bootloaders handling)
+# Bootloaders utility functions
 ###############################################
 
-# Set up boot loaders
-_make_bootmodes_iso() {
-    local bootmode
-    for bootmode in "${bootmodes[@]}"; do
-        _run_once "_make_bootmode_${bootmode}_iso"
+# Returns the correct device selection command line for use in a templatized GRUB
+# configuration file
+_get_device_select_cmdline() {
+    local _cmd=(
+      search --no-floppy
+             --set=root
+             --fs-uuid "$(_get_bootable_uuid)")
+    #shellcheck disable=SC2005
+    [[ "$(_get_obj_var "persistent" \
+                       "image_type")" == *luks ]] && \
+      _cmd=(cryptomount -u "$(_get_cryptomount_uuid)")
+    echo "${_cmd[*]}"
+}
+
+# Produces the 'encrypt' hook's kernel parameters
+# needed to boot an encrypted ISO.
+_get_crypto_params() {
+    local _cryptdevice=() \
+          _cryptkey=() \
+          _cparams=() \
+          _keys_fs_type \
+          _keys_path
+    _keys_fs_type="$(_get_fs_type "keys")"
+    _keys_path="keys.$(_get_fs_ext "keys")"
+    [[ "${airootfs_image_type}" == *luks ]] && \
+      _cryptdevice=(
+        "UUID=$(_get_archiso_uuid),$(_get_airootfs_path)"
+        "root"
+        "readonly") && \
+      _cparams+=(
+        "root=/dev/mapper/root"
+        "cryptdevice=$(IFS=: ; \
+                       echo "${_cryptdevice[@]}")") && \
+      [ "${airootfs_encryption_key}" != "" ] && \
+        _cryptkey=(
+          "UUID=$(_get_dongle_uuid)"
+          "iso9660,${_keys_fs_type}"
+          "${_keys_path},airootfs.key") && \
+        _cparams+=(
+          "cryptkey=$(IFS=: ; \
+                      echo "${_cryptkey[@]}")")
+    echo "${_cparams[@]}"
+}
+
+# Produces kernel parameters.
+_get_kernel_params() {
+    local _kparams=() \
+          _sigdevice=()
+    _kparams+=(
+      "archisobasedir=${install_dir}"
+      "archisolabel=${iso_label}"
+      "archisouuid=$(_get_archiso_uuid)"
+      "$(_get_crypto_params)")
+    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+      _sigdevice=(
+        "UUID=$(_get_dongle_uuid)"
+        "iso9660"
+        "$(_get_airootfs_path).sig") && \
+      _kparams+=("sigdevice=$(IFS=: ; \
+                              echo "${_sigdevice[@]}")"
+                 "verify=y")
+    echo "${_kparams[@]}"
+}
+
+# Fill a bootloader configuration template and copy the result in a file
+# $1: bootloader configuration file (templatized, see profile directory)
+# $2: bootloader (empty?)
+_build_bootloader_config() {
+    local _template="${1}"
+    local _bootloader="${2}"
+    sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
+         s|%ARCH%|${arch}|g;
+         s|%INSTALL_DIR%|/${install_dir}|g;
+         s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
+         s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
+         s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" \
+        "${_template}"
+}
+
+### GRUB
+
+## GRUB configuration files
+
+# Prepare GRUB configuration files
+_make_common_bootmode_grub_cfg(){
+    local _cfg \ 
+          _work="${work_dir}/grub" \
+          _profile="${profile}/grub"
+          _embed_cfg \
+          embedcfg
+    _embed_cfg="${_grub}/grub-embed.cfg"
+    install -d -- \
+            "${_work}"
+    # Fill GRUB configuration files
+    for _cfg in "${_profile}/"*'.cfg'; do
+        _build_bootloader_config "${_cfg}" \
+                                 "grub" > \
+          "${_work}/${_cfg##*/}"
     done
+    # Add all GRUB files to the list of files
+    # used to calculate the required FAT image size.
+    efi_boot_files+=(
+      "${_work}/"
+      "${_profile}/"!(*.cfg))
+
+    IFS='' read -r -d '' embedcfg <<'EOF' || true
+if ! [ -d "$cmdpath" ]; then
+    # On some firmware, GRUB has a wrong cmdpath
+    # when booted from an optical disc.
+    # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
+    if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
+        cmdpath="${isodevice}/EFI/BOOT"
+    fi
+fi
+configfile "${cmdpath}/grub.cfg"
+EOF
+    printf '%s\n' \
+           "${embedcfg}" > \
+      "${_embed_cfg}"
 }
 
-# Set up boot loaders
-_make_bootmodes_dongle() {
-    local bootmode
-    for bootmode in "${bootmodes[@]}"; do
-        _run_once "_make_bootmode_${bootmode}_dongle"
-    done
+# Minimum GRUB module list to open a luks2 image
+# Module list from 
+# https://bugs.archlinux.org/task/71382#comment202911
+# $1: 'bios' or 'efi'
+_get_grubmodules(){
+    local _mode="${1}"
+    _modules=(
+      afsplitter boot bufio chain configfile
+      cryptodisk disk echo ext2 gcry_rijndael
+      gcry_sha256 gcry_sha512 halt iso9660 linux
+      loadenv loopback luks2 minicmd  normal 
+      part_apple part_gpt part_msdos password_pbkdf2
+      reboot search search_fs_uuid test usb)
+    if [ "${_mode}" != "bios" ]; then
+        _modules+=(
+          at_keyboard all_video btrfs cat echo
+          diskfilter echo efifwsetup f2fs fat
+          font gcry_crc gfxmenu gfxterm gzio
+          hfsplus jpeg keylayouts ls lsefi
+          lsefimmap lzopio ntfs png read regexp
+          search_fs_file search_label serial sleep
+          tpm trig usbserial_common usbserial_ftdi
+          usbserial_pl2303 usbserial_usbdebug video
+          xfs zstd)
+    elif [ "${_mode}" == "bios" ] ; then
+        _modules+=(biosdisk)
+    fi
+    echo "${_modules[*]}"
 }
 
-### ISO file system
+###########################
+# Kernel related functions
+###########################
 
-# Copy kernel and initramfs to ISO 9660
-_make_boot_on_iso9660() {
-    isofs_dir="${work_dir}/iso"
-    _make_boot_on_iso "${isofs_dir}" \
-                      "ISO 9660"
-    _make_boot_on_iso "${persistent_dir}" \
-                      "ISO 9660"
-}
+## ISO file system
 
-# Copy kernel and initramfs to dongle ISO 9660
-_make_boot_on_dongle() {
-    _make_boot_on_iso "${work_dir}/dongle_iso" \
-                      "dongle ISO 9660"
-    _make_boot_on_iso "${work_dir}/dongle_boot" \
-                      "dongle boot"
-    _make_boot_on_iso "${work_dir}/dongle_persistent" \
-                      "dongle persistent"
-}
-
-# Copy kernel and initramfs to ISO 9660
+# Copy kernel, microcodes and initramfs to ISO 9660
+# $1: directory it will be used to generate
+#     the image file
+# $2: name of the ISO image (just for display)
 _make_boot_on_iso() {
     local bootable_dir="${1}" \
           _fs_name="${2}"
@@ -2246,7 +2445,9 @@ _make_boot_on_iso() {
     for _query in  "${images[@]}"; do
         find "${work_dir}" \
              -iname "${_query}" \
-             -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \; \
+             -exec cp "${_cp_opts[@]}" \
+                      {} \
+                      "${kernel_dir}" \; \
              -quit
         find "${kernel_dir}" \
              -iname "${_query}" \
@@ -2256,12 +2457,16 @@ _make_boot_on_iso() {
     for _ucode in "${ucodes[@]}"; do
         find "${work_dir}" \
              -iname "${_ucode}" \
-             -exec cp "${_cp_opts[@]}" {} "${boot_dir}" \;
+             -exec cp "${_cp_opts[@]}" \
+                      {} \
+                      "${boot_dir}" \;
         find "${boot_dir}" \
              -iname "${_query}" \
              -exec chmod 0644 {} \;
         [[ -e "${licenses_src}/${_ucode%.*}/" ]] && \
-          install -d -m 0755 -- "${licenses_dest}/${_ucode%.*}/" && \
+          install -d \
+                  -m 0755 -- \
+                  "${licenses_dest}/${_ucode%.*}/" && \
           install -m 0644 -- \
                   "${licenses_src}/${_ucode%.*}/"* \
                   "${licenses_dest}/${_ucode%.*}/"
@@ -2269,55 +2474,89 @@ _make_boot_on_iso() {
     _msg_info "Done!"
 }
 
-# Produces kernel parameters.
-_get_kernel_params() {
-    local _kparams=() \
-          _sigdevice=()
-    _kparams+=(
-      "archisobasedir=${install_dir}"
-      "archisolabel=${iso_label}"
-      "archisouuid=$(_get_archiso_uuid)"
-      "$(_get_crypto_params)")
-    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-      _sigdevice=(
-        "UUID=$(_get_dongle_uuid)"
-        "iso9660"
-        "$(_get_airootfs_path).sig") && \
-      _kparams+=("sigdevice=$(IFS=: ; \
-                              echo "${_sigdevice[@]}")"
-                 "verify=y")
-    echo "${_kparams[@]}"
+# Copy kernel and initramfs to ISO 9660
+_make_boot_on_iso9660() {
+    isofs_dir="${work_dir}/iso"
+    _make_boot_on_iso "${isofs_dir}" \
+                      "ISO 9660"
+    _make_boot_on_iso "${persistent_dir}" \
+                      "ISO 9660"
 }
 
-# Produces the 'encrypt' hook's kernel parameters
-# needed to boot an encrypted ISO.
-_get_crypto_params() {
-    local _cryptdevice=() \
-          _cryptkey=() \
-          _cparams=() \
-          _keys_fs_type \
-          _keys_path
-    _keys_fs_type="$(_get_fs_type "keys")"
-    _keys_path="keys.$(_get_fs_ext "keys")"
-    [[ "${airootfs_image_type}" == *luks ]] && \
-      _cryptdevice=(
-          "UUID=$(_get_archiso_uuid),$(_get_airootfs_path)"
-          "root"
-          "readonly") && \
-      _cparams+=(
-        "root=/dev/mapper/root"
-        "cryptdevice=$(IFS=: ; \
-                       echo "${_cryptdevice[@]}")") && \
-      [ "${airootfs_encryption_key}" != "" ] && \
-        _cryptkey=(
-          "UUID=$(_get_dongle_uuid)"
-          "iso9660,${_keys_fs_type}"
-          "${_keys_path},airootfs.key") && \
-        _cparams+=(
-          "cryptkey=$(IFS=: ; \
-                      echo "${_cryptkey[@]}")")
-    echo "${_cparams[@]}"
+# Copy kernel and initramfs to dongle ISO 9660
+_make_boot_on_dongle() {
+    _make_boot_on_iso "${work_dir}/dongle_iso" \
+                      "dongle ISO 9660"
+    _make_boot_on_iso "${work_dir}/dongle_boot" \
+                      "dongle boot"
+    _make_boot_on_iso "${work_dir}/dongle_persistent" \
+                      "dongle persistent"
 }
+
+## ESP (UEFI System Partition)
+
+# Copies kernel and initramfs to FAT image
+_make_boot_on_fat() {
+    local _images _msg _ucode
+    _msg=(
+      "Preparing kernel and initramfs"
+      "for the FAT file system...")
+    _msg_info "${_msg[*]}"
+    _images=(
+      "initramfs-*"
+      "vmlinuz-*")
+    mmd -D o \
+        -i "${efi_boot_img}" \
+        "::/${install_dir}" \
+        "::/${install_dir}/boot" \
+        "::/${install_dir}/boot/${arch}"
+    for _query in "${_images[@]}"; do
+        find "${work_dir}" \
+             -iname "${_query}" \
+             -exec mcopy -D "o" \
+                         -i "${efi_boot_img}" \
+                         {} \
+                         "::/${install_dir}/boot/${arch}/" \; \
+             -quit
+    done
+    for _ucode in "${ucodes[@]}"; do
+        find "${work_dir}" \
+             -iname "${_ucode_image}" \
+             -exec mcopy -D "o" \
+                         -i "${efi_boot_img}" \
+                         {} \
+                         "::/${install_dir}/boot/" \;
+    done
+    _msg_info "Done!"
+}
+
+##################################
+# Bootmodes
+##################################
+
+#### Main callers
+
+# Set up boot loaders
+_make_bootmodes_iso() {
+    local bootmode
+    for bootmode in "${bootmodes[@]}"; do
+        _run_once "_make_bootmode_${bootmode}_iso"
+    done
+}
+
+# Set up boot loaders
+_make_bootmodes_dongle() {
+    local bootmode
+    for bootmode in "${bootmodes[@]}"; do
+        _run_once "_make_bootmode_${bootmode}_dongle"
+    done
+}
+
+#### BIOS
+
+### MBR
+
+## GRUB BIOS MBR
 
 # Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
@@ -2535,56 +2774,21 @@ _make_bootmode_bios.syslinux.eltorito_dongle() {
     _run_once _make_bootmode_bios.syslinux.mbr_dongle
 }
 
-# Copies kernel and initramfs to FAT image
-_make_boot_on_fat() {
-    local _images _ucode_image
-    _msg_info "Preparing kernel and initramfs for the FAT file system..."
-    _images=("initramfs-*" "vmlinuz-*")
-    mmd -D o -i "${efi_boot_img}" \
-        "::/${install_dir}" "::/${install_dir}/boot" "::/${install_dir}/boot/${arch}"
-    for _query in "${_images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec mcopy -D "o" -i "${efi_boot_img}" {} "::/${install_dir}/boot/${arch}/" \; -quit
-    done
-    for _ucode_image in "${ucodes[@]}"; do
-        find "${work_dir}" -iname "${_ucode_image}" -exec mcopy -D "o" -i "${efi_boot_img}" {} "::/${install_dir}/boot/" \;
-    done
-    _msg_info "Done!"
-}
-
 # Creates a FAT image (efiboot.img) which will serve as the EFI system partition
 # $1: image size in bytes
 _make_efi_boot_img() {
-    local _size_kib="0"
-    local _size_bytes=${1}
-
-    if (( _size_bytes < 2*1024*1024 )); then
-        _msg_info "Validating '${bootmode}': efiboot.img size is ${_size_bytes} bytes is less than 2 MiB! Bumping up to 2 MiB"
-        _size_bytes=$((20*1024*1024))
-    fi
-
-    # Where it spills?
-    _size_bytes=$((_size_bytes * 10))
-
-    # Convert from bytes to KiB and round up to the next full MiB with an additional MiB for reserved sectors.
-    _size_kib="$(awk 'function ceil(x){return int(x)+(x>int(x))}
-            function byte_to_kib(x){return x/1024}
-            function mib_to_kib(x){return x*1024}
-            END {print mib_to_kib(ceil((byte_to_kib($1)+1024)/1024))}' <<< "${_size_bytes}"
-    )"
-    # The FAT image must be created with mkfs.fat not mformat, as some systems have issues with mformat made images:
-    # https://lists.gnu.org/archive/html/grub-devel/2019-04/msg00099.html
+    local _size_bytes=${1} \
+          _size_kib="0" \
+          _msg=()
     rm -f -- "${efi_boot_img}"
-    _msg_info "Creating FAT image of size: ${_size_kib} KiB..."
-    if [[ "${quiet}" == "y" ]]; then
-        # mkfs.fat does not have a -q/--quiet option, so redirect stdout to /dev/null instead
-        # https://github.com/dosfstools/dosfstools/issues/103
-        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${_size_kib}" > /dev/null
-    else
-        mkfs.fat -C -n ARCHISO_EFI "${efi_boot_img}" "${_size_kib}"
-    fi
-
+    _run_mkfat "${efi_boot_img}" \
+               "${_size_bytes}" \
+               "ARCHISO_EFI"
     # Create the default/fallback boot path in which a boot loaders will be placed later.
-    mmd -D o -i "${efi_boot_img}" ::/EFI ::/EFI/BOOT
+    mmd -D o \
+        -i "${efi_boot_img}" \
+        ::/EFI \
+        ::/EFI/BOOT
 }
 
 # Copies GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
@@ -2594,52 +2798,10 @@ _make_common_bootmode_grub_copy_to_efi_boot_img() {
     if compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null; then
         files_to_copy+=("${profile}/grub/"!(*.cfg))
     fi
-    mcopy -D o -i "${efi_boot_img}" "${files_to_copy[@]}" ::/EFI/BOOT/
-}
-
-# Gets an ext4-compatible uuid from a date
-# $1: datetime in UNIX time
-_epoch_to_uuid() {
-    local _epoch="${1}"
-    local _uuid
-    TZ=UTC printf -v _uuid '%(%F-%H-%M-%S-00)T' "${_epoch}"
-    echo "${_uuid}"
-}
-
-# Returns ISO image uuid for current buildmode
-_get_bootable_uuid() {
-    local _uuid
-    _uuid="$(_get_archiso_uuid)"
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _uuid=$(_get_dongle_uuid)
-    fi
-    echo "${_uuid}"
-}
-
-# Returns the correct device selection command line for use in a templatized GRUB
-# configuration file
-_get_device_select_cmdline() {
-    #shellcheck disable=SC2005
-    if [[ "${persistent_image_type}" == *luks ]]; then
-        echo "cryptomount -u $(_get_cryptomount_uuid)"
-    else
-        echo "search --no-floppy --set=root --fs-uuid $(_get_bootable_uuid)"
-    fi
-}
-
-# Fill a bootloader configuration template and copy the result in a file
-# $1: bootloader configuration file (templatized, see profile directory)
-# $2: bootloader (empty?)
-_build_bootloader_config() {
-    local _template="${1}"
-    local _bootloader="${2}"
-    sed "s|%DEVICE_SELECT_CMDLINE%|$(_get_device_select_cmdline)|g;
-         s|%ARCH%|${arch}|g;
-         s|%INSTALL_DIR%|/${install_dir}|g;
-         s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
-         s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
-         s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" \
-        "${_template}"
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${files_to_copy[@]}" \
+          "::/EFI/BOOT/"
 }
 
 # Fills templatized udev rules for the persistent partitions
@@ -2656,44 +2818,6 @@ _fill_persistent_ro_udev_rules() {
     [[ "${persistent_size}" != "" ]] && \
         _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
     sed -i "${_sed_cmd}" "${_template}"
-}
-
-# Prepare GRUB configuration files
-_make_common_bootmode_grub_cfg(){
-    local _cfg \ 
-          _work="${work_dir}/grub" \
-          _profile="${profile}/grub"
-          _embed_cfg \
-          embedcfg
-    _embed_cfg="${_grub}/grub-embed.cfg"
-    install -d -- \
-            "${_work}"
-    # Fill GRUB configuration files
-    for _cfg in "${_profile}/"*'.cfg'; do
-        _build_bootloader_config "${_cfg}" \
-                                 "grub" > \
-          "${_work}/${_cfg##*/}"
-    done
-    # Add all GRUB files to the list of files
-    # used to calculate the required FAT image size.
-    efi_boot_files+=(
-      "${_work}/"
-      "${_profile}/"!(*.cfg))
-
-    IFS='' read -r -d '' embedcfg <<'EOF' || true
-if ! [ -d "$cmdpath" ]; then
-    # On some firmware, GRUB has a wrong cmdpath
-    # when booted from an optical disc.
-    # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
-    if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
-        cmdpath="${isodevice}/EFI/BOOT"
-    fi
-fi
-configfile "${cmdpath}/grub.cfg"
-EOF
-    printf '%s\n' \
-           "${embedcfg}" > \
-      "${_embed_cfg}"
 }
 
 _make_common_bootmode_grub_copy_to_isofs_iso() {
