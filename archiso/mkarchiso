@@ -2118,11 +2118,9 @@ _cleanup_pacstrap_dir() {
     _msg_info "Done!"
 }
 
-###############################################
-# Bootmodes functions (bootloaders handling)
-###############################################
-
-#### UUID getters
+################
+# UUID getters
+################
 
 ## Main ISO
 
@@ -2182,6 +2180,10 @@ _get_cryptomount_uuid() {
     _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
 }
 
+###############################################
+# Bootmodes functions (bootloaders handling)
+###############################################
+
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
@@ -2197,6 +2199,8 @@ _make_bootmodes_dongle() {
         _run_once "_make_bootmode_${bootmode}_dongle"
     done
 }
+
+### ISO file system
 
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso9660() {
