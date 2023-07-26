@@ -206,6 +206,7 @@ create_ephemeral_keys() {
 setup_repo() {
   local _awk_split_cmd \
 	_build_repo \
+	_build_repo_cmds=() \
 	_build_repo_options=() \
 	_build_repo_cmd \
 	_ci_bin \
@@ -243,20 +244,28 @@ setup_repo() {
   _build_repo="${_ci_bin}/build_repo.sh"
   _setup_user="${_ci_bin}/setup_user.sh"
   _gen_pacman_conf="${_ci_bin}/set_custom_repo.sh"
-  [ -e "${_build_repo}" ] || _build_repo="mkarchisorepo"
-  [ -e "${_gen_pacman_conf}" ] || _gen_pacman_conf="mkarchisosetrepo"
-  [ -e "${_setup_user}" ] || _setup_user="mkarchisorepobuilder"
-  _build_repo_cmd="cd ${_profile} && ${_build_repo} ${_build_repo_options[*]}"
-
+  [ -e "${_build_repo}" ] || \
+    _build_repo="mkarchisorepo"
+  [ -e "${_gen_pacman_conf}" ] || \
+    _gen_pacman_conf="mkarchisosetrepo"
+  [ -e "${_setup_user}" ] || \
+    _setup_user="mkarchisorepobuilder"
+  _build_repo_cmds=(
+    "cd ${_profile}"
+    "${_build_repo}" "${_build_repo_options[*]}")
+  _build_repo_cmd="$(IFS=" && " ;
+                     echo "${_build_repo_cmds[*]}")"
   print_section_start "setup_repo" "${_setup_repo_msg}"
-  if [ -e "${_packages_extra}" ]; then
+  [ -e "${_packages_extra}" ] && \
     #shellcheck disable=SC1090
     source "${_packages_extra}"
-  fi
   if [[ "${_packages[*]}" != "" ]] ; then
     "${_setup_user}" "${_user}"
-    cp -r "${_src_profile}" "${_home}"
-    chown -R "${_user}" "${_profile}"
+    cp -r "${_src_profile}" \
+	  "${_home}"
+    chown -R "${_user}:${_user}" \
+	     "${_profile}"
+    chmod 700 "${_profile}"
     su user -c "${_build_repo_cmd}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
@@ -265,19 +274,22 @@ setup_repo() {
     pacman "${_pacman_opts[@]}" -Sy
     for _pkg in "${_packages[@]}"; do
       echo "Removing conflicts for ${_pkg}"
-      _conflicts_line="$(pacman "${_pacman_opts[@]}" -Si "${_pkg}" \
-	                 | grep Conflicts)"
+      _conflicts_line="$(pacman "${_pacman_opts[@]}" \
+	                        -Si "${_pkg}" \
+	                   | grep Conflicts)"
       _conflicts=(
-        $(echo ${_conflicts_line##*:} \
-	   | awk "${_awk_split_cmd}")
-      )
+        "$(echo ${_conflicts_line##*:} | \
+	    awk "${_awk_split_cmd}")")
       for _conflict in "${_conflicts[@]}"; do
 	echo "Removing '${_conflict}'"
-        pacman -Rdd "${_conflict}" --noconfirm || true
+        pacman -Rdd "${_conflict}" \
+		--noconfirm || true
       done
     done
     echo "Installing ${_packages[@]}"
-    pacman "${_pacman_opts[@]}" -Sdd "${_packages[@]}" --noconfirm
+    pacman "${_pacman_opts[@]}" \
+	    -Sdd "${_packages[@]}" \
+	    --noconfirm
   fi
   print_section_end "setup_repo"
 }
