@@ -1873,6 +1873,7 @@ _make_packages() {
     _msg_info "Done! Packages installed successfully."
 }
 
+# Produces version files
 _make_version() {
     local _grubenv \
           _install_dir="${isofs_dir}/${install_dir}" \
@@ -2022,6 +2023,39 @@ _make_customize_airootfs() {
                          "${_custom_script}"
 }
 
+_make_pkglist() {
+    local _pkglist="pkglist.${arch}.txt"
+    local _bootstrap="${pacstrap_dir}/${_pkglist}" \
+          _iso="${isofs_dir}/${install_dir}/${_pkglist}"
+    _msg_info "Creating a list of installed packages on live-enviroment..."
+    case "${buildmode}" in
+        "bootstrap")
+            pacman -Q \
+                   --sysroot \
+                   "${pacstrap_dir}" > "${_bootstrap}"
+            ;;
+        "iso")
+            install -d \
+                    -m 0755 -- \
+                    "${isofs_dir}/${install_dir}"
+            if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
+                pacman -Q \
+                       --sysroot \
+                       "${pacstrap_dir}" > "${_iso}"
+            fi
+            ;;
+        "netboot")
+            install -d \
+                    -m 0755 -- \
+                    "${isofs_dir}/${install_dir}"
+            pacman -Q \
+                   --sysroot \
+                   "${pacstrap_dir}" > "${_iso}"
+            ;;
+    esac
+    _msg_info "Done!"
+}
+
 # Cleanup airootfs
 _cleanup_pacstrap_dir() {
     local _images=("initramfs-*" "vmlinuz-*" "${ucodes[@]}")
@@ -2081,8 +2115,9 @@ _cleanup_pacstrap_dir() {
 }
 
 ###############################################
-### Bootmodes functions (bootloaders handling)
+# Bootmodes functions (bootloaders handling)
 ###############################################
+
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
@@ -4636,92 +4671,6 @@ _export_gpg_publickey() {
     else
         gpg "${gpg_options[@]}"
     fi
-}
-
-_make_version() {
-    local _grubenv \
-          _install_dir="${isofs_dir}/${install_dir}" \
-          _msg \
-          _os_release \
-          _version_iso \
-    _grubenv="${_install_dir}/grubenv"
-    _version_iso="${install_dir}/version"
-    _msg_info "Creating version files..."
-    # Write version file to system installation dir
-    rm -f -- "${pacstrap_dir}/version"
-    printf '%s\n' \
-           "${iso_version}" > "${pacstrap_dir}/version"
-    [[ "${buildmode}" == @("iso"|"netboot") ]] && \
-      install -d \
-              -m 0755 -- \
-              "${_install_dir}" && \
-      # Write version file to ISO 9660
-      printf '%s\n' \
-             "${iso_version}" > "${_version_iso}" && \
-      # Write grubenv with version information to ISO 9660
-      printf '%.1024s' \
-             "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
-                       "${iso_name}" \
-                       "${iso_version}" \
-                       "$(printf '%0.1s' \
-                                 "#"{1..1024})")" > "${_grubenv}"
-    # Append IMAGE_ID & IMAGE_VERSION to os-release
-    _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
-    [[ ! -e "${pacstrap_dir}/etc/os-release" ]] && \
-    [[ -e "${pacstrap_dir}/usr/lib/os-release" ]] && \
-      _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
-    if [[ "${_os_release}" != "${pacstrap_dir}"* ]]; then
-        _msg="os-release file '${_os_release}' is outside of valid path."
-        _msg_warning "${_msg}"
-    else
-        [[ ! -e "${_os_release}" ]] || \
-          sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' \
-              "${_os_release}"
-        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' \
-               "${iso_name}" \
-               "${iso_version}" >> "${_os_release}"
-    fi
-
-    # Touch /usr/lib/clock-epoch to give another hint on date and time
-    # for systems with screwed or broken RTC.
-    touch -m \
-          -d"@${SOURCE_DATE_EPOCH}" -- \
-          "${pacstrap_dir}/usr/lib/clock-epoch"
-
-    _msg_info "Done!"
-}
-
-_make_pkglist() {
-    local _pkglist="pkglist.${arch}.txt"
-    local _bootstrap="${pacstrap_dir}/${_pkglist}" \
-          _iso="${isofs_dir}/${install_dir}/${_pkglist}"
-    _msg_info "Creating a list of installed packages on live-enviroment..."
-    case "${buildmode}" in
-        "bootstrap")
-            pacman -Q \
-                   --sysroot \
-                   "${pacstrap_dir}" > "${_bootstrap}"
-            ;;
-        "iso")
-            install -d \
-                    -m 0755 -- \
-                    "${isofs_dir}/${install_dir}"
-            if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
-                pacman -Q \
-                       --sysroot \
-                       "${pacstrap_dir}" > "${_iso}"
-            fi
-            ;;
-        "netboot")
-            install -d \
-                    -m 0755 -- \
-                    "${isofs_dir}/${install_dir}"
-            pacman -Q \
-                   --sysroot \
-                   "${pacstrap_dir}" > "${_iso}"
-            ;;
-    esac
-    _msg_info "Done!"
 }
 
 # Builds the base for an ISO and/or a netboot target
