@@ -76,7 +76,6 @@ fs_images_arr_vars=(
   'files'
   'image_tool_options')
 _img=""
-
 for _img in "${fs_images[@]}"; do
     for _var in "${fs_images_str_vars[@]}"; do
         printf -v "${_img}_${_var}" ""
@@ -85,6 +84,8 @@ for _img in "${fs_images[@]}"; do
         declare -a "${_img}_${_var}"
     done
 done
+
+# Declare constants
 # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
 # https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
 readonly ucodes=(
@@ -92,9 +93,8 @@ readonly ucodes=(
   'intel-ucode.img'
   'amd-uc.img'
   'amd-ucode.img'
-  'early_ucode.cpio' 'microcode.cpio')
-
-# Constants
+  'early_ucode.cpio'
+  'microcode.cpio')
 epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
 luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
 linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
@@ -224,85 +224,91 @@ _show_config() {
     _msg_info "                 Packages:   ${buildmode_pkg_list[*]}"
 }
 
-# Cleanup airootfs
-_cleanup_pacstrap_dir() {
-    local _images=("initramfs-*" "vmlinuz-*" "${ucodes[@]}")
-    local _root="${pacstrap_dir}"
-    local _boot="${_root}/boot"
-    local _log="${pacstrap_dir}/var/log"
-    local _machine_id="${pacstrap_dir}/etc/machine-id"
-    local _pacman_db="${_root}/var/lib/pacman"
-    local _pacman_cache="${_root}/var/cache/pacman/pkg"
-    local _tmp="${pacstrap_dir}/var/tmp"
-    local _cp_opts=('-af' '--no-preserve=ownership,mode')
-    _msg_info "Cleaning up in pacstrap location..."
+# Returns an attribute variable value for a 
+# given object
+# $1: an object
+# $2: a variable value attached to object
+_get_obj_var() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _ref
+    _ref="${_image}_${_var}"
+    printf %s "${!_ref[*]}"
+}
 
-    # Move kernel, initramfs and microcodes for later usage
-    install -d -m 0755 "${work_dir}/boot" 
-    for _query in "${_images[@]}"; do
-        find "${_boot}" -iname "${_query}" \
-                        -exec cp "${_cp_opts[@]}" \
-                                 {} "${work_dir}/boot" \; -quit
-    done
-    [[ -d "${_boot}" ]] && \
-      find "${_boot}" -maxdepth 1 \
-                      -type f \
-                      -delete
-    # Delete pacman database sync cache files (*.tar.gz)
-    [[ -d "${_pacman_db}" ]] && \
-      find "${_pacman_db}" -maxdepth 1 \
-                           -type f \
-                           -delete
-    # Delete pacman database sync cache
-    [[ -d "${_pacman_db}/sync" ]] && \
-      find "${_pacman_db}/sync" -delete
-    # Delete pacman cache files
-    [[ -d "${_pacman_cache}" ]] && \
-      find "${_pacman_cache}" -type f -delete
-    # Delete all log files, keeps empty dirs.
-    [[ -d "${_log}" ]] && \
-      find "${_log}" -type f \
-                     -delete
-    # Delete all temporary files and dirs
-    [[ -d "${_tmp}" ]] && \
-      find "${_tmp}" -mindepth 1 \
-                     -delete
-    # Delete package pacman related files.
-    find "${work_dir}" \( -name '*.pacnew' \
-                          -o -name '*.pacsave' \
-                          -o -name '*.pacorig' \) \
-                       -delete
-    if [[ "${persistent_size}" != "" ]]; then
-        dbus-uuidgen --ensure="${_machine_id}"
+# Sets object attribute variables
+_set_obj_var() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _value="${3}"
+    printf -v "${_obj}_${_var}" \
+              "${_value}"
+}
+
+# Helper function to run functions only one time.
+# $1: function name
+_run_once() {
+    if [[ ! -e "${work_dir}/${run_once_mode}.${1}" ]]; then
+        "${1}"
+        touch "${work_dir}/${run_once_mode}.${1}"
     else
-        # Create an empty /etc/machine-id
-        rm -f -- "${_machine_id}"
-        printf '' > "${_machine_id}"
+        if [ "${quiet}" != "y"  ]; then
+            _msg_info "Command ${1} already run"
+        fi
     fi
+}
+
+########################################################
+# File system making functions
+########################################################
+
+## Utility functions
+
+# Returns epoch given a file system image name 
+# $1: value in fs_images
+_get_epoch() {
+    local _name="${1}"
+    echo $((SOURCE_DATE_EPOCH + "${_name}_const"))
+}
+
+# Returns an unique uuid given a datetime in UNIX time
+# $1: UNIX time
+_get_epoch_fsuuid() {
+    local _epoch="${1}"
+    uuidgen --sha1 \
+	        --namespace "${epoch_namespace}" \
+            --name "${_epoch}"
+}
+
+## EROFS
+
+# Creates an EROFS image given a directory.
+# $1: resulting image
+# $2: input directory
+# $3: UNIX time (to generate a date-based uuid)
+_run_mkerofs() {
+    local _image_path="${1}"
+    local _dir="${2}"
+    local _epoch="${3}"
+    local fsuuid
+    fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
+    [[ ! "${quiet}" == "y" ]] || \
+      mkfs_erofs_options+=('--quiet')
+    _msg_info "Creating EROFS image"
+    _msg_info "Directory: ${_dir}"
+    _msg_info "Image path: ${_image_path}"
+    _msg_info "UUID: ${fsuuid}"
+    _msg_info "this may take a while..."
+    mkfs_erofs_options+=(
+      '-U' "${fsuuid}"
+      "${_mkfs_options[@]}")
+    mkfs.erofs "${mkfs_erofs_options[@]}" -- \
+               "${_image_path}" \
+               "${_dir}"
     _msg_info "Done!"
 }
 
-# Creates a squashfs image from a
-# file system image or directory.
-# $1: directory or a file system image
-# $2: path of the result image
-_run_mksquashfs() {
-    local _directory_or_fs="${1}" \
-          _image_path="${2}" \
-          _msg=() \
-          mksquashfs_options=("${_mkfs_options[@]}")
-    [[ ! "${quiet}" == "y" ]] || \
-      mksquashfs_options+=(
-        '-no-progress'
-        '-quiet')
-    _msg=("Creating SQUASHFS image,"
-          "this may take some time...")
-    _msg_info "${_msg[*]}"
-    mksquashfs "${_directory_or_fs}" \
-               "${_image_path}" \
-               -noappend \
-               "${mksquashfs_options[@]}"
-}
+## EXT4
 
 # Creates an ext4 image of given size 
 # from a directory with the same name in the same path.
@@ -372,70 +378,82 @@ _run_mkext4() {
     _msg_info "Done!"
 }
 
-# Creates an EROFS image given a directory.
-# $1: resulting image
-# $2: input directory
-# $3: UNIX time (to generate a date-based uuid)
-_run_mkerofs() {
-    local _image_path="${1}"
-    local _dir="${2}"
-    local _epoch="${3}"
-    local fsuuid
-    fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
-    [[ ! "${quiet}" == "y" ]] || \
-      mkfs_erofs_options+=('--quiet')
-    _msg_info "Creating EROFS image"
-    _msg_info "Directory: ${_dir}"
-    _msg_info "Image path: ${_image_path}"
-    _msg_info "UUID: ${fsuuid}"
-    _msg_info "this may take a while..."
-    mkfs_erofs_options+=(
-      '-U' "${fsuuid}"
-      "${_mkfs_options[@]}")
-    mkfs.erofs "${mkfs_erofs_options[@]}" -- \
-               "${_image_path}" \
-               "${_dir}"
-    _msg_info "Done!"
+## LUKS
+
+# Prompts a passphrase to be used as key for a partition
+# $1: partition name
+# $2: partition label
+_ask_passwd() {
+    local _name="${1}" \
+          _label="${2}" \
+          _prompt=() \
+          _prompt_cmd \
+          _mismatch \
+          _mismatch_cmd="echo" \
+          _opts=("--timeout=69042")
+    local _msg=("Insert new passphrase"
+                "for ${_name} (${_label}): ") \
+          _confirm_msg="Confirm: " \
+          _mismatch_opts=() \
+          _mismatch_msg="Passwords mismatch." \
+          _confirm
+    if command -v zenity &> /dev/null && \
+       [ -n "${DISPLAY}" ]; then
+        _prompt_cmd="$(which zenity)"
+        _mismatch_cmd="${_prompt_cmd}"
+        _opts+=(
+          "--password")
+        _mismatch_opts+=(
+          "--info"
+          "--icon" "dialog-password"
+          "--text")
+    else
+        _prompt_cmd=$(which systemd-ask-password)
+    fi
+    _prompt=("${_prompt_cmd}" "${_opts[@]}")
+    _mismatch=("${_mismatch_cmd}" "${_mismatch_opts[@]}"
+                                  "${_mismatch_msg}")
+    while true; do
+        _passphrase=$("${_prompt[@]}" "${_msg[*]}")
+        echo "${_confirm_msg}"
+        _confirm=$("${_prompt[@]}" "${_confirm_msg}")
+        [[ "${_passphrase}" == "${_confirm}" ]] && \
+          break
+        "${_mismatch[@]}"
+    done
 }
 
-# Creates a swap image
-# $1: resulting image
-# $2: image size
-# $3: UNIX time (to generate a date-based uuid)
-# $4: partition label
-_run_mkswap() {
+# Determines correct fallocate options for an image at a chosen path
+# $1: path of the fallocate resulting image to verify options for
+_validate_fallocate_opts() {
     local _image_path="${1}"
-    local _size="${2}"
-    local _epoch="${3}"
-    local _label="${4}"
-    local _fsuuid
-    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
-    dd if=/dev/zero \
-       of="${_image_path}" \
-       bs=1K count="${_size}" \
-       status=progress
-    chmod 0600 "${_image_path}"
+    local _posix_error=("fallocate:"
+                        "fallocate failed:"
+                        "Operation not supported")
+    local _msg
+    _msg="$(fallocate -l "100K" \
+                      "${_image_path}.test" 2>&1)" 
+    if [ "${_msg}" == "${_posix_error[*]}" ]; then
+        rm "${_image_path}.test"
+        echo '--posix' 
+    elif [ "${_msg}" != "" ]; then
+        _msg_error "${_msg}" 1
+    fi
+}
+
+# Closes a LUKS device mapper
+# $1: device mapper to close
+_close_luks_device() {
+    local _device="${1}"
+    local _mapper
+    _mapper=$(basename "${_device}")
+    blockdev --flushbufs \
+             "${_device}" > /dev/null 2>&1 || true
+    cryptsetup luksClose "${_mapper}" > /dev/null 2>&1 || true
+    if [ -e "${_device}" ]; then
+        dmsetup remove "${_device}" > /dev/null 2>&1 || true
+    fi
     sync
-    mkswap -L "${_label}" \
-           -U "${_fsuuid}" \
-           "${_image_path}"
-}
-
-# Creates and opens a RAID device
-# $1: RAID name
-# $2: RAID type (only '1' for now)
-_run_mkraid() {
-    # local _image_path="${1}"
-    # local _dev_path="${1}"
-    local _name="${1}"
-    # local _size="${2}" # should go into the array
-    local _type="${2}"
-    shift 3
-    local _devices=("$@")
-    mdadm --create "/dev/md${_name}.map" \
-          --level="${_type}" \
-          --run \
-          "${_devices[@]}"
 }
 
 # Creates and opens a LUKS image of the size
@@ -557,147 +575,124 @@ _run_mkluks() {
     _msg_info "Done!"
 }
 
-# Determines correct fallocate options for an image at a chosen path
-# $1: path of the fallocate resulting image to verify options for
-_validate_fallocate_opts() {
-    local _image_path="${1}"
-    local _posix_error=("fallocate:"
-                        "fallocate failed:"
-                        "Operation not supported")
-    local _msg
-    _msg="$(fallocate -l "100K" \
-                      "${_image_path}.test" 2>&1)" 
-    if [ "${_msg}" == "${_posix_error[*]}" ]; then
-        rm "${_image_path}.test"
-        echo '--posix' 
-    elif [ "${_msg}" != "" ]; then
-        _msg_error "${_msg}" 1
-    fi
-}
 
-# Closes a LUKS device mapper
-# $1: device mapper to close
-_close_luks_device() {
-    local _device="${1}"
-    local _mapper
-    _mapper=$(basename "${_device}")
-    blockdev --flushbufs \
-             "${_device}" > /dev/null 2>&1 || true
-    cryptsetup luksClose "${_mapper}" > /dev/null 2>&1 || true
-    if [ -e "${_device}" ]; then
-        dmsetup remove "${_device}" > /dev/null 2>&1 || true
-    fi
-    sync
-}
+## RAID
 
-# Prompts a passphrase to be used as key for a partition
-# $1: partition name
-# $2: partition label
-_ask_passwd() {
-    local _name="${1}" \
-          _label="${2}" \
-          _prompt=() \
-          _prompt_cmd \
-          _mismatch \
-          _mismatch_cmd="echo" \
-          _opts=("--timeout=69042")
-    local _msg=("Insert new passphrase"
-                "for ${_name} (${_label}): ") \
-          _confirm_msg="Confirm: " \
-          _mismatch_opts=() \
-          _mismatch_msg="Passwords mismatch." \
-          _confirm
-    if command -v zenity &> /dev/null && \
-       [ -n "${DISPLAY}" ]; then
-        _prompt_cmd="$(which zenity)"
-        _mismatch_cmd="${_prompt_cmd}"
-        _opts+=(
-          "--password")
-        _mismatch_opts+=(
-          "--info"
-          "--icon" "dialog-password"
-          "--text")
-    else
-        _prompt_cmd=$(which systemd-ask-password)
-    fi
-    _prompt=("${_prompt_cmd}" "${_opts[@]}")
-    _mismatch=("${_mismatch_cmd}" "${_mismatch_opts[@]}"
-                                  "${_mismatch_msg}")
-    while true; do
-        _passphrase=$("${_prompt[@]}" "${_msg[*]}")
-        echo "${_confirm_msg}"
-        _confirm=$("${_prompt[@]}" "${_confirm_msg}")
-        [[ "${_passphrase}" == "${_confirm}" ]] && \
-          break
-        "${_mismatch[@]}"
-    done
-}
-
-# Steps shared by the mkimg+<fs_image_type> functions
-# $1: name for the device mapper
-# $2: an encryption key (prompts for one if empty)
-# $3: partition label
-_mkluks_common() {
-    local _name="${1}" \
-          _key="${2}" \
-          _label="${3}"
-    local _out="${work_dir}/${_label}.key"
-    if [ "${_key}" = "" ]; then
-        _ask_passwd "${_name}" "${_label}"
-        printf "%s" "${_passphrase}" > "${_out}"
-        _encryption_key="${_out}"
-    elif [ "${_key}" = "auto" ]; then
-        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | \
-                         head -c 20 ; \
-                       echo '')" > "${_out}"
-        _encryption_key="${_out}"
-    fi
-}
-
-# Creates a squash fs image.
-# $1: path of the resulting image
-# $2: partition size
-# $3: UNIX time (for a date-based uuid)
-# $4: partition label
-_mkimg_swap() {
-    _run_mkswap "${@}"
-}
-
-# Creates a swap partition inside a LUKS container image file.
-# $1: device mapper name
-# $2: LUKS image path
-# $3: image size
-# $4: encryption key
-# $5: UNIX time (for a date-based uuid)
-# $6: partition label
-# $7: if true, dm-verity layer will be disabled to open the image from GRUB
-_mkimg_swap+luks() {
+# Creates and opens a RAID device
+# $1: RAID name
+# $2: RAID type (only '1' for now)
+_run_mkraid() {
+    # local _image_path="${1}"
+    # local _dev_path="${1}"
     local _name="${1}"
-    local _image_path="${2}"
-    local _size="${3}"
-    local _encryption_key="${4}"
-    local _epoch="${5}"
-    local _label="${6}"
-    local _grub="${7}"
-    local _writable="true"
-    _mkluks_common "${_name}" \
-                   "${_encryption_key}" \
-                   "${_label}"
-    _run_mkluks "${_image_path}" \
-                "${_size}" \
-                "${_encryption_key}" \
-                "${_epoch}" \
-                "${_label}" \
-                "${_writable}" \
-                "${_grub}"
-    _run_mkswap "${image_device}" \
-                "$(_get_internal_size "${_size}")" \
-                "${_epoch}" \
-                "${_name}"
+    # local _size="${2}" # should go into the array
+    local _type="${2}"
+    shift 3
+    local _devices=("$@")
+    mdadm --create "/dev/md${_name}.map" \
+          --level="${_type}" \
+          --run \
+          "${_devices[@]}"
+}
+
+## SQUASHFS
+
+# Creates a squashfs image from a
+# file system image or directory.
+# $1: directory or a file system image
+# $2: path of the result image
+_run_mksquashfs() {
+    local _directory_or_fs="${1}" \
+          _image_path="${2}" \
+          _msg=() \
+          mksquashfs_options=("${_mkfs_options[@]}")
+    [[ ! "${quiet}" == "y" ]] || \
+      mksquashfs_options+=(
+        '-no-progress'
+        '-quiet')
+    _msg=("Creating SQUASHFS image,"
+          "this may take some time...")
+    _msg_info "${_msg[*]}"
+    mksquashfs "${_directory_or_fs}" \
+               "${_image_path}" \
+               -noappend \
+               "${mksquashfs_options[@]}"
+}
+
+
+## SWAP
+
+# Creates a swap image
+# $1: resulting image
+# $2: image size
+# $3: UNIX time (to generate a date-based uuid)
+# $4: partition label
+_run_mkswap() {
+    local _image_path="${1}"
+    local _size="${2}"
+    local _epoch="${3}"
+    local _label="${4}"
+    local _fsuuid
+    _fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
+    dd if=/dev/zero \
+       of="${_image_path}" \
+       bs=1K count="${_size}" \
+       status=progress
+    chmod 0600 "${_image_path}"
     sync
-    _close_luks_device "${image_device}"
+    mkswap -L "${_label}" \
+           -U "${_fsuuid}" \
+           "${_image_path}"
+}
+
+#################################################
+# Image making functions
+#################################################
+
+### Utility functions
+
+# Returns internal size for an internal partition 
+# from the outer image size
+# $1: outer partition size
+_get_internal_size() {
+    local _size="${1}" _ratio
+    local _s=50 _S=200 _l=1000 _L=5000
+    if [[ "${_size}" -lt $((_s * 1000)) ]]; then
+        _ratio=60
+    elif [[ "${_size}" -gt $((_s * 1000)) ]] && \
+         [[ "${_size}" -lt $((_S * 1000)) ]]; then
+        _ratio=70
+    elif [[ "${_size}" -gt $((_S * 1000)) ]] && \
+         [[ "${_size}" -lt $((_l * 1000)) ]]; then
+        _ratio=75
+    elif [[ "${_size}" -gt $((_l * 1000)) ]] && \
+         [[ "${_size}" -lt $((_L * 1000)) ]]; then
+        _ratio=80
+    else
+        _ratio=85
+    fi
+    echo $(((_size * _ratio)/100))
+}
+
+### Base types
+
+## EROFS (compressed read-only image type)
+
+# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
+# $1: image path
+# $2: directory to be put onto the image
+# $3: UNIX time (for a date-based uuid)
+_mkimg_erofs() {
+    local _image_path="${1}"
+    local _dir="${2}"
+    local _epoch="${3}"
+    _run_mkerofs "${_image_path}" \
+                 "${_dir}" \
+                 "${_epoch}"
     _msg_info "Done!"
 }
+
+## EXT4 (easily readable file system)
 
 # Creates an ext4 file system image
 # $1: directory to use to generate the image
@@ -722,204 +717,30 @@ _mkimg_ext4() {
     _msg_info "Done!"
 }
 
-# Creates an ext4 fs inside a LUKS container image file.
-# $1: device mapper name
-# $2: directory to be put onto the image
-# $3: image path
-# $4: image size
-# $5: encryption key
-# $6: UNIX time (for a date-based uuid)
-# $7: partion label
-# $8: if true, the dm-verity will be disabled to let GRUB open it
-_mkimg_ext4+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _grub="${8}"
-    local _writable="true"
-    _mkluks_common "${_name}" \
-                   "${_encryption_key}" \
-                   "${_label}"
-    _run_mkluks "${_image_path}" \
-                "${_size}" \
-                "${_encryption_key}" \
-                "${_epoch}" \
-                "${_label}" \
-                "${_writable}" \
-                "${_grub}"
-    _run_mkext4 "${_dir}" \
-                "$(_get_internal_size "${_size}")" \
-                "${_epoch}" \
-                "${_name}" \
-                "${_writable}"
-    dd if="${_dir}.img" \
-       of="${image_device}" > /dev/null 2>&1
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${_dir}.img"
+## LUKS (encrypted file system container)
+
+# Steps shared by the mkimg+<fs_image_type>+luks functions
+# $1: name for the device mapper
+# $2: an encryption key (prompts for one if empty)
+# $3: partition label
+_mkluks_common() {
+    local _name="${1}" \
+          _key="${2}" \
+          _label="${3}"
+    local _out="${work_dir}/${_label}.key"
+    if [ "${_key}" = "" ]; then
+        _ask_passwd "${_name}" "${_label}"
+        printf "%s" "${_passphrase}" > "${_out}"
+        _encryption_key="${_out}"
+    elif [ "${_key}" = "auto" ]; then
+        printf "%s" "$(tr -dc A-Za-z0-9 </dev/urandom | \
+                         head -c 20 ; \
+                       echo '')" > "${_out}"
+        _encryption_key="${_out}"
+    fi
 }
 
-# Creates an ext4-formatted RAID1 on a LUKS images array
-# $1: RAID name
-# $2: directory to fill the RAID with
-# $3: encryption key
-# $4: UNIX time (to get a date-based UUID)
-# $@: LUKS image paths array
-_mkimg_ext4+raid1+luks() {
-  local _name="${1}"
-  local _dir="${2}"
-  # local _image_path="${3}"
-  # local _size="${4}"
-  local _encryption_key="${3}"
-  local _epoch="${4}"
-  # local _label="${5}"
-  # local _grub="${6}"
-  local _writable="true"
-  shift 4
-  local _images=("$@")
-  local _image
-  for _image in "${_images[@]}"; do
-      echo "${_device}"
-      _mkluks_common "${_name}" \
-                     "${_encryption_key}" \
-                     "${_label}"
-      _run_mkluks "${_image_path}" \
-                  "${_size}" \
-                  "${_encryption_key}" \
-                  "${_epoch}" \
-                  "${_label}" \
-                  "${_writable}" \
-                  "${_grub}"
-  done
-
-  for _device in "${_devices[@]}"; do
-    _close_luks_device "${image_device}"
-  done
-}
-
-# Creates or expand an ext4-formatted RAID array
-# $1: RAID name
-# $2: files to be put onto the RAID
-# $@: devices, in the following format <todo>
-_mkimg+ext4+raid() {
-  local _name="${1}"
-  local _dir="${2}"
-  shift 2
-  local _array=("${@}")
-  _run_mkraid "${_name}"
-  echo "${_array[@]}"
-}
-
-# Creates an ext4 image and packs it inside a squashfs image.
-# Packs the squash image inside a LUKS image.
-# $1: device mapper name
-# $2: directory to put inside the image
-# $3: image path
-# $4: image size
-# $5: encryption key
-# $6: UNIX time (for a datetime-based uuid)
-# $7: partition label
-# $8: if true, the image will be writable
-# $9: if true, the dm-verity layer will be disabled 
-#     so that the image can be opened from GRUB
-_mkimg_ext4+squashfs+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _writable="${8}"
-    local _grub="${9}"
-    _mkluks_common "${_name}" \
-                   "${_encryption_key}" \
-                   "${_label}"
-    _run_mkluks "${_image_path}" \
-                "${_size}" \
-                "${_encryption_key}" \
-                "${_epoch}" \
-                "${_label}" \
-                "${_writable}" \
-                "${_grub}"
-    _run_mkext4 "${_dir}" \
-                "$(_get_internal_size "${_size}")" \
-                "${_epoch}" \
-                "${_name}" \
-                "${_writable}"
-    _run_mksquashfs "${_dir}.img" \
-                    "${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-    _msg_info "Done!"
-    rm -- "${_dir}.img"
-}
-
-# Creates a squashfs image and saves it on a LUKS image.
-# $1: device mapper name
-# $2: directory to put inside the image
-# $3: image path
-# $4: image size
-# $5: encryption key
-# $6: UNIX time (for a datetime-based uuid)
-# $7: partition label
-# $8: if true, the image will be writable
-# $9: if true, the dm-verity layer will be disabled 
-#     so that the image can be opened from GRUB
-_mkimg_squashfs+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _writable="${8}"
-    local _grub="${9}"
-    _mkluks_common "${_name}" \
-                   "${_encryption_key}" \
-                   "${_label}"
-    _run_mkluks "${_image_path}" \
-                "${_size}" \
-                "${_encryption_key}" \
-                "${_epoch}" \
-                "${_label}" \
-                "${_writable}" \
-                "${_grub}"
-    _run_mksquashfs "${_dir}" \
-                    "${image_device}"
-    sync
-    _close_luks_device "${image_device}"
-}
-
-# Creates an ext4 file system inside a squashfs image.
-# $1: partition label
-# $2: directory to put inside the image
-# $3: image path
-# $4: image size
-# $5: UNIX time (for a datetime-based uuid)
-_mkimg_ext4+squashfs() {
-    local _label="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _epoch="${5}"
-    local _writable="false"
-    _run_mkext4 "${_dir}" \
-                "$(_get_internal_size "${_size}")" \
-                "${_epoch}" \
-                "${_name}" \
-                "${_writable}"
-    _run_mksquashfs "${_dir}.img" \
-                    "${_image_path}"
-    _msg_info "Done!"
-    rm -- "${_dir}.img"
-}
+## SQUASHFS (compressed read-only image type)
 
 # Creates a squash fs image.
 # $1: directory to create the squashfs image with
@@ -931,19 +752,21 @@ _mkimg_squashfs() {
                     "${_image_path}"
 }
 
-# Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
-# $1: image path
-# $2: directory to be put onto the image
+## SWAP (on-disk virtual memory)
+
+# Creates a swap image.
+# $1: path of the resulting image
+# $2: partition size
 # $3: UNIX time (for a date-based uuid)
-_mkimg_erofs() {
-    local _image_path="${1}"
-    local _dir="${2}"
-    local _epoch="${3}"
-    _run_mkerofs "${_image_path}" \
-                 "${_dir}" \
-                 "${_epoch}"
-    _msg_info "Done!"
+# $4: partition label
+_mkimg_swap() {
+    _run_mkswap "${@}"
 }
+
+### 2-layered types
+
+## EROFS over LUKS (encrypted compressed
+#                   read-only image type)
 
 # Create an EROFS image containing the root file system and saves it on the LUKS image.
 # Save the LUKS image on the ISO 9660 file system.
@@ -1003,126 +826,493 @@ _mkimg_erofs+luks() {
     _close_luks_device "${image_device}"
 }
 
-# Defines run once functions to create file system images
-# for all supported file system formats.
-for _img in "${fs_images[@]}"; do
-    eval "_mk${_img}_ext4() {" \
-             "${_img}_guid=${linux_guid};" \
-              "_mkimg_ext4 \${_dir}" \
-                          "\${_image_path}" \
-                          "\${_size}" \
-                          "\${_epoch}" \
-                          "\${_label}; }"
-    eval "_mk${_img}_squashfs() {" \
-              "_mkimg_squashfs \${_dir}" \
-                              "\${_image_path}; }"
-    eval "_mk${_img}_erofs() {" \
-              "_mkimg_erofs \${_image_path}" \
-                           "\${_dir}" \
-                           "\${_epoch}; }"
-    eval "_mk${_img}_erofs+luks() {" \
-              "_mkimg_erofs+luks \${_name}" \
-                                "\${_dir}" \
-                                "\${_image_path}" \
-                                "\${_auto_size}" \
-                                "\${_encryption_key}" \
-                                "\${_epoch}" \
-                                "\${_label}" \
-                                "\${_grub}; }"
-    eval "_mk${_img}_ext4+squashfs() {" \
-              "_mkimg_ext4+squashfs \${_name}" \
-                                   "\${_dir}" \
-                                   "\${_image_path}" \
-                                   "\${_size}" \
-                                   "\${_epoch}" \
-                                   "\${_label}" \
-                                   "\${_writable}; }"
-    eval "_mk${_img}_ext4+squashfs+luks() {" \
-              "_mkimg_ext4+squashfs+luks \${_name}" \
-                                        "\${_dir}" \
-                                        "\${_image_path}" \
-                                        "\${_size}" \
-                                        "\${_encryption_key}" \
-                                        "\${_epoch}" \
-                                        "\${_writable}" \
-                                        "\${_grub}; }"
-    eval "_mk${_img}_ext4+luks() {" \
-              "${_img}_guid=${luks_guid};" \
-              "_mkimg_ext4+luks \${_name}" \
-                               "\${_dir}" \
-                               "\${_image_path}" \
-                               "\${_size}" \
-                               "\${_encryption_key}" \
-                               "\${_epoch}" \
-                               "\${_label}" \
-                               "\${_grub}; }"
-    eval "_mk${_img}_squashfs+luks() {" \
-              "_mkimg_squashfs+luks \${_name}" \
-                                   "\${_dir}" \
-                                   "\${_image_path}" \
-                                   "\${_size}" \
-                                   "\${_encryption_key}" \
-                                   "\${_epoch}" \
-                                   "\${_label}" \
-                                   "\${_writable}" \
-                                   "\${_grub}; }"
-    eval "_mk${_img}_swap() {" \
-              "_run_mkswap \${_image_path}" \
-                          "\${_size}" \
-                          "\${_epoch}" \
-                          "\${_label}; }"
-    eval "_mk${_img}_swap+luks() {" \
-              "_mkimg_swap+luks \${_name}" \
-                               "\${_image_path}" \
-                               "\${_size}" \
-                               "\${_encryption_key}" \
-                               "\${_epoch}" \
-                               "\${_label}" \
-                               "\${_grub}; }"
-done
+## EXT4 over LUKS (encrypted image type)
 
-# Parameters for _mk<fs_image>_<fs_type> functions
-# $1: value in fs_images
-_mkfs_common() {
-    local _image="${1}"
-    _name="$(_get_fs_name "${_image}")"
-    _dir="$(_get_fs_var "${_image}" \
-                        "dir")"
-    _epoch="$(_get_epoch "${_image}")"
-    _encryption_key="$(_get_fs_var "${_image}" \
-                                   "encryption_key")"
-    _label="$(_get_iso_partition_label "${_image}")"
-    _size="$(_get_fs_var "${_image}" \
-                         "size")"
-    _image_path="$(_get_fs_img "${_image}")"
-    _grub="false"
-    _writable="false"
+# Creates an ext4 fs inside a LUKS container image file.
+# $1: device mapper name
+# $2: directory to be put onto the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a date-based uuid)
+# $7: partion label
+# $8: if true, the dm-verity will be disabled to let GRUB open it
+_mkimg_ext4+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _grub="${8}"
+    local _writable="true"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    dd if="${_dir}.img" \
+       of="${image_device}" > /dev/null 2>&1
+    sync
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+    rm -- "${_dir}.img"
 }
 
-# Parameters for _mkairootfs_fs_type functions
-_mkairootfs_common() {
+## EXT4 over RAID (high-availability/high-performance
+#                  image type)
+
+# Creates or expand an ext4-formatted RAID array
+# $1: RAID name
+# $2: files to be put onto the RAID
+# $@: devices, in the following format <todo>
+_mkimg+ext4+raid1() {
+  local _name="${1}"
+  local _dir="${2}"
+  shift 2
+  local _array=("${@}")
+  _run_mkraid "${_name}"
+  echo "${_array[@]}"
+}
+
+## EXT4 over SQUASHFS (easily supported file system over
+##                     read-only compressed container)
+
+# Creates an ext4 file system inside a squashfs image.
+# $1: partition label
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: UNIX time (for a datetime-based uuid)
+_mkimg_ext4+squashfs() {
+    local _label="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size="${4}"
+    local _epoch="${5}"
+    local _writable="false"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    _run_mksquashfs "${_dir}.img" \
+                    "${_image_path}"
+    _msg_info "Done!"
+    rm -- "${_dir}.img"
+}
+
+# SQUASHFS over LUKS (encrypted compressed
+#                     read-only image type)
+
+# Creates a squashfs image and saves it on a LUKS image.
+# $1: device mapper name
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a datetime-based uuid)
+# $7: partition label
+# $8: if true, the image will be writable
+# $9: if true, the dm-verity layer will be disabled 
+#     so that the image can be opened from GRUB
+_mkimg_squashfs+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    local _grub="${9}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mksquashfs "${_dir}" \
+                    "${image_device}"
+    sync
+    _close_luks_device "${image_device}"
+}
+
+## SWAP over LUKS (encrypted swap)
+
+# Creates a swap partition inside a LUKS container image file.
+# $1: device mapper name
+# $2: LUKS image path
+# $3: image size
+# $4: encryption key
+# $5: UNIX time (for a date-based uuid)
+# $6: partition label
+# $7: if true, dm-verity layer will be disabled to open the image from GRUB
+_mkimg_swap+luks() {
+    local _name="${1}"
+    local _image_path="${2}"
+    local _size="${3}"
+    local _encryption_key="${4}"
+    local _epoch="${5}"
+    local _label="${6}"
+    local _grub="${7}"
+    local _writable="true"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkswap "${image_device}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}"
+    sync
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+}
+
+### 3-layered types
+
+## EXT4 over RAID over LUKS (encrypted high-performance/high-availability
+#                            image type)
+
+# Creates an ext4-formatted RAID1 on a LUKS images array
+# $1: RAID name
+# $2: directory to fill the RAID with
+# $3: encryption key
+# $4: UNIX time (to get a date-based UUID)
+# $@: LUKS image paths array
+_mkimg_ext4+raid1+luks() {
+  local _name="${1}"
+  local _dir="${2}"
+  # local _image_path="${3}"
+  # local _size="${4}"
+  local _encryption_key="${3}"
+  local _epoch="${4}"
+  # local _label="${5}"
+  # local _grub="${6}"
+  local _writable="true"
+  shift 4
+  local _images=("$@")
+  local _image
+  for _image in "${_images[@]}"; do
+      echo "${_device}"
+      _mkluks_common "${_name}" \
+                     "${_encryption_key}" \
+                     "${_label}"
+      _run_mkluks "${_image_path}" \
+                  "${_size}" \
+                  "${_encryption_key}" \
+                  "${_epoch}" \
+                  "${_label}" \
+                  "${_writable}" \
+                  "${_grub}"
+  done
+
+  for _device in "${_devices[@]}"; do
+    _close_luks_device "${image_device}"
+  done
+}
+
+## EXT4 OVER SQUASHFS OVER LUKS (encrypted compressed
+#                                read-only image type) 
+
+# Creates an ext4 image and packs it inside a squashfs image.
+# Packs the squash image inside a LUKS image.
+# $1: device mapper name
+# $2: directory to put inside the image
+# $3: image path
+# $4: image size
+# $5: encryption key
+# $6: UNIX time (for a datetime-based uuid)
+# $7: partition label
+# $8: if true, the image will be writable
+# $9: if true, the dm-verity layer will be disabled 
+#     so that the image can be opened from GRUB
+_mkimg_ext4+squashfs+luks() {
+    local _name="${1}"
+    local _dir="${2}"
+    local _image_path="${3}"
+    local _size="${4}"
+    local _encryption_key="${5}"
+    local _epoch="${6}"
+    local _label="${7}"
+    local _writable="${8}"
+    local _grub="${9}"
+    _mkluks_common "${_name}" \
+                   "${_encryption_key}" \
+                   "${_label}"
+    _run_mkluks "${_image_path}" \
+                "${_size}" \
+                "${_encryption_key}" \
+                "${_epoch}" \
+                "${_label}" \
+                "${_writable}" \
+                "${_grub}"
+    _run_mkext4 "${_dir}" \
+                "$(_get_internal_size "${_size}")" \
+                "${_epoch}" \
+                "${_name}" \
+                "${_writable}"
+    _run_mksquashfs "${_dir}.img" \
+                    "${image_device}"
+    sync
+    _close_luks_device "${image_device}"
+    _msg_info "Done!"
+    rm -- "${_dir}.img"
+}
+
+## Image making funtions arguments generation function
+
+# Get opts for a mkimg<fs_type> function
+# $1: file system composed type (ie. ext4+squashfs+luks)
+_get_mkimg_opts() {
+  local fs_type="${1}" \
+        _erofs_opts=() \
+        _erofs+luks_opts=() \
+        _ext4_opts=() \
+        _ext4+luks_opts=() \
+        _ext4+squashfs+luks_opts=() \
+        _squashfs_opts=() \
+        _squashfs+luks_opts=() \
+        _swap_opts=() \
+        _swap+luks_opts=() \
+  _erofs_opts=(
+    "${_image_path}"
+    "${_dir}"
+    "${_epoch}")
+  _ext4_opts=(
+      "${_dir}"
+      "${_image_path}"
+      "${_size}"
+      "${_epoch}"
+      "${_label}")
+  _squashfs_opts=( 
+    "${_dir}"
+    "${_image_path}")
+  _swap_opts=(
+    "${_image_path}"
+    "${_size}"
+    "${_epoch}"
+    "${_label}")
+  _erofs+luks_opts=(
+    "${_name}"
+    "${_dir}"
+    "${_image_path}"
+    "${_auto_size}"
+    "${_encryption_key}"
+    "${_epoch}"
+    "${_label}"
+    "${_grub}")
+  _ext4+luks_opts=(
+    "${_name}"
+    "${_dir}"
+    "${_image_path}"
+    "${_size}"
+    "${_encryption_key}"
+    "${_epoch}"
+    "${_label}"
+    "${_grub}")
+  _ext4+squashfs_opts=(
+    "${_name}"
+    "${_dir}"
+    "${_image_path}"
+    "${_size}"
+    "${_epoch}"
+    "${_label}"
+    "${_writable}")
+  _squashfs+luks_opts=(
+    "${_name}"
+    "${_dir}"
+    "${_image_path}"
+    "${_size}"
+    "${_encryption_key}"
+    "${_epoch}"
+    "${_label}"
+    "${_writable}"
+    "${_grub}")
+  _swap+luks=(
+    "${_name}"
+    "${_image_path}"
+    "${_size}"
+    "${_encryption_key}"
+    "${_epoch}"
+    "${_label}"
+    "${_grub}")
+  _ext4+squashfs+luks_opts=(
+    "${_name}"
+    "${_dir}"
+    "${_image_path}"
+    "${_size}"
+    "${_encryption_key}"
+    "${_epoch}"
+    "${_writable}"
+    "${_grub}")
+  echo "$(_get_obj_var "${_fs_image}" \
+                       "opts")"
+}
+
+# Produces a file system image
+# $1: value in 'fs_images'
+_mkimg() {
+    local _image="${1}" \
+          _image_type \
+          _mkimg_opts=()
+    rm -f -- "${_image_path}"
+    _image_type="$(_get_obj_var "${_image_type}" \
+                                "image_type")")
+    _mkimg_opts=("$(_get_mkimg_opts "${_image_type}")")
+    "_mkimg_${_image_type}" "${_mkimg_opts[@]}"
+}
+
+##################################
+# Volumes functions
+###################################
+
+### Utility fuctions
+
+# Returns the outest file system type for
+# a given file system image, ignoring LUKS
+# $1: a value in the 'fs_images' array
+_get_fs_type() {
+    local _fs_image="${1}" _tmp
+    _tmp="$(_get_obj_var "${_fs_image}" \
+                         "image_type")"
+    _tmp="${_tmp%%+luks}"
+    echo "${_tmp##*"+"}"
+}
+
+# Returns the extension for a given file system image
+# $1: a value in 'fs_images' (airootfs, persistent, ...)
+_get_fs_ext() {
+    local _image="${1}"
+    local _fs_type
+    _fs_type=$(_get_fs_type "${_image}")
+    if [ "${_fs_type}" = "squashfs" ]; then
+        echo "sfs"
+    else
+        echo "${_fs_type}"
+    fi
+}
+
+# Produces path for a given file system image in work directory
+# $1: value in fs_images
+_get_fs_img() {
+    local _fs_image="${1}"
+    local _img_name
+    _img_name="$(echo "${_fs_image}" | \
+                   tr -d '_')"
+    echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
+}
+
+# Returns image filename/device mapper name for a given
+# file system image.
+# $1: a value in 'fs_images' array
+_get_fs_name() {
+    local _image="${1}"
+    echo "${_image}" | tr -d '_'
+}
+
+# Returns partition label for a physical partition
+# $1: value in fs_images
+_get_iso_partition_label() {
+    local _image="${1}" \
+          _label=("${iso_label}") \
+          _suffix
+    _suffix="$(echo "${_image}" | \
+                 tr '[:lower:]' '[:upper:]')"
+    [[ "${_suffix}" != "" ]] && \
+    [[ "${_suffix}" != "airootfs" ]] && \
+      _label+=("${_suffix}")
+    echo "$(IFS=, ; \
+            +echo "${_label[*]}")" 
+}
+
+# Sets correct file system guid given type
+_set_fs_guid() {
+    local _fs_image="${1}" \
+          _guid \
+          _image_type
+    _image_type="$(_get_obj_var "${_fs_image}" \
+                                "image_type")"
+    if [[ "${_image_type}" == *luks ]]; then
+        _guid="${luks_guid}"
+    elif [[ "${_image_type}" == *swap ]]; then
+        _guid="${swap_guid}"
+    elif [[ "${_image_type}" == *ext4 ]]; then
+        _guid="${linux_guid};"
+    fi
+    _set_obj_var "${_fs_image}" \
+                 "guid" \
+                 "${_guid}"
+}
+
+# Sets parameters for _mk<fs_image> functions
+# $1: value in fs_images
+_mkfs_common() {
+    local _fs_image="${1}"
+    _name="$(_get_fs_name "${_fs_image}")"
+    _dir="$(_get_obj_var "${_fs_image}" \
+                         "dir")"
+    _epoch="$(_get_epoch "${_fs_image}")"
+    _encryption_key="$(_get_obj_var "${_fs_image}" \
+                                    "encryption_key")"
+    _label="$(_get_iso_partition_label "${_fs_image}")"
+    _size="$(_get_obj_var "${_fs_image}" \
+                          "size")"
+    _image_path="$(_get_fs_img "${_fs_image}")"
+    _grub="false"
+    _writable="false"
+    _set_fs_guid "${_fs_image}"
+}
+
+### Main ISO volumes
+
+## Airootfs (the root file system image)
+
+# Returns workdir airootfs image path
+_get_airootfs_img(){
+    echo "$(_get_obj_var "airootfs" \
+                         "dir")/airootfs.$(_get_fs_ext "airootfs")"
+}
+
+# Produces airootfs image
+_mkairootfs() {
     _mkfs_common "airootfs"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     _dir="${pacstrap_dir}"
     _image_path="$(_get_airootfs_img)"
     _auto_size=""
-    rm -f -- "${_image_path}"
     [[ -e "${_dir}" ]] || \
       _msg_error "The path '${_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_dir}"
+    _mkimg "airootfs"
 }
 
-# Parameters for _mkkeys_fs_type functions
-_mkkeys_common() {
-    _mkfs_common "keys"
-    _mkfs_options=("${keys_image_tool_options[@]}")
-    _image_path="$(_get_keys_img)"
-    _auto_size=""
-    rm -f -- "${_image_path}"
-}
+## Persistent (the user data partition)
 
-# Parameters for _mkpersistent_fs_type functions
-_mkpersistent_common() {
+# Builds persistent partition image
+_mkpersistent() {
     _mkfs_common "persistent"
     _writable="true"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
@@ -1132,52 +1322,78 @@ _mkpersistent_common() {
     fi
     _auto_size=""
     persistent_epoch="${_epoch}"
-    rm -f -- "${_image_path}"
+    _mkimg "persistent"
 }
 
-# Parameters for _mkdongle_boot_fs_type functions
-_mkdongle_boot_common() {
-    _mkfs_common "dongle_boot"
-    _grub="true"
-    rm -f -- "${_image_path}"
-}
-
-# Parameters for _mkdongle_persistent_<fs_type> functions
-_mkdongle_persistent_common() {
-    _mkfs_common "dongle_persistent"
-    _writable="true"
-    rm -f -- "${_image_path}"
-}
+## Swap (on-disk virtual memory partition)
 
 # Parameters for _mkswap_<fs_type> functions
-_mkswap_common() {
+_mkswap() {
     _mkfs_common "swap"
     _writable="true"
     _auto_size=""
-    rm -f -- "${_image_path}"
+    _mkimg "swap"
 }
 
+### Dongle ISO volumes
+
+## Keys (the keys file system image)
+
+# Builds keys image
+_mkkeys() {
+    _mkfs_common "keys"
+    _mkfs_options=("${keys_image_tool_options[@]}")
+    _image_path="$(_get_keys_img)"
+    _auto_size=""
+    _mkimg "keys"
+}
+
+## Dongle boot (encrypted boot partition)
+
+# Builds dongle boot partition image
+_mkdongle_boot() {
+    _mkfs_common "dongle_boot"
+    _grub="true"
+    _mkimg "boot"
+}
+
+## Dongle persistent (user data partition)
+
+# Parameters for _mkdongle_persistent_<fs_type> functions
+_mkdongle_persistent() {
+    _mkfs_common "dongle_persistent"
+    _writable="true"
+    _mkimg "dongle_persistent"
+}
+
+## Dongle swap (on-disk virtual memory partition)
+
 # Parameters for _mkdongle_swap_<fs_type> functions
-_mkdongle_swap_common() {
+_mkdongle_swap() {
     _mkfs_common "dongle_swap"
     _writable="true"
     _auto_size=""
-    rm -f -- "${_image_path}"
+    _mkimg "dongle_swap"
 }
 
+## Recovery (airootfs but onto a partition to boot
+#            the dongle without the main ISO)
+
 # Parameters for _mkrecovery_<fs_type> functions
-_mkrecovery_common() {
+_mkrecovery() {
     _mkfs_common "recovery"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
     _dir="${pacstrap_dir}"
     _grub=true
     _auto_size=""
-    rm -f -- "${_image_path}"
     [[ -e "${_dir}" ]] || \
       _msg_error "The path '${_dir}' does not exist" 1
+    _mkimg "dongle_swap"
 }
 
-# Create checksum for a given file.
+### Image integrity checking functions
+
+# Returns a file SHA512 checksum
 _mkchecksum() {
     local _file
     local _dir
@@ -1194,7 +1410,7 @@ _mkchecksum() {
     cd -- "${OLDPWD}"
 }
 
-# GPG sign a file.
+# GPG signs a file
 _mksignature() {
     local _file="${1}"
     rm -f -- "${_file}.sig"
@@ -1226,118 +1442,191 @@ _mksignature() {
     _msg_info "Done!"
 }
 
-# Returns the extension for a given file system image
-# $1: a value in 'fs_images' (airootfs, persistent, ...)
-_get_fs_ext() {
-    local _image="${1}"
-    local _fs_type
-    _fs_type=$(_get_fs_type "${_image}")
-    if [ "${_fs_type}" = "squashfs" ]; then
-        echo "sfs"
+###################################
+# Airootfs making utilities functions
+###################################
+
+#### Pre-install
+
+### Encryption
+
+# Fill a templatized crypttab
+# $1: crypttab template
+# $2: out file
+_build_crypttab() {
+    local _template="${1}"
+    local _out="${2}"
+    if [[ "$(_get_obj_var "persistent" \
+                          "image_type")" == *"luks" ]]; then
+        sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
+            "${_template}" > "${_out}"
     else
-        echo "${_fs_type}"
+        sed '/%PERSISTENT_UUID%/d' \
+            "${_template}" > "${_out}"
+    fi
+    if [[ "$(_get_obj_var "dongle_persistent" \
+                          "image_type")" == *"luks" ]]; then
+        sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" \
+            "${_out}"
+    else
+        sed -i '/%DONGLE_PERSISTENT_UUID%/d' \
+            "${_out}"
+    fi
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        sed -i "s|%SECURE_MOUNT%|/run/archiso/donglepersistent|g" \
+            "${_out}"
+    else
+        sed -i "s|%SECURE_MOUNT%||g" \
+            "${_out}"
+    fi
+    if [[ "${swap_image_type}" == *"luks" ]]; then
+        sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" \
+            "${_out}"
+    else
+        sed -i '/%SWAP_UUID%/d' \
+            "${_out}"
+    fi
+    if [[ "${swap_size}" != "" ]] && \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        sed -i "s|%DONGLE_SWAP_UUID%|$(_get_dongle_swap_uuid)|g" \
+            "${_out}"
+    else
+        sed -i '/%DONGLE_SWAP_UUID%/d' "${_out}"
     fi
 }
 
-# Returns image filename/device mapper name for a given
+# Generates an encryption key when the "auto" value
+# has been specified for an <image>_encryption_key
+# variable in profiledef.sh
+# $1: output file path
+# $2: mode (binary/random plain)
+_gen_key() {
+    local _out="${1}"
+    local _mode="${2}"
+    if [ "${_mode}" == "binary" ]; then
+        dd if=/dev/random \
+           bs=512 \
+           count=1 \
+           of="${_out}" > /dev/null 2>&1
+    elif [ "${_mode}" == "plain" ]; then
+        printf "%s" \
+               "$(tr -dc A-Za-z0-9 </dev/urandom | \
+                    head -c 20 ; \
+                    echo '')" > "${_out}"
+    fi
+}
+
+# Parse encryption key variable value for a
 # file system image.
-# $1: a value in 'fs_images' array
-_get_fs_name() {
-    local _image="${1}"
-    echo "${_image}" | tr -d '_'
-}
-
-# Returns an attribute variable value for a 
-# given file system image
-# $1: a value in the 'fs_images' array
-# $2: a value in a 'fs_images_<type>_vars' array
-_get_fs_var() {
-    local _image="${1}" \
-          _var="${2}" \
-          _no_luks
-    _ref="${_image}_${_var}"
-    printf %s "${!_ref}"
-}
-
-# Sets file system image variables
-_set_fs_var() {
+# If the variable is set to "auto" it will
+# generate a key at a selected location
+# $1: a value in fs_images
+# $2: auto-generated output key path
+_resolve_fs_encryption_key(){
     local _fs_image="${1}" \
-          _var="${2}" \
-          _value="${3}"
-    printf -v "${_fs_image}_${_var}" \
-              "${_value}"
+          _auto_key="${2}"
+    local _encryption_key \
+          _msg=() \
+          _out_dir
+    _encryption_key="$(_get_obj_var "${fs_image}" \
+                                    "encryption_key")"
+    _outdir="$(dirname "${_auto_key}")"
+    [ ! -f "${_encryption_key}" ] && \
+      if [ "${_encryption_key}" = 'auto' ]; then
+          _set_obj_var "${_fs_image}" \
+                       "encryption_key" \
+                       "${_auto_key}"
+          [ ! -d "${_out_dir}" ] && \
+            install -d "${_out_dir}"
+          _gen_key "${_auto_key}" \
+                   "binary"
+      elif [ "${_encryption_key}" != 'auto' ]; then
+          _msg=("File '${_encryption_key}'"
+                "does not exist.")
+          _msg_error "${_msg[*]}" 0
+      fi
 }
 
-# Returns the outest file system type for
-# a given file system image, ignoring LUKS
-# $1: a value in the 'fs_images' array
-_get_fs_type() {
-    local _fs_image="${1}" _tmp
-    _tmp="$(_get_fs_var "${_fs_image}" \
-                        "image_type")"
-    _tmp="${_tmp%%+luks}"
-    echo "${_tmp##*"+"}"
+# Resolves the value of an image encryption key from an
+# <image>_encryption_key profiledef.sh variable
+# $1: a value in fs_images
+_resolve_secondary_encryption_key() {
+    local _name="${1}"
+    local _at_rest_image_type \
+          _auto_key="${work_dir}/${_name}.key" \
+          _encryption_key \
+          _image_type \
+          _install_dir \
+          _mode="binary"
+    _at_rest_image_type="$(_get_obj_var "airootfs" \
+                                        "image_type")"
+    _image_type="$(_get_obj_var "${_name}" \
+                                "image_type")"
+    _encryption_key="$(_get_obj_var "${_name}" \
+                                    "encryption_key")"
+    [[ "${_image_type}" == *"luks" ]] && \
+      if [[ "${_encryption_key}" == "auto" ]]; then
+          _msg_info "Random plaintext password for ${_name}"
+          if [[ "${_at_rest_image_type}" != *"luks" ]] && \
+             [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+              _install_dir="${dongle_persistent_dir}/etc/cryptsetup-keys.d"
+              _mode="plain"
+          fi
+      elif [[ "${_at_rest_image_type}" == *"luks" ]] && \
+           [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+          _install_dir="${pacstrap_dir}/etc/keys"
+          #_install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
+      elif [[ "${_at_rest_image_type}" != *"luks" ]] && \
+           [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+          _install_dir="${dongle_persistent_dir}/etc/keys"
+      elif [[ "${_at_rest_image_type}" != *"luks" ]] && \
+           [[ "${_name}" != "persistent" ]] && \
+           ( ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] ); then
+          _install_dir="${persistent_dir}/etc/cryptsetup-keys.d"
+      else
+          _msg=("Rootfs encryption and dongle buildmode disabled."
+                "You will be prompted to insert a password for"
+                "the ${_name} partition.")
+          _msg_warning "${_msg[*]}"
+          _set_obj_var "${_name}" \
+                       "encryption_key" \
+                       ""
+          return
+      fi
+      _set_obj_var "${_name}" \
+                    "encryption_key" \
+                    "${_auto_key}"
+      _gen_key "${_encryption_key}" \
+               "${_mode}"
+      install -d -m700 "${_install_dir}"
+      install -D -m400 "${_auto_key}" \
+                       "${_install_dir}"
 }
 
-# Returns path for a given file system image in work directory
-# $1: value in fs_images
-_get_fs_img() {
-    local _fs_image="${1}"
-    local _img_name
-    _img_name="$(echo "${_fs_image}" | \
-                   tr -d '_')"
-    echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
-}
+# Adds archiso hooks to profile's mkinitcpio.conf
+# $1: mkinitcpio.conf file to edit
+# $2: an encryption key to add to resulting initrd image
+_build_archiso_mkinitcpio_conf() {
+    local _mkinitcpio_conf="${1}"
+    local _encryption_key="${2}"
+    local _files=() _hooks=() _modules=()
+    local _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
+    
+    [[ "${airootfs_image_type}" == *luks ]] || \
+    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+      _hooks+=("encrypt") && \
+      [[ "${_encryption_key}" != "" ]] && \
+        _files+=("${_encryption_key}")
+    _hooks+=("archiso")
 
-# Returns partition label for a physical partition
-# $1: value in fs_images
-_get_iso_partition_label() {
-    local _image="${1}" \
-          _label=("${iso_label}") \
-          _suffix
-    _suffix="$(echo "${_image}" | \
-                 tr '[:lower:]' '[:upper:]')"
-    [[ "${_suffix}" != "" ]] && \
-    [[ "${_suffix}" != "airootfs" ]] && \
-      _label+=("${_suffix}")
-    echo "$(IFS=, ; \
-            +echo "${_label[*]}")" 
-}
+    [[ "${airootfs_image_type}" == *"ext4"* ]] && \
+      _modules+=("ext4")
 
-# Returns internal size for an internal partition 
-# from the outer image size
-# $1: outer partition size
-_get_internal_size() {
-    local _size="${1}" _ratio
-    local _s=50 _S=200 _l=1000 _L=5000
-    if [[ "${_size}" -lt $((_s * 1000)) ]]; then
-        _ratio=60
-    elif [[ "${_size}" -gt $((_s * 1000)) ]] && \
-         [[ "${_size}" -lt $((_S * 1000)) ]]; then
-        _ratio=70
-    elif [[ "${_size}" -gt $((_S * 1000)) ]] && \
-         [[ "${_size}" -lt $((_l * 1000)) ]]; then
-        _ratio=75
-    elif [[ "${_size}" -gt $((_l * 1000)) ]] && \
-         [[ "${_size}" -lt $((_L * 1000)) ]]; then
-        _ratio=80
-    else
-        _ratio=85
-    fi
-    echo $(((_size * _ratio)/100))
-}
-
-# Helper function to run functions only one time.
-# $1: function name
-_run_once() {
-    if [[ ! -e "${work_dir}/${run_once_mode}.${1}" ]]; then
-        "${1}"
-        touch "${work_dir}/${run_once_mode}.${1}"
-    else
-        if [ "${quiet}" != "y"  ]; then
-            _msg_info "Command ${1} already run"
-        fi
-    fi
+    cp "${_mkinitcpio_conf}" "${_mkinitcpio_conf_tmp}"
+    sed "s|%ARCHISO_FILES%|${_files[*]}|g;
+         s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
+         s|%ARCHISO_MODULES%|${_modules[*]}|g" \
+        "${_mkinitcpio_conf_tmp}" > "${_mkinitcpio_conf}"
 }
 
 # Sets up custom pacman.conf with custom cache and pacman hook directories.
@@ -1347,9 +1636,9 @@ _make_pacman_conf() {
           _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
           _profile_cache_dirs \
           _system_cache_dirs
-    _system_cache_dirs="$(pacman-conf CacheDir| \
+    _system_cache_dirs="$(pacman-conf CacheDir | \
                             tr '\n' ' ')"
-    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" CacheDir| \
+    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" CacheDir | \
                              tr '\n' ' ')"
 
     # Only use the profile's CacheDir, if it is not the
@@ -1374,6 +1663,145 @@ _make_pacman_conf() {
           "${work_dir}/${buildmode}.pacman.conf"
 }
 
+#### Install
+
+# Checks whether an image's file system path
+# is present in the profile directories
+# $1: file system path
+_is_file_in_work_paths() {
+    local _filename="${1}"
+    local _dir
+    local _dirs=("${profile}/airootfs"
+                 "${profile}/persistent")
+    _pass="false"
+    for _dir in "${_dirs[@]}"; do
+        if [ -e "${_dir}${_filename}" ]; then
+            _pass=""
+        fi
+    done
+}
+
+# Checks if an image's file system path can be applied permissions on
+# $1: filename path
+# $2: image name (airootfs, persistent)
+_validate_file_path() {
+    local _filename="${1}" \
+          _storage="${2}"
+    local _msg \
+          _on_storage="${_storage}${_filename}" \
+          pacstrap_dir="${work_dir}/${arch}/airootfs" \
+          persistent_dir="${work_dir}/persistent"
+    _validate_file_result="false"
+    _validate_file_err=""
+    _validate_file_warn=""
+    _is_file_in_work_paths "${_filename}"
+    if [[ "${_pass}" != "" ]]; then
+        _msg=("Cannot change permissions of '${_filename}'."
+              "The file or directory does not exist.")
+        _validate_file_err="${_msg[*]}"
+        return
+    fi
+    if [[ ! -e "${_on_storage}" ]]; then
+        _msg=("Cannot change permissions of '${_on_storage}'."
+              "The file or directory does not exist on this storage.")
+        _validate_file_warn="${_msg[*]}"
+    elif [[ "$(realpath -q -- "${_on_storage}")" != "${_storage}"* ]]; then
+        _msg=("Failed to set permissions on '${_on_storage}'."
+              "Outside of valid path.")
+        _validate_file_err="${_msg[*]}"
+    else
+        _validate_file_result=""
+    fi
+}
+
+# Apply file permissions on files 
+# copied to a directory, with paths relative
+# to that directory
+# $1: file path as on the host file
+#     system (ie. /etc/fstab)
+# $2: permissions string
+# $3: directory where files are being put into
+_apply_permissions() {
+    local _filename="${1}" \
+          _permissions="${2}" \
+          _dir="${3}" \
+          _chmod_opts=() \
+          _chown_opts=() \
+          _group \
+          _msg_type="warning" \
+          _opts=('-f')
+          _perm \
+          _recur=() \
+          _user \
+          permissions=()
+    _validate_file_err=""
+    _validate_file_warn=""
+    _validate_file_result=""
+    IFS=':' \
+      read -ra permissions <<< \
+        "${_permissions}"
+    _user="${permissions[0]}" \
+    _group="${permissions[1]}" \
+    _perm="${permissions[2]}"
+    _validate_file_path "${_filename}" "${_dir}"
+    if [[ "${_validate_file_result}" == "" ]]; then
+        _msg=("Setting ${_perm} permissions for"
+              "${_user}:${_group} on ${_filename}")
+        [[ "${_filename: -1}" == "/" ]] && \
+          _recur+=('-R') \
+          _msg+=("recursively")
+        [[ "${quiet}" != "y" ]] && \
+          _msg_info "${_msg[*]}"
+        _chown_opts=(
+          "${_opts[@]}"
+          '-h'
+          "${_recur[@]}")
+        _chmod_opts=(
+          "${_opts[@]}"
+          "${_recur[@]}")
+        chown "${_chown_opts[@]}" -- \
+              "${_user}:${_group}" \
+              "${_dir}${_filename}"
+        chmod "${_chmod_opts[@]}" -- \
+              "${_perm}" \
+              "${_dir}${_filename}"
+    else
+	    [ "${_validate_file_err}" != "" ] && \
+	      _msg_type="error" \
+	      _error_code=1
+        [[ "${_validate_file_err}" != "" ]] && \
+          "_msg_${_msg_type}" "${_validate_file_err}" \
+                              "${_error_code}"
+        [[ "${quiet}" != "y" ]] && \
+        [[ "${_validate_file_warn}" != "" ]] && \
+          "_msg_${_msg_type}" "${_validate_file_warn}"
+    fi
+}
+
+# Copies custom files onto an image, reading and 
+# applying permissions parsed from the `file_permissions'
+# array
+# $1: archiso profile-tracked file system
+#     image name (airootfs, persistent)
+# $2: work directory for that file system
+_copy_custom_files() {
+    local _fs_image="${1}"
+    local _fs_dir="${2}"
+    local _error_code _msg=()
+    local _cp_opts=(
+      -af
+      --no-preserve=ownership,mode)
+    _msg_info "Copying custom ${_fs_image} files..."
+    cp "${_cp_opts[@]}" -- \
+       "${profile}/${_fs_image}/." \
+       "${_fs_dir}"
+    for filename in "${!file_permissions[@]}"; do
+        _apply_permissions "${filename}" \
+                           "${file_permissions[${filename}]}" \
+                           "${_fs_dir}"
+    done
+}
+
 # Prepares working directory and copies custom root file system files.
 _make_custom_airootfs() {
     _validate_file_err="" _validate_file_warn=""
@@ -1392,8 +1820,10 @@ _make_custom_airootfs() {
             _resolve_secondary_encryption_key "keys"
             if [[ "${airootfs_image_type}" == *luks ]]; then
                 # shellcheck disable=SC2034
-                dongle_boot_encryption_key="$(_get_fs_var "keys" \
-                                                          "encryption_key")"
+                _set_var_obj "dongle_boot" \
+                             "_encryption_key" \
+                             "$(_get_obj_var "keys" \
+                                              "encryption_key")"
                 cp "${_etc}/mkinitcpio.conf" \
                    "${_etc}/mkinitcpio.dongle_boot.conf"
                 _build_archiso_mkinitcpio_conf \
@@ -1404,77 +1834,255 @@ _make_custom_airootfs() {
                    "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
                 _build_archiso_mkinitcpio_conf \
                     "${_etc}/mkinitcpio.recovery.conf" \
-                    "$(_get_fs_var "recovery" \
-                                   "encryption_key")"
+                    "$(_get_obj_var "recovery" \
+                                    "encryption_key")"
             fi
         fi
         _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" 
-        _copy_custom_files "airootfs" "${pacstrap_dir}"
+        _copy_custom_files "airootfs" \
+                           "${pacstrap_dir}"
     fi
 }
 
 # Install desired packages to the root file system
 _make_packages() {
+    local _opts=(
+      -C "${work_dir}/${buildmode}.pacman.conf"
+      -c
+      -G
+      -M)
     _msg_info "Installing packages to '${pacstrap_dir}/'..."
-
-    if [[ -n "${gpg_key}" ]]; then
-        exec {ARCHISO_GNUPG_FD}<>"${work_dir}/pubkey.gpg"
-        export ARCHISO_GNUPG_FD
-    fi
-
+    [[ -n "${gpg_key}" ]] && \
+      exec {ARCHISO_GNUPG_FD}<>"${work_dir}/pubkey.gpg" && \
+      export ARCHISO_GNUPG_FD
     # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
     if [[ "${quiet}" = "y" ]]; then
-        env -u TMPDIR pacstrap -C "${work_dir}/${buildmode}.pacman.conf" -c -G -M -- "${pacstrap_dir}" "${buildmode_pkg_list[@]}" > /dev/null 2>&1
+        env -u TMPDIR \
+          pacstrap "${_opts[@]}" -- \
+                   "${pacstrap_dir}" \
+                   "${buildmode_pkg_list[@]}" > /dev/null 2>&1
     else
-        env -u TMPDIR pacstrap -C "${work_dir}/${buildmode}.pacman.conf" -c -G -M -- "${pacstrap_dir}" "${buildmode_pkg_list[@]}"
+        env -u TMPDIR \
+          pacstrap "${_opts[@]}" -- \
+                    "${pacstrap_dir}" \
+                    "${buildmode_pkg_list[@]}"
     fi
-
-    if [[ -n "${gpg_key}" ]]; then
-        exec {ARCHISO_GNUPG_FD}<&-
-        unset ARCHISO_GNUPG_FD
-    fi
-
+    [[ -n "${gpg_key}" ]] && \
+      exec {ARCHISO_GNUPG_FD}<&- && \
+      unset ARCHISO_GNUPG_FD
     _msg_info "Done! Packages installed successfully."
+}
+
+_make_version() {
+    local _grubenv \
+          _install_dir="${isofs_dir}/${install_dir}" \
+          _msg \
+          _os_release \
+          _version_iso \
+    _grubenv="${_install_dir}/grubenv"
+    _version_iso="${install_dir}/version"
+    _msg_info "Creating version files..."
+    # Write version file to system installation dir
+    rm -f -- "${pacstrap_dir}/version"
+    printf '%s\n' \
+           "${iso_version}" > "${pacstrap_dir}/version"
+    [[ "${buildmode}" == @("iso"|"netboot") ]] && \
+      install -d \
+              -m 0755 -- \
+              "${_install_dir}" && \
+      # Write version file to ISO 9660
+      printf '%s\n' \
+             "${iso_version}" > "${_version_iso}" && \
+      # Write grubenv with version information to ISO 9660
+      printf '%.1024s' \
+             "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
+                       "${iso_name}" \
+                       "${iso_version}" \
+                       "$(printf '%0.1s' \
+                                 "#"{1..1024})")" > "${_grubenv}"
+    # Append IMAGE_ID & IMAGE_VERSION to os-release
+    _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
+    [[ ! -e "${pacstrap_dir}/etc/os-release" ]] && \
+    [[ -e "${pacstrap_dir}/usr/lib/os-release" ]] && \
+      _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
+    if [[ "${_os_release}" != "${pacstrap_dir}"* ]]; then
+        _msg="os-release file '${_os_release}' is outside of valid path."
+        _msg_warning "${_msg}"
+    else
+        [[ ! -e "${_os_release}" ]] || \
+          sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' \
+              "${_os_release}"
+        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' \
+               "${iso_name}" \
+               "${iso_version}" >> "${_os_release}"
+    fi
+    # Touch /usr/lib/clock-epoch to give another hint on date and time
+    # for systems with screwed or broken RTC.
+    touch -m \
+          -d"@${SOURCE_DATE_EPOCH}" -- \
+          "${pacstrap_dir}/usr/lib/clock-epoch"
+    _msg_info "Done!"
+}
+
+### Post-install
+
+# Sets up home directories for users from a 
+# passwd file in a root directory
+# $1: root file system path
+# $2: passwd file path
+_user_setup_passwd() {
+   local _chroot="${1}" \
+         _passwd_path="${2}" \
+         _gid \
+         _home \
+         _msg=() \
+         _passwd \
+         _path \
+         _uid \
+   _msg_info "Copying /etc/skel/* to user homes..."
+   while IFS=':' read -a _passwd -r; do
+       _uid="${_passwd[2]}"
+       _gid="${_passwd[3]}"
+       _home="${_passwd[5]}"
+       # Only operate on UIDs in range 1000–59999
+       (( _uid >= 1000 && _uid < 60000 )) || \
+         continue
+       # Skip invalid home directories
+       [[ "${_home}" == '/' ]] && \
+         continue
+       [[ -z "${_home}" ]] && \
+         continue
+       # Prevent path traversal outside of $pacstrap_dir
+       _path="$(realpath -q -- \
+                         "${_chroot}${_home}")"
+       if [[ "${_path}" == "${_chroot}"* ]]; then
+           [[ ! -d "${_chroot}${_home}" ]] && \
+             install -d \
+                     -m 0750 \
+                     -o "${_uid}" \
+                     -g "${_gid}" -- \
+                     "${_chroot}${_home}"
+           cp -dnRT \
+              --preserve=mode,timestamps,links -- \
+              "${_chroot}/etc/skel/." \
+              "${_chroot}${_home}"
+           chmod -f 0750 -- \
+                 "${_chroot}${_home}"
+           chown -hR -- \
+                 "${_uid}:${_gid}" \
+                 "${_chroot}${_home}"
+       else
+           _msg=("Failed to set permissions on"
+                 "'${_chroot}${_home}'."
+                 "Outside of valid path.")
+           _msg_error "${_msg[*]}" 1
+       fi
+   done < "${_passwd_path}"
+}
+
+# Runs a script in a chroot
+# $1: chroot path
+# $2: custom script path (relative to chroot)
+_run_chroot_script() {
+    local _chroot="${1}" \
+          _custom_script="${2}" \
+          _custom_script_path \
+          _deprecation_msg=(
+            "customize_airootfs.sh is deprecated!"
+            "Support for it will be removed in a"
+            "future archiso version.")
+    local _start_msg=(
+            "Running customize_airootfs.sh in"
+            "'${_chroot}' chroot...")
+    _custom_script_path="${_chroot}${_custom_script}"
+    _msg_info "${_start_msg[@]}"
+    _msg_warning "${_deprecation_msg[*]}"
+    chmod -f -- \
+          +x \
+          "${_custom_script_path}"
+    # Unset TMPDIR to work around 
+    # https://bugs.archlinux.org/task/70580
+    eval -- env -u TMPDIR \
+              arch-chroot "${_chroot}" \
+                          "${_custom_script}"
+    rm -- "${_custom_script_path}"
+    _msg_info "Done! ${_custom_script} run successfully."
 }
 
 # Customize installation.
 _make_customize_airootfs() {
-    local passwd=()
-
-    if [[ -e "${profile}/airootfs/etc/passwd" ]]; then
-        _msg_info "Copying /etc/skel/* to user homes..."
-        while IFS=':' read -a passwd -r; do
-            # Only operate on UIDs in range 1000–59999
-            (( passwd[2] >= 1000 && passwd[2] < 60000 )) || continue
-            # Skip invalid home directories
-            [[ "${passwd[5]}" == '/' ]] && continue
-            [[ -z "${passwd[5]}" ]] && continue
-            # Prevent path traversal outside of $pacstrap_dir
-            if [[ "$(realpath -q -- "${pacstrap_dir}${passwd[5]}")" == "${pacstrap_dir}"* ]]; then
-                if [[ ! -d "${pacstrap_dir}${passwd[5]}" ]]; then
-                    install -d -m 0750 -o "${passwd[2]}" -g "${passwd[3]}" -- "${pacstrap_dir}${passwd[5]}"
-                fi
-                cp -dnRT --preserve=mode,timestamps,links -- "${pacstrap_dir}/etc/skel/." "${pacstrap_dir}${passwd[5]}"
-                chmod -f 0750 -- "${pacstrap_dir}${passwd[5]}"
-                chown -hR -- "${passwd[2]}:${passwd[3]}" "${pacstrap_dir}${passwd[5]}"
-            else
-                _msg_error "Failed to set permissions on '${pacstrap_dir}${passwd[5]}'. Outside of valid path." 1
-            fi
-        done < "${profile}/airootfs/etc/passwd"
-        _msg_info "Done!"
-    fi
-
-    if [[ -e "${pacstrap_dir}/root/customize_airootfs.sh" ]]; then
-        _msg_info "Running customize_airootfs.sh in '${pacstrap_dir}' chroot..."
-        _msg_warning "customize_airootfs.sh is deprecated! Support for it will be removed in a future archiso version."
-        chmod -f -- +x "${pacstrap_dir}/root/customize_airootfs.sh"
-        # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
-        eval -- env -u TMPDIR arch-chroot "${pacstrap_dir}" "/root/customize_airootfs.sh"
-        rm -- "${pacstrap_dir}/root/customize_airootfs.sh"
-        _msg_info "Done! customize_airootfs.sh run successfully."
-    fi
+    local _chroot="${pacstrap_dir}" \
+          _custom_script="/root/customize_airootfs.sh" \
+          _passwd="${profile}/airootfs/etc/passwd"
+    [[ -e "${_passwd}" ]] &&
+      _user_setup_passwd "${_chroot}" \
+                         "${_passwd}"
+    [[ -e "${_custom_script_path}" ]] && \
+      _run_chroot_script "${_chroot}" \
+                         "${_custom_script}"
 }
 
+# Cleanup airootfs
+_cleanup_pacstrap_dir() {
+    local _images=("initramfs-*" "vmlinuz-*" "${ucodes[@]}")
+    local _root="${pacstrap_dir}"
+    local _boot="${_root}/boot"
+    local _log="${pacstrap_dir}/var/log"
+    local _machine_id="${pacstrap_dir}/etc/machine-id"
+    local _pacman_db="${_root}/var/lib/pacman"
+    local _pacman_cache="${_root}/var/cache/pacman/pkg"
+    local _tmp="${pacstrap_dir}/var/tmp"
+    local _cp_opts=('-af' '--no-preserve=ownership,mode')
+    _msg_info "Cleaning up in pacstrap location..."
+
+    # Move kernel, initramfs and microcodes for later usage
+    install -d -m 0755 "${work_dir}/boot" 
+    for _query in "${_images[@]}"; do
+        find "${_boot}" -iname "${_query}" \
+                        -exec cp "${_cp_opts[@]}" \
+                                 {} "${work_dir}/boot" \; -quit
+    done
+    [[ -d "${_boot}" ]] && \
+      find "${_boot}" -maxdepth 1 \
+                      -type f \
+                      -delete
+    # Delete pacman database sync cache files (*.tar.gz)
+    [[ -d "${_pacman_db}" ]] && \
+      find "${_pacman_db}" -maxdepth 1 \
+                           -type f \
+                           -delete
+    # Delete pacman database sync cache
+    [[ -d "${_pacman_db}/sync" ]] && \
+      find "${_pacman_db}/sync" -delete
+    # Delete pacman cache files
+    [[ -d "${_pacman_cache}" ]] && \
+      find "${_pacman_cache}" -type f -delete
+    # Delete all log files, keeps empty dirs.
+    [[ -d "${_log}" ]] && \
+      find "${_log}" -type f \
+                     -delete
+    # Delete all temporary files and dirs
+    [[ -d "${_tmp}" ]] && \
+      find "${_tmp}" -mindepth 1 \
+                     -delete
+    # Delete package pacman related files.
+    find "${work_dir}" \( -name '*.pacnew' \
+                          -o -name '*.pacsave' \
+                          -o -name '*.pacorig' \) \
+                       -delete
+    if [[ "${persistent_size}" != "" ]]; then
+        dbus-uuidgen --ensure="${_machine_id}"
+    else
+        # Create an empty /etc/machine-id
+        rm -f -- "${_machine_id}"
+        printf '' > "${_machine_id}"
+    fi
+    _msg_info "Done!"
+}
+
+###############################################
+### Bootmodes functions (bootloaders handling)
+###############################################
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
@@ -1494,89 +2102,68 @@ _make_bootmodes_dongle() {
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso9660() {
     isofs_dir="${work_dir}/iso"
-    _make_boot_on_iso "${isofs_dir}" "ISO 9660"
-    _make_boot_on_iso "${persistent_dir}" "ISO 9660"
+    _make_boot_on_iso "${isofs_dir}" \
+                      "ISO 9660"
+    _make_boot_on_iso "${persistent_dir}" \
+                      "ISO 9660"
 }
 
 # Copy kernel and initramfs to dongle ISO 9660
 _make_boot_on_dongle() {
-    _make_boot_on_iso "${work_dir}/dongle_iso" "dongle ISO 9660"
-    _make_boot_on_iso "${work_dir}/dongle_boot" "dongle boot"
-    _make_boot_on_iso "${work_dir}/dongle_persistent" "dongle persistent"
+    _make_boot_on_iso "${work_dir}/dongle_iso" \
+                      "dongle ISO 9660"
+    _make_boot_on_iso "${work_dir}/dongle_boot" \
+                      "dongle boot"
+    _make_boot_on_iso "${work_dir}/dongle_persistent" \
+                      "dongle persistent"
 }
 
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso() {
-    local bootable_dir="${1}"
-    local _fs_name="${2}"
-    local _query _src ucode_image
-    local _cp_opts=('-af' '--no-preserve=ownership,mode')
-    local boot_dir="${bootable_dir}/${install_dir}/boot"
-    local kernel_dir="${bootable_dir}/${install_dir}/boot/${arch}"
-    local licenses_src="${pacstrap_dir}/usr/share/licenses"
-    local licenses_dest="${boot_dir}/licenses"
-    local images=("initramfs-*" "vmlinuz-*")
-    _msg_info "Preparing kernel and initramfs for the ${_fs_name} file system in ${bootable_dir}..."
-    install -d -m 0755 -- "${kernel_dir}"
+    local bootable_dir="${1}" \
+          _fs_name="${2}"
+    local _cp_opts=(
+            '-af'
+            '--no-preserve=ownership,mode') \
+          _msg=(
+            "Preparing kernel and initramfs for the"
+            "${_fs_name} file system in ${bootable_dir}...") \
+          _query \
+          _src \
+          _ucode \
+          boot_dir="${bootable_dir}/${install_dir}/boot"
+    local kernel_dir="${boot_dir}/${arch}" \
+          licenses_src="${pacstrap_dir}/usr/share/licenses"
+    local licenses_dest="${boot_dir}/licenses" \
+          images=("initramfs-*" "vmlinuz-*") \
+    _msg_info "${_msg[*]}"
+    install -d \
+            -m 0755 -- \
+            "${kernel_dir}"
     for _query in  "${images[@]}"; do
-        find "${work_dir}" -iname "${_query}" -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \; -quit
-        find "${kernel_dir}" -iname "${_query}" -exec chmod 0644 {} \;
+        find "${work_dir}" \
+             -iname "${_query}" \
+             -exec cp "${_cp_opts[@]}" {} "${kernel_dir}" \; \
+             -quit
+        find "${kernel_dir}" \
+             -iname "${_query}" \
+             -exec chmod 0644 {} \;
     done
 
-    for ucode_image in "${ucodes[@]}"; do
-        find "${work_dir}" -iname "${ucode_image}" -exec cp "${_cp_opts[@]}" {} "${boot_dir}" \;
-        find "${boot_dir}" -iname "${_query}" -exec chmod 0644 {} \;
-        if [[ -e "${licenses_src}/${ucode_image%.*}/" ]]; then
-            install -d -m 0755 -- "${licenses_dest}/${ucode_image%.*}/"
-            install -m 0644 -- "${licenses_src}/${ucode_image%.*}/"* "${licenses_dest}/${ucode_image%.*}/"
-        fi
+    for _ucode in "${ucodes[@]}"; do
+        find "${work_dir}" \
+             -iname "${_ucode}" \
+             -exec cp "${_cp_opts[@]}" {} "${boot_dir}" \;
+        find "${boot_dir}" \
+             -iname "${_query}" \
+             -exec chmod 0644 {} \;
+        [[ -e "${licenses_src}/${_ucode%.*}/" ]] && \
+          install -d -m 0755 -- "${licenses_dest}/${_ucode%.*}/" && \
+          install -m 0644 -- \
+                  "${licenses_src}/${_ucode%.*}/"* \
+                  "${licenses_dest}/${_ucode%.*}/"
     done
     _msg_info "Done!"
-}
-
-# Adds archiso hooks to profile's mkinitcpio.conf
-# $1: mkinitcpio.conf file to edit
-# $2: an encryption key to add to resulting initrd image
-_build_archiso_mkinitcpio_conf() {
-    local _mkinitcpio_conf="${1}"
-    local _encryption_key="${2}"
-    local _files=() _hooks=() _modules=()
-    local _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
-    
-    if [[ "${airootfs_image_type}" == *luks ]] || \
-       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _hooks+=("encrypt") 
-        if [[ "${_encryption_key}" != "" ]]; then
-            _files+=("${_encryption_key}")
-        fi
-    fi
-    _hooks+=("archiso")
-
-    if [[ "${airootfs_image_type}" == *"ext4"* ]]; then
-        _modules+=("ext4")
-    fi
-
-    cp "${_mkinitcpio_conf}" "${_mkinitcpio_conf_tmp}"
-    sed "s|%ARCHISO_FILES%|${_files[*]}|g;
-         s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
-         s|%ARCHISO_MODULES%|${_modules[*]}|g" \
-        "${_mkinitcpio_conf_tmp}" > "${_mkinitcpio_conf}"
-}
-
-# Returns epoch given a file system image name 
-# $1: value in fs_images
-_get_epoch() {
-    local _name="${1}"
-    echo $((SOURCE_DATE_EPOCH + "${_name}_const"))
-}
-
-# Returns an unique uuid given a datetime in UNIX time
-# $1: UNIX time
-_get_epoch_fsuuid() {
-    local _epoch="${1}"
-    uuidgen --sha1 \
-	        --namespace "${epoch_namespace}" \
-            --name "${_epoch}"
 }
 
 # Returns UUID for the GRUB plain mount
@@ -1593,6 +2180,7 @@ _get_dongle_uuid() {
 
 # Returns UUID for the GRUB cryptomount (i.e. currently the encrypted boot partition)
 _get_cryptomount_uuid() {
+    local _epoch
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _epoch="$(_get_epoch dongle_boot)"
     else
@@ -1603,55 +2191,75 @@ _get_cryptomount_uuid() {
 
 # Returns dongle persistent partition uuid
 _get_dongle_persistent_uuid() {
+    local _epoch
     _epoch=$(_get_epoch dongle_persistent)
     _get_epoch_fsuuid "${_epoch}"
 }
 
 # Returns dongle swap partition uuid
 _get_dongle_swap_uuid() {
+    local _epoch
     _epoch="$(_get_epoch dongle_swap)"
     _get_epoch_fsuuid "${_epoch}"
 }
 
 # Returns UUID for the dongle swap mount
 _get_swap_uuid() {
-    if [[ "${buildmode}" == 'dongle' ]]; then
-        _epoch="$(_get_epoch dongle_swap)"
-    else
-        _epoch="$(_get_epoch swap)"
-    fi
+    local _epoch
+    _epoch="$(_get_epoch swap)"
+    [[ "${buildmode}" == 'dongle' ]] && \
+      _epoch="$(_get_epoch dongle_swap)"
     _get_epoch_fsuuid "${_epoch}"
 }
 
 
 # Produces kernel parameters.
 _get_kernel_params() {
-    local _kparams=()
-    _kparams+=("archisobasedir=${install_dir}"
-               "archisolabel=${iso_label}"
-               "archisouuid=$(_get_archiso_uuid)"
-               "$(_get_crypto_params)")
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _kparams+=("sigdevice=UUID=$(_get_dongle_uuid):iso9660:$(_get_airootfs_path).sig"
-                   "verify=y")
-    fi
+    local _kparams=() \
+          _sigdevice=()
+    _kparams+=(
+      "archisobasedir=${install_dir}"
+      "archisolabel=${iso_label}"
+      "archisouuid=$(_get_archiso_uuid)"
+      "$(_get_crypto_params)")
+    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+      _sigdevice=(
+        "UUID=$(_get_dongle_uuid)"
+        "iso9660"
+        "$(_get_airootfs_path).sig") && \
+      _kparams+=("sigdevice=$(IFS=: ; \
+                              echo "${_sigdevice[@]}")"
+                 "verify=y")
     echo "${_kparams[@]}"
 }
 
-# Produces the 'encrypt' hook's kernel parameters needed to boot an encrypted ISO.
+# Produces the 'encrypt' hook's kernel parameters
+# needed to boot an encrypted ISO.
 _get_crypto_params() {
-    declare -a _cparams
-    local _keys_fs_type _keys_path
+    local _cryptdevice=() \
+          _cryptkey=() \
+          _cparams=() \
+          _keys_fs_type \
+          _keys_path
     _keys_fs_type="$(_get_fs_type "keys")"
     _keys_path="keys.$(_get_fs_ext "keys")"
-    _cparams=()
-    if [[ "${airootfs_image_type}" == *luks ]]; then
-        _cparams+=("root=/dev/mapper/root"
-                   "cryptdevice=UUID=$(_get_archiso_uuid),$(_get_airootfs_path):root:readonly")
-        if [ "${airootfs_encryption_key}" != "" ]; then
-            _cparams+=("cryptkey=UUID=$(_get_dongle_uuid):iso9660,${_keys_fs_type}:${_keys_path},airootfs.key")
-        fi
-    fi
+    [[ "${airootfs_image_type}" == *luks ]] && \
+      _cryptdevice=(
+          "UUID=$(_get_archiso_uuid),$(_get_airootfs_path)"
+          "root"
+          "readonly") && \
+      _cparams+=(
+        "root=/dev/mapper/root"
+        "cryptdevice=$(IFS=: ; \
+                       echo "${_cryptdevice[@]}")") && \
+      [ "${airootfs_encryption_key}" != "" ] && \
+        _cryptkey=(
+          "UUID=$(_get_dongle_uuid)"
+          "iso9660,${_keys_fs_type}"
+          "${_keys_path},airootfs.key") && \
+        _cparams+=(
+          "cryptkey=$(IFS=: ; \
+                      echo "${_cryptkey[@]}")")
     echo "${_cparams[@]}"
 }
 
@@ -1930,41 +2538,6 @@ _build_bootloader_config() {
          s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" "${_template}"
 }
 
-# Fill a templatized crypttab
-# $1: crypttab template
-# $2: out file
-_build_crypttab() {
-    local _template="${1}"
-    local _out="${2}"
-    if [[ "$(_get_fs_var "persistent" \
-                         "image_type")" == *"luks" ]]; then
-        sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}" > "${_out}"
-    else
-        sed '/%PERSISTENT_UUID%/d' "${_template}" > "${_out}"
-    fi
-    if [[ "$(_get_fs_var "dongle_persistent" \
-                         "image_type")" == *"luks" ]]; then
-        sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_out}"
-    else
-        sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_out}"
-    fi
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        sed -i "s|%SECURE_MOUNT%|/run/archiso/donglepersistent|g" "${_out}"
-    else
-        sed -i "s|%SECURE_MOUNT%||g" "${_out}"
-    fi
-    if [[ "${swap_image_type}" == *"luks" ]]; then
-        sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" "${_out}"
-    else
-        sed -i '/%SWAP_UUID%/d' "${_out}"
-    fi
-    if [[ "${swap_size}" != "" ]] && [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        sed -i "s|%DONGLE_SWAP_UUID%|$(_get_dongle_swap_uuid)|g" "${_out}"
-    else
-        sed -i '/%DONGLE_SWAP_UUID%/d' "${_out}"
-    fi
-}
-
 # Fills templatized udev rules for the persistent partitions
 # $1: template udev rule file
 _fill_persistent_ro_udev_rules() {
@@ -2032,20 +2605,29 @@ _make_common_bootmode_grub_copy_to_isofs() {
 }
 
 # Minimum GRUB module list to open a luks2 image
-# Module list from https://bugs.archlinux.org/task/71382#comment202911
+# Module list from 
+# https://bugs.archlinux.org/task/71382#comment202911
 # $1: 'bios' or 'efi'
 _get_grubmodules(){
     local _mode="${1}"
-    _modules=(afsplitter boot bufio chain configfile cryptodisk disk echo ext2 gcry_rijndael
-              gcry_sha256 gcry_sha512 halt iso9660 linux loadenv loopback luks2 minicmd
-              normal part_apple part_gpt part_msdos password_pbkdf2 reboot search test
-              search_fs_uuid usb)
+    _modules=(
+      afsplitter boot bufio chain configfile
+      cryptodisk disk echo ext2 gcry_rijndael
+      gcry_sha256 gcry_sha512 halt iso9660 linux
+      loadenv loopback luks2 minicmd  normal 
+      part_apple part_gpt part_msdos password_pbkdf2
+      reboot search search_fs_uuid test usb)
     if [ "${_mode}" != "bios" ]; then
-        _modules+=(at_keyboard all_video btrfs cat echo diskfilter echo efifwsetup f2fs
-                   fat font gcry_crc gfxmenu gfxterm gzio hfsplus jpeg keylayouts ls
-                   lsefi lsefimmap lzopio ntfs png read regexp search_fs_file search_label
-                   serial sleep tpm trig usbserial_common usbserial_ftdi usbserial_pl2303
-                   usbserial_usbdebug video xfs zstd)
+        _modules+=(
+          at_keyboard all_video btrfs cat echo
+          diskfilter echo efifwsetup f2fs fat
+          font gcry_crc gfxmenu gfxterm gzio
+          hfsplus jpeg keylayouts ls lsefi
+          lsefimmap lzopio ntfs png read regexp
+          search_fs_file search_label serial sleep
+          tpm trig usbserial_common usbserial_ftdi
+          usbserial_pl2303 usbserial_usbdebug video
+          xfs zstd)
     elif [ "${_mode}" == "bios" ] ; then
         _modules+=(biosdisk)
     fi
@@ -2344,74 +2926,249 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito_dongle() {
     _make_bootmode_uefi-x64.systemd-boot.eltorito "${dongle_isofs_dir}" "dongle"
 }
 
+##################################
+# File system validate functions
+##################################
+
 # Checks for a missing program and suggests to install a package
 # $1: the command to check
 # $2: package to install if the command is missing
-_validate_buildmode_missing_cmd() {
-    local _cmd="${1}"
-    local _pkg="${2}"
-    local _msg=()
-    [[ "${_pkg}" == "" ]] && _pkg="${_cmd}"
-    if ! command -v "${_cmd}" &> /dev/null; then
+_check_missing_cmd() {
+    local _cmd="${1}" \
+          _pkg="${2}"
+          _msg=() \
+    _msg=("Validating build mode '${_buildmode}':"
+          "${_cmd} is not available on this host."
+          "Install '${_pkg}'!")
+    [[ "${_pkg}" == "" ]] && \
+      _pkg="${_cmd}"
+    ( ! command -v "${_cmd}" &> /dev/null ) && \
+      (( validation_error=validation_error+1 )) \
+      _msg_error "${_msg[*]}" 0
+}
+
+## File systems type support
+
+# EROFS
+_validate_requirements_image_type_erofs() {
+    _check_missing_cmd "mkfs.erofs" "erofs-utils"
+}
+
+# EXT4
+_validate_requirements_image_type_ext4() {
+    _check_missing_cmd "mkfs.ext4" "e2fsprogs"
+    _check_missing_cmd "tune2fs" "e2fsprogs"
+}
+
+# FAT
+_validate_requirements_image_type_fat() {
+    _check_missing_cmd "mkfs.fat" "dosfstools"
+    _check_missing_cmd "mmd" "mtools"
+}
+
+# LUKS
+_validate_requirements_image_type_luks() {
+    _check_missing_cmd "cryptsetup"
+}
+
+# SQUASHFS
+_validate_requirements_image_type_squashfs() {
+    _check_missing_cmd "mksquashfs" "squashfs-tools"
+}
+
+##################################################
+# Volumes file systems support validate functions
+##################################################
+
+### Airootfs
+
+## Base image types
+
+# EROFS airootfs
+_validate_requirements_airootfs_image_type_erofs() {
+    _validate_requirements_image_type_erofs
+}
+
+# EXT4 airootfs
+_validate_requirements_airootfs_image_type_ext4() {
+    _validate_requirements_image_type_ext4
+}
+
+# LUKS airootfs
+_validate_requirements_airootfs_image_type_luks() {
+    local _encryption_key \
+          _key_auto
+    _encryption_key="$(_get_obj_var "airootfs" \
+                                    "encryption_key")"
+    _key_auto="$(_get_obj_var "airootfs" \
+                              "encryption_key_auto")"
+    _validate_requirements_image_type_luks
+    [[ -n "${_encryption_key}" ]] && \
+      _resolve_fs_encryption_key "airootfs" \
+                                 "${_key_auto}"
+}
+
+# SQUASHFS airootfs
+_validate_requirements_airootfs_image_type_squashfs() {
+    _validate_requirements_image_type_squashfs
+}
+
+## 2-layered image types
+
+# EROFS over LUKS airootfs
+_validate_requirements_airootfs_image_type_erofs+luks() {
+    _validate_requirements_image_type_luks
+    _validate_requirements_image_type_erofs
+}
+
+# EXT4 over SQUASHFS airootfs
+_validate_requirements_airootfs_image_type_ext4+squashfs() {
+    _validate_requirements_image_type_ext4
+    _validate_requirements_image_type_squashfs
+}
+
+# SQUASHFS over LUKS airootfs
+_validate_requirements_airootfs_image_type_squashfs+luks() {
+    _validate_requirements_airootfs_image_type_luks
+    _validate_requirements_airootfs_image_type_squashfs
+}
+
+## 3-layered image types
+
+# EXT4 over SQUASHFS over LUKS airootfs
+_validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
+    _validate_requirements_airootfs_image_type_luks
+    _validate_requirements_image_type_squashfs
+    _validate_requirements_image_type_ext4
+}
+
+### Persistent
+
+## Base image types
+
+# EXT4 persistent
+_validate_requirements_persistent_image_type_ext4() {
+    local _msg=() \
+          _etc="${profile}/airootfs/etc"
+    local _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
+    local _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
+    _validate_requirements_image_type_ext4
+    if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _msg=("Persistent image not encrypted."
+              "Be sure not to put sensitive data"
+              "on it and write the resulting image"
+              "on a write-once device.")
+        _msg_warning "${_msg[*]}"
+    fi
+    if [ ! -e "${_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating build mode '${_buildmode}':"
-              "${_cmd} is not available on this host. Install '${_pkg}'!"
+        _msg=("Validating '${persistent_image_type}' "
+              "for persistent partition: udev rule not found!")
+        _msg_error "${_msg[*]}" 0
+    fi
+    if [ ! -e "${_dongle_ro_udev_rule}" ]; then
+        (( validation_error=validation_error+1 ))
+        _msg=("Validating '$(_get_obj_var "dongle_persistent" \
+                                          "image_type")' "
+              "for dongle persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
 }
 
-_validate_common_requirements_bootmode_grub(){
-    _validate_buildmode_missing_cmd "grub-mkstandalone" "grub"
+## 2-layered image types
 
+# EXT4 over LUKS persistent
+_validate_requirements_persistent_image_type_ext4+luks() {
+    local _crypttab="${profile}/airootfs/etc/crypttab" \
+          _msg=()
+    _validate_requirements_image_type_luks
+    _validate_requirements_persistent_image_type_ext4
+    [ ! -e "${_crypttab}" ] && \
+      (( validation_error=validation_error+1 )) \
+      _msg=("Validating '${persistent_image_type}'"
+            "for persistent partition: crypttab not found!") && \
+      _msg_error "${_msg[*]}" 0
+}
+
+#######################################
+# Bootmodes support validate functions
+#######################################
+
+## Common
+
+# GRUB common
+_validate_common_requirements_grub(){
+    local _no_cfg_msg=() \
+          _no_dir_msg=() \
+          _no_cfgs_msg=() \
+          _conf_file
+    _no_cfg_mgs=(
+      "Validating '${bootmode}':"
+      "File '${profile}/grub/grub.cfg' not found!")
+    _no_dir_msg=(
+      "Validating '${bootmode}':"
+      "The '${profile}/grub' directory is missing!")
+    _no_cfgs_msg=(
+      "Validating '${bootmode}':"
+      "No configuration file found in '${profile}/grub/'!"
+    _check_missing_cmd "grub-mkstandalone" "grub"
     # Check if GRUB configuration files exist
     if [[ ! -d "${profile}/grub" ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The '${profile}/grub' directory is missing!" 0
+        _msg_error "${_no_dir_msg[*]}" 0
     else
-        if [[ ! -e "${profile}/grub/grub.cfg" ]]; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': File '${profile}/grub/grub.cfg' not found!" 0
-        fi
-        local conffile
-        for conffile in "${profile}/grub/"*'.cfg'; do
-            if [[ -e "${conffile}" ]]; then
+        [[ ! -e "${profile}/grub/grub.cfg" ]] && \
+          (( validation_error=validation_error+1 ))
+          _msg_error "${_no_cfg_msg[*]}" 0
+        for _conf_file in "${profile}/grub/"*'.cfg'; do
+            if [[ -e "${_conf_file}" ]]; then
                 break
             else
                 (( validation_error=validation_error+1 ))
-                _msg_error "Validating '${bootmode}': No configuration file found in '${profile}/grub/'!" 0
+                _msg_error "${_no_cfgs_msg[*]}" 0
             fi
         done
     fi
 }
 
-_validate_common_requirements_bootmode_uefi(){
-    _validate_buildmode_missing_cmd "mkfs.fat" "dosfstools"
-    _validate_buildmode_missing_cmd "mmd" "mtools"
-}
+#### BIOS
 
+### GRUB
+
+# GRUB BIOS MBR
 _validate_requirements_bootmode_bios.grub.mbr() {
+    local _msg=()
     # bios.syslinux.mbr requires bios.grub.eltorito
     # actually I'm not sure this is true
-    _validate_common_requirements_bootmode_grub
+    _validate_common_requirements_grub
     # shellcheck disable=SC2076
     if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Using 'bios.grub.mbr' boot mode without 'bios.grub.eltorito' is not supported." 0
+        _msg=("Using 'bios.grub.mbr' boot mode without"
+              "'bios.grub.eltorito' is not supported.")
+        _msg_error "${_msg[*]}" 0
     fi
 
     # Check if the grub package is in the package list
     # shellcheck disable=SC2076
     if [[ ! " ${pkg_list[*]} " =~ ' grub ' ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The 'grub' package is missing from the package list!" 0
+        _msg=("Validating '${bootmode}':"
+              "The 'grub' package is missing"
+              "from the package list!")
+        _msg_error "${_msg[*]}" 0
     fi
 }
 
+# GRUB BIOS ELTORITO
 _validate_requirements_bootmode_bios.grub.eltorito() {
     # bios.grub.eltorito has the exact same requirements as bios.grub.mbr
     _validate_requirements_bootmode_bios.grub.mbr
 }
 
+### SYSLINUX
+
+# SYSLINUX BIOS MBR
 _validate_requirements_bootmode_bios.syslinux.mbr() {
     local _msg
     # bios.syslinux.mbr requires bios.syslinux.eltorito
@@ -2453,11 +3210,62 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
     fi
 }
 
+# SYSLINUX BIOS ELTORITO
 _validate_requirements_bootmode_bios.syslinux.eltorito() {
     # bios.syslinux.eltorito has the exact same requirements as bios.syslinux.mbr
     _validate_requirements_bootmode_bios.syslinux.mbr
 }
 
+#### UEFI
+
+_validate_common_requirements_bootmode_uefi(){
+    _validate_requirements_image_type_fat
+}
+
+### UEFI 64-bit
+
+# GRUB UEFI64 ESP
+_validate_requirements_bootmode_uefi-x64.grub.esp() {
+    local _conflict_msg=() \
+          _no_efi_shell_msg=()
+    _conflict_msg=(
+      "Validating '${bootmode}': cannot be used with bootmode"
+      "uefi-x64.systemd-boot.esp!")
+    _no_efi_shell_msg=(
+      "'edk2-shell' is not in the package list."
+      "The ISO will not contain a bootable UEFI shell.")
+    _validate_common_requirements_bootmode_uefi
+    _validate_common_requirements_grub
+    # shellcheck disable=SC2076
+    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
+        _msg_error "${_conflict_msg[*]}" 0
+    fi
+
+    # Check for optional packages
+    # shellcheck disable=SC2076
+    if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
+        _msg_info "${_no_efi_shell_msg[*]}'"
+    fi
+}
+
+# GRUB UEFI64 ELTORITO
+_validate_requirements_bootmode_uefi-x64.grub.eltorito() {
+    local _msg=()
+    _msg=(
+      "Validating '${bootmode}': cannot be used with bootmode"
+      "uefi-x64.systemd-boot.eltorito!")
+    # shellcheck disable=SC2076
+    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]]; then
+        _msg_error "${_msg[*]}" 0
+    fi
+    # uefi-x64.grub.eltorito has the exact same requirements
+    # as uefi-x64.grub.esp
+    _validate_requirements_bootmode_uefi-x64.grub.esp
+}
+
+## SYSTEMD-BOOT
+
+## SYSTEMD-BOOT UEFI64 ESP
 _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
@@ -2493,112 +3301,48 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
     fi
 }
 
+# SYSTEMD-BOOT UEFI64 ELTORITO
 _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
+    local _bootmode="uefi-x64.grub.eltorito"  \
+          _msg=()
+    _msg=("Validating '${bootmode}':"
+          "cannot be used with bootmode"
+          "${_bootmode}!")
     # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.eltorito ' ]]; then
-        _msg_error "Validating '${bootmode}': cannot be used with bootmode uefi-x64.grub.eltorito!" 0
+    if [[ " ${bootmodes[*]} " =~ " ${_bootmode} " ]]; then
+        _msg_error "${_msg[*]}" 0
     fi
 
-    # uefi-x64.systemd-boot.eltorito has the exact same requirements as uefi-x64.systemd-boot.esp
+    # uefi-x64.systemd-boot.eltorito has the exact
+    # same requirements as uefi-x64.systemd-boot.esp
     _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
 }
 
+### UEFI 32-bit 
+
+# GRUB UEFI32 ESP
 _validate_requirements_bootmode_uefi-ia32.grub.esp() {
-    _validate_common_requirements_bootmode_grub
+    local _msg=()
+    _msg=("Validating '${bootmode}': requires one of bootmode"
+          "uefi-x64.systemd-boot.esp or uefi-x64.grub.esp")
+    _validate_common_requirements_grub
     # shellcheck disable=SC2076
     if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
         _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
     elif [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
         _validate_requirements_bootmode_uefi-x64.grub.esp
     else
-        _msg_error "Validating '${bootmode}': requires one of bootmode uefi-x64.systemd-boot.esp or uefi-x64.grub.esp" 0
+        # Please someone remembers me why 32-bit grub needs
+        # a 64-bit bootmode enabled
+        _msg_error "${_msg[*]}" 0
     fi
 }
 
+# GRUB UEFI32 ELTORITO
 _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
-    # uefi-ia32.grub.eltorito has the exact same requirements as uefi-ia32.grub.esp
+    # uefi-ia32.grub.eltorito has the exact 
+    # same requirements as uefi-ia32.grub.esp
     _validate_requirements_bootmode_uefi-ia32.grub.esp
-}
-
-_validate_requirements_bootmode_uefi-x64.grub.esp() {
-    _validate_common_requirements_bootmode_uefi
-    _validate_common_requirements_bootmode_grub
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
-        _msg_error "Validating '${bootmode}': cannot be used with bootmode uefi-x64.systemd-boot.esp!" 0
-    fi
-
-    # Check for optional packages
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
-        _msg_info "'edk2-shell' is not in the package list. The ISO will not contain a bootable UEFI shell."
-    fi
-}
-
-_validate_requirements_bootmode_uefi-x64.grub.eltorito() {
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]]; then
-        _msg_error "Validating '${bootmode}': cannot be used with bootmode uefi-x64.systemd-boot.eltorito!" 0
-    fi
-    # uefi-x64.grub.eltorito has the exact same requirements as uefi-x64.grub.esp
-    _validate_requirements_bootmode_uefi-x64.grub.esp
-}
-
-# Resolves the value of an image encryption key from an <image>_encryption_key
-# profiledef.sh variable
-# $1: a value in fs_images
-_resolve_secondary_encryption_key() {
-    local _name="${1}"
-    local _encryption_key _image_type
-    _image_type=$(eval echo \$"{${_name}_image_type}")
-    _encryption_key=$(eval echo \$"{${_name}_encryption_key}")
-    if [[ "${_image_type}" == *"luks" ]]; then
-        if [[ "${_encryption_key}" == "auto" ]]; then
-            _msg_info "Random plaintext password for ${_name}"
-            if [[ "${airootfs_image_type}" != *"luks" ]] && \
-               [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-                _encryption_key="${work_dir}/${_name}.key"
-                _install_dir="${dongle_persistent_dir}/etc/cryptsetup-keys.d"
-                eval "${_name}_encryption_key=\"${_encryption_key}\""
-                _gen_key "${_encryption_key}" "plain"
-                install -d -m700 "${_install_dir}"
-                install -D -m400 "${_encryption_key}" "${_install_dir}"
-            fi
-        elif [[ "${airootfs_image_type}" == *"luks" ]] && \
-             [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            _encryption_key="${work_dir}/${_name}.key"
-            _install_dir="${pacstrap_dir}/etc/keys"
-            #_install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
-            eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}" "binary"
-            install -d -m700 "${_install_dir}"
-            install -D -m400 "${_encryption_key}" "${_install_dir}"
-        elif [[ "${airootfs_image_type}" != *"luks" ]] && \
-             [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            _encryption_key="${work_dir}/${_name}.key"
-            _install_dir="${dongle_persistent_dir}/etc/keys"
-            # _install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
-            eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}" "binary"
-            install -d -m700 "${_install_dir}"
-            install -D -m400 "${_encryption_key}" "${_install_dir}"
-        elif [[ "${airootfs_image_type}" != *"luks" ]] && \
-             [[ "${_name}" != "persistent" ]] && \
-             ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            _encryption_key="${work_dir}/${_name}.key"
-            _install_dir="${persistent_dir}/etc/cryptsetup-keys.d"
-            eval "${_name}_encryption_key=\"${_encryption_key}\""
-            _gen_key "${_encryption_key}" "binary"
-            install -d -m700 "${_install_dir}"
-            install -D -m400 "${_encryption_key}" "${_install_dir}"
-        else
-            _msg=("Rootfs encryption and dongle buildmode disabled."
-                  "You will be prompted to insert a password for"
-                  "the ${_name} partition.")
-            _msg_warning "${_msg[*]}"
-            eval "${_name}_encryption_key="
-        fi
-    fi
 }
 
 # Returns install path of airootfs image
@@ -2607,38 +3351,28 @@ _get_airootfs_path(){
 }
 
 # Returns workdir airootfs image path
-_get_airootfs_img(){
-    echo "$(_get_fs_var "airootfs" \
-                         "dir")/airootfs.$(_get_fs_ext "airootfs")"
-}
-
-# Returns workdir airootfs image path
 _get_keys_img(){
-    echo "$(_get_fs_var "dongle_isofs" \
+    echo "$(_get_obj_var "dongle_isofs" \
                          "dir")/${_name}.$(_get_fs_ext "keys")"
 }
 
 # Builds airootfs filesystem image
 _prepare_airootfs_image() {
     local _sig_dir _pacstrap_size
-
     _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
     airootfs_size=$((_pacstrap_size+200000))
-
-    _run_once "_mkairootfs_common"
-    _run_once "_mkairootfs_${airootfs_image_type}"
+    _run_once "_mkairootfs"
     _mkchecksum "$(_get_airootfs_img)"
-    if [[ -n "${gpg_key}" ]]; then
-        _mksignature "$(_get_airootfs_img)"
-        if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            dongle_isofs_dir="${work_dir}/dongle_iso"
-            dongle_persistent_dir="${work_dir}/dongle_persistent"
-            dongle_boot_dir="${work_dir}/dongle_boot"
-            _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}"
-            install -d -m711 "${_sig_dir}"
-            cp "$(_get_airootfs_img).sig" "${_sig_dir}"
-        fi
-    fi
+    [[ -n "${gpg_key}" ]] && \
+      _mksignature "$(_get_airootfs_img)" && \
+      [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+        dongle_isofs_dir="${work_dir}/dongle_iso" \
+        dongle_persistent_dir="${work_dir}/dongle_persistent" \
+        dongle_boot_dir="${work_dir}/dongle_boot" && \
+        _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}" &&
+        install -d -m711 "${_sig_dir}" &&
+        cp "$(_get_airootfs_img).sig" \
+           "${_sig_dir}"
 }
 
 # Builds keys filesystem image
@@ -2657,8 +3391,7 @@ _prepare_swap_image() {
     if [ "${swap_size}" != "" ] || \
        [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "swap"
-        _run_once "_mkswap_common"
-        _run_once "_mkswap_${swap_image_type}"
+        _run_once "_mkswap"
     fi
 }
 
@@ -2670,8 +3403,7 @@ _prepare_dongle_swap_image() {
         if [[ "${dongle_swap_size}" == "" ]]; then
             dongle_swap_size="${swap_size}"
         fi
-        _run_once "_mkdongle_swap_common"
-        _run_once "_mkdongle_swap_${swap_image_type}"
+        _run_once "_mkdongle_swap"
     fi
 }
 
@@ -2686,123 +3418,8 @@ _prepare_recovery_image() {
             airootfs_size=$((_pacstrap_size+200000))
             recovery_size="${airootfs_size}"
         fi
-        _run_once "_mkrecovery_common"
-        _run_once "_mkrecovery_$(_get_fs_var "recovery" \
-                                             "image_type")"
+        _run_once "_mkrecovery"
     fi
-}
-
-# Checks whether an image's file system path
-# is present in the profile directories
-# $1: file system path
-_is_file_in_work_paths() {
-    local _filename="${1}"
-    local _dir
-    local _dirs=("${profile}/airootfs"
-                 "${profile}/persistent")
-    _pass="false"
-    for _dir in "${_dirs[@]}"; do
-        if [ -e "${_dir}${_filename}" ]; then
-            _pass=""
-        fi
-    done
-}
-
-# Checks if an image's file system path can be applied permissions on
-# $1: filename path
-# $2: image name (airootfs, persistent)
-_validate_file() {
-    local _filename="${1}" \
-          _storage="${2}"
-    local _msg \
-          _on_storage="${_storage}${_filename}" \
-          pacstrap_dir="${work_dir}/${arch}/airootfs" \
-          persistent_dir="${work_dir}/persistent"
-    _validate_file_result="false"
-    _validate_file_err=""
-    _validate_file_warn=""
-    _is_file_in_work_paths "${_filename}"
-    if [[ "${_pass}" != "" ]]; then
-        _msg=("Cannot change permissions of '${_filename}'."
-              "The file or directory does not exist.")
-        _validate_file_err="${_msg[*]}"
-        return
-    fi
-    if [[ ! -e "${_on_storage}" ]]; then
-        _msg=("Cannot change permissions of '${_on_storage}'."
-              "The file or directory does not exist on this storage.")
-        _validate_file_warn="${_msg[*]}"
-    elif [[ "$(realpath -q -- "${_on_storage}")" != "${_storage}"* ]]; then
-        _msg=("Failed to set permissions on '${_on_storage}'."
-              "Outside of valid path.")
-        _validate_file_err="${_msg[*]}"
-    else
-        _validate_file_result=""
-    fi
-}
-
-# Copies custom files onto an image, reading and 
-# applying permissions from a file
-# $1: destination image name (airootfs, persistent)
-# $2: output directory
-_copy_custom_files() {
-    local _dest="${1}"
-    local _out_dir="${2}"
-    local _error_code _msg=()
-    local _opts=('-f') _chmod_opts=() _recur=()
-    _msg_info "Copying custom ${_dest} files..."
-    cp -af \
-       --no-preserve=ownership,mode -- \
-       "${profile}/${_dest}/." \
-       "${_out_dir}"
-    for filename in "${!file_permissions[@]}"; do
-        IFS=':' \
-          read -ra permissions <<< \
-            "${file_permissions["${filename}"]}"
-        _user="${permissions[0]}"
-        _group="${permissions[1]}"
-        _perm="${permissions[2]}"
-        _recur=()
-        _validate_file_err=""
-        _validate_file_warn=""
-        _validate_file_result=""
-        _validate_file "${filename}" "${_out_dir}"
-        if [[ "${_validate_file_result}" == "" ]]; then
-            _msg=("Setting" "${_perm} permissions for"
-                  "${_user}:${_group} on ${filename}")
-            if [[ "${filename: -1}" == "/" ]]; then
-                _recur+=('-R')
-                _msg+=("recursively")
-            fi
-            [[ "${quiet}" != "y" ]] && \
-              _msg_info "${_msg[*]}"
-            _chown_opts=(
-              "${_opts[@]}"
-              '-h'
-              "${_recur[@]}")
-            _chmod_opts=(
-              "${_opts[@]}"
-              "${_recur[@]}")
-            chown "${_chown_opts[@]}" -- \
-                  "${_user}:${_group}" \
-                  "${_out_dir}${filename}"
-            chmod "${_chmod_opts[@]}" -- \
-                  "${_perm}" \
-                  "${_out_dir}${filename}"
-        else
-             _msg_type="warning"
-	         if [ "${_validate_file_err}" != "" ]; then
-	             _msg_type="error"
-	             _error_code=1
-	         fi
-             [[ "${_validate_file_err}" != "" ]] && \
-               "_msg_${_msg_type}" "${_validate_file_err}" \
-                                   "${_error_code}"
-             [[ "${quiet}" != "y" ]] && \
-             [[ "${_validate_file_warn}" != "" ]] && \
-               "_msg_${_msg_type}" "${_validate_file_warn}"
-        fi
-    done
 }
 
 # Build persistent filesystem image
@@ -2829,22 +3446,19 @@ _prepare_persistent_image() {
                             persistent_dir_size : persistent_size ))
         _msg_info "Done!"
     fi
-    _build_crypttab "${crypttab}" "${pacstrap_dir}/etc/crypttab"
+    _build_crypttab "${crypttab}" \
+                    "${pacstrap_dir}/etc/crypttab"
     _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
     _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
     if [ "${persistent_size}" != "" ] || \
        [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _resolve_secondary_encryption_key "persistent"
         _run_once _make_boot_on_dongle
-        _run_once "_mkpersistent_common"
-        _run_once "_mkpersistent_${persistent_image_type}"
+        _run_once "_mkpersistent"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
             [ "${dongle_persistent_size}" = "" ] && \
                 dongle_persistent_size="${persistent_size}"
-            _run_once "_mkdongle_persistent_common"
-            _img_type="$(_get_fs_var "dongle_persistent" \
-                                     "image_type")"
-            _run_once "_mkdongle_persistent_${_img_type}"
+            _run_once "_mkdongle_persistent"
         fi
     fi
 }
@@ -2852,9 +3466,7 @@ _prepare_persistent_image() {
 _prepare_dongle_boot_image() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         dongle_boot_size=169042 # 169.042 MB
-        _run_once "_mkdongle_boot_common"
-        _run_once "_mkdongle_boot_$(_get_fs_var "dongle_boot" \
-                                                "image_type")"
+        _run_once "_mkdongle_boot"
     fi
 }
 
@@ -2894,26 +3506,12 @@ _sign_netboot_artifacts() {
     _msg_info "Done!"
 }
 
-_validate_requirements_airootfs_image_type_squashfs() {
-    _validate_buildmode_missing_cmd "mksquashfs" "squashfs-tools"
-}
-
-_validate_requirements_airootfs_image_type_ext4() {
-    _validate_buildmode_missing_cmd "mkfs.ext4" "e2fsprogs"
-    _validate_buildmode_missing_cmd "tune2fs" "e2fsprogs"
-}
-
-_validate_requirements_airootfs_image_type_ext4+squashfs() {
-    _validate_requirements_airootfs_image_type_ext4
-    _validate_requirements_airootfs_image_type_squashfs
-}
-
 _validate_requirements_persistent_image_type_ext4() {
-    local _msg \
+    local _msg=() \
           _etc="${profile}/airootfs/etc"
-    local  persistent_ro_udev_rule="${_etc}/udev/rules.d/98_persistent.rules"
-    local dongle_persistent_ro_udev_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
-    _validate_requirements_airootfs_image_type_ext4
+    local _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
+    local _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
+    _validate_requirements_image_type_ext4
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data"
@@ -2921,121 +3519,43 @@ _validate_requirements_persistent_image_type_ext4() {
               "on a write-once device.")
         _msg_warning "${_msg[*]}"
     fi
-     if [ ! -e "${persistent_ro_udev_rule}" ]; then
+    if [ ! -e "${_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
         _msg=("Validating '${persistent_image_type}' "
               "for persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
-    if [ ! -e "${dongle_persistent_ro_udev_rule}" ]; then
+    if [ ! -e "${_dongle_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '$(_get_fs_var "dongle_persistent" \
-                                         "image_type")' "
+        _msg=("Validating '$(_get_obj_var "dongle_persistent" \
+                                          "image_type")' "
               "for dongle persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
 }
 
 _validate_requirements_persistent_image_type_ext4+luks() {
-    local _msg=()
-    _validate_requirements_airootfs_image_type_luks
+    local _crypttab="${profile}/airootfs/etc/crypttab" \
+          _msg=()
+    _validate_requirements_image_type_luks
     _validate_requirements_persistent_image_type_ext4
-    if [ ! -e "${profile}/airootfs/etc/crypttab" ]; then
-        (( validation_error=validation_error+1 ))
-        _msg=("Validating '${persistent_image_type}'"
-              "for persistent partition: crypttab not found!")
-        _msg_error "${_msg[*]}" 0
-    fi
+    [ ! -e "${_crypttab}" ] && \
+      (( validation_error=validation_error+1 )) \
+      _msg=("Validating '${persistent_image_type}'"
+            "for persistent partition: crypttab not found!") && \
+      _msg_error "${_msg[*]}" 0
 }
 
-# Generates an encryption key when the "auto" value
-# has been specified for an <image>_encryption_key
-# variable in profiledef.sh
-# $1: output file path
-# $2: mode (binary/random plain)
-_gen_key() {
-    local _out="${1}"
-    local _mode="${2}"
-    if [ "${_mode}" == "binary" ]; then
-        dd if=/dev/random \
-           bs=512 \
-           count=1 \
-           of="${_out}" > /dev/null 2>&1
-    elif [ "${_mode}" == "plain" ]; then
-        printf "%s" \
-               "$(tr -dc A-Za-z0-9 </dev/urandom | \
-                    head -c 20 ; \
-                    echo '')" > "${_out}"
-    fi
-}
-
-# Parse encryption key variable value for a
-# file system image.
-# If the variable is set to "auto" it will
-# generate a key at a selected location
-# $1: a value in fs_images
-# $2: auto-generated output key path
-_resolve_fs_encryption_key(){
-    local _fs_image="${1}" \
-          _auto_key_path="${2}"
-    local _encryption_key \
-          _msg=() \
-          _out_dir
-    _encryption_key="$(_get_fs_var "${fs_image}" \
-                                   "encryption_key")"
-    _outdir="$(dirname "${_auto_key_path}")"
-    [ ! -f "${_encryption_key}" ] && \
-      if [ "${_encryption_key}" = 'auto' ]; then
-          _set_fs_var "${_fs_image}" \
-                      "encryption_key" \
-                      "${_auto_key_path}"
-          [ ! -d "${_out_dir}" ] && \
-            install -d "${_out_dir}"
-          _gen_key "${_auto_key_path}" \
-                   "binary"
-      elif [ "${_encryption_key}" != 'auto' ]; then
-          _msg=("File '${_encryption_key}'"
-                "does not exist.")
-          _msg_error "${_msg[*]}" 0
-      fi
-}
-
-_validate_requirements_airootfs_image_type_squashfs+luks() {
-    _validate_requirements_airootfs_image_type_luks
-    _validate_requirements_airootfs_image_type_squashfs
-}
-
-_validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
-    _validate_requirements_airootfs_image_type_luks
-    _validate_requirements_airootfs_image_type_squashfs
-    _validate_requirements_airootfs_image_type_ext4
-}
-
-_validate_requirements_airootfs_image_type_erofs() {
-    _validate_buildmode_missing_cmd "mkfs.erofs" "erofs-utils"
-}
-
-_validate_requirements_airootfs_image_type_luks() {
-    _validate_buildmode_missing_cmd "cryptsetup"
-    [[ -n "$(_get_fs_var "airootfs" \
-                         "encryption_key")" ]] && \
-      _resolve_fs_encryption_key "airootfs" \
-                                 "${airootfs_encryption_key_auto}"
-}
-
-_validate_requirements_airootfs_image_type_erofs+luks() {
-    _validate_requirements_airootfs_image_type_luks
-    _validate_requirements_airootfs_image_type_erofs
-}
+### Buildmodes
 
 _validate_common_requirements_buildmode_all() {
     local _msg=()
-    _validate_buildmode_missing_cmd "pacman"
-    _validate_buildmode_missing_cmd "find" "findutils"
-    _validate_buildmode_missing_cmd "gzip"
+    _check_missing_cmd "pacman"
+    _check_missing_cmd "find" "findutils"
+    _check_missing_cmd "gzip"
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       [[ "$(_get_fs_var "persistent" \
-                         "image_type")" != *"luks" ]]; then
+       [[ "$(_get_obj_var "persistent" \
+                          "image_type")" != *"luks" ]]; then
         _msg=("Validating build mode '${_buildmode}':"
               "'dongle' build mode not selected;"
               "persistent partition encryption disabled."
@@ -3067,7 +3587,7 @@ _validate_requirements_buildmode_bootstrap() {
     fi
 
     _validate_common_requirements_buildmode_all
-    _validate_buildmode_missing_cmd "bsdtar" "libarchive"
+    _check_missing_cmd "bsdtar" "libarchive"
 }
 
 # Check whether the specified file system type
@@ -3105,14 +3625,14 @@ _validate_requirements_fs_image_type() {
     local _error_msg \
           _image_type
           _validate_fun_error_msg=()
-    _image_type="$(_get_fs_var "${_fs_image}" \
-                               "image_type")"
+    _image_type="$(_get_obj_var "${_fs_image}" \
+                                "image_type")"
     _error_msg="Unsupported image type: '${_image_type}'"
     _validate_fun_error_msg=(
       "Validating the requirements"
       "of '${_image_type}' for ${_fs_image}"
       "image type will not be possible.")
-    _validate_requirements "_mk${_fs_image}_${_image_type}" \
+    _validate_requirements "_mkimg_${_image_type}" \
                            "${_fs_image}_image_type" \
                            "${_image_type}" \
                            "${_error_msg}" \
@@ -3143,7 +3663,7 @@ _validate_common_requirements_buildmode_iso_netboot() {
 
 _validate_requirements_buildmode_dongle() {
     _validate_common_requirements_buildmode_all
-    _validate_requirements_airootfs_image_type_luks() {
+    _validate_requirements_image_type_luks
     [[ ! "${airootfs_image_type}" == *luks ]] && \
       _msg=("Dongle buildmode active but root file system "
             "encryption disabled.") && \
@@ -3175,7 +3695,7 @@ _validate_requirements_buildmode_iso() {
                                "${_validate_fun_error_msg[*]}"
     done
 
-    _validate_buildmode_missing_cmd "awk"
+    _check_missing_cmd "awk"
 
     # Check if the profile supports
     # the specified persistent_image_type
@@ -3207,7 +3727,7 @@ _validate_requirements_buildmode_netboot() {
     fi
     _validate_common_requirements_buildmode_iso_netboot
     _validate_common_requirements_buildmode_all
-    _validate_buildmode_missing_cmd "openssl"
+    _check_missing_cmd "openssl"
 }
 
 # Add boot partition options to a xorrisofs options array
@@ -3865,11 +4385,11 @@ _build_iso_image() {
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 
-    if [[ "$(_get_fs_var "airootfs" \
-                         "image_type")" == *"luks"* ]] && \
+    if [[ "$(_get_obj_var "airootfs" \
+                          "image_type")" == *"luks"* ]] && \
        [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        cp "$(_get_fs_var "airootfs" \
-                          "encryption_key")" \
+        cp "$(_get_obj_var "airootfs" \
+                           "encryption_key")" \
            "${out_dir}"
         cp "${persistent_encryption_key}" \
            "${out_dir}"
@@ -4119,30 +4639,32 @@ _export_gpg_publickey() {
 }
 
 _make_version() {
-    local _msg _os_release
-
+    local _grubenv \
+          _install_dir="${isofs_dir}/${install_dir}" \
+          _msg \
+          _os_release \
+          _version_iso \
+    _grubenv="${_install_dir}/grubenv"
+    _version_iso="${install_dir}/version"
     _msg_info "Creating version files..."
     # Write version file to system installation dir
     rm -f -- "${pacstrap_dir}/version"
-    printf '%s\n' "${iso_version}" > "${pacstrap_dir}/version"
-
-    if [[ "${buildmode}" == @("iso"|"netboot") ]]; then
-        install -d \
-                -m 0755 -- \
-                "${isofs_dir}/${install_dir}"
-        # Write version file to ISO 9660
-        printf '%s\n' \
-               "${iso_version}" > "${isofs_dir}/${install_dir}/version"
-        # Write grubenv with version information to ISO 9660
-        printf '%.1024s' \
-               "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
-                         "${iso_name}" \
-                         "${iso_version}" \
-                         "$(printf '%0.1s' \
-                                   "#"{1..1024})")" > \
-                 "${isofs_dir}/${install_dir}/grubenv"
-    fi
-
+    printf '%s\n' \
+           "${iso_version}" > "${pacstrap_dir}/version"
+    [[ "${buildmode}" == @("iso"|"netboot") ]] && \
+      install -d \
+              -m 0755 -- \
+              "${_install_dir}" && \
+      # Write version file to ISO 9660
+      printf '%s\n' \
+             "${iso_version}" > "${_version_iso}" && \
+      # Write grubenv with version information to ISO 9660
+      printf '%.1024s' \
+             "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
+                       "${iso_name}" \
+                       "${iso_version}" \
+                       "$(printf '%0.1s' \
+                                 "#"{1..1024})")" > "${_grubenv}"
     # Append IMAGE_ID & IMAGE_VERSION to os-release
     _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
     [[ ! -e "${pacstrap_dir}/etc/os-release" ]] && \
@@ -4231,10 +4753,10 @@ _build_dongle_base() {
 # $1: value in fs_images
 _setup_work_dir() {
     local _image="${1}"
-    [[ -d "$(_get_fs_var "${_image}" \
-                         "dir")" ]] || \
-      install -d -- "$(_get_fs_var "${_image}" \
-                                   "dir")"
+    [[ -d "$(_get_obj_var "${_image}" \
+                          "dir")" ]] || \
+      install -d -- "$(_get_obj_var "${_image}" \
+                                    "dir")"
 }
 
 # build the base for an ISO and/or a netboot target
