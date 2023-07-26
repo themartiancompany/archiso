@@ -2023,11 +2023,15 @@ _make_customize_airootfs() {
                          "${_custom_script}"
 }
 
+# Produces a list of the installed packages
 _make_pkglist() {
-    local _pkglist="pkglist.${arch}.txt"
+    local _msg=() \
+          _pkglist="pkglist.${arch}.txt"
     local _bootstrap="${pacstrap_dir}/${_pkglist}" \
           _iso="${isofs_dir}/${install_dir}/${_pkglist}"
-    _msg_info "Creating a list of installed packages on live-enviroment..."
+    _msg=("Creating a list of installed"
+          "packages on live-enviroment..."
+    _msg_info "${_msg[*]}"
     case "${buildmode}" in
         "bootstrap")
             pacman -Q \
@@ -2118,6 +2122,66 @@ _cleanup_pacstrap_dir() {
 # Bootmodes functions (bootloaders handling)
 ###############################################
 
+#### UUID getters
+
+## Main ISO
+
+# Returns UUID for the GRUB plain mount
+_get_archiso_uuid() {
+    #shellcheck disable=SC2005
+    echo "$(_epoch_to_uuid "$(_get_epoch airootfs)")"
+}
+
+# Swap partition
+
+# Returns UUID for the dongle swap mount
+_get_swap_uuid() {
+    local _epoch
+    _epoch="$(_get_epoch swap)"
+    [[ "${buildmode}" == 'dongle' ]] && \
+      _epoch="$(_get_epoch dongle_swap)"
+    _get_epoch_fsuuid "${_epoch}"
+}
+
+## Dongle ISO
+
+# Returns UUID for the dongle GRUB plain mount
+_get_dongle_uuid() {
+    #shellcheck disable=SC2005
+    echo "$(_epoch_to_uuid "$(_get_epoch dongle)")"
+}
+
+# Dongle persistent partition
+
+# Returns dongle persistent partition uuid
+_get_dongle_persistent_uuid() {
+    local _epoch
+    _epoch=$(_get_epoch dongle_persistent)
+    _get_epoch_fsuuid "${_epoch}"
+}
+
+# Dongle swap partition
+
+# Returns dongle swap partition uuid
+_get_dongle_swap_uuid() {
+    local _epoch
+    _epoch="$(_get_epoch dongle_swap)"
+    _get_epoch_fsuuid "${_epoch}"
+}
+
+# Encrypted boot
+
+# Returns UUID for the GRUB cryptomount 
+_get_cryptomount_uuid() {
+    local _epoch
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _epoch="$(_get_epoch dongle_boot)"
+    else
+        _epoch="$(_get_epoch persistent)"
+    fi
+    _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
+}
+
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
@@ -2168,8 +2232,8 @@ _make_boot_on_iso() {
           _ucode \
           boot_dir="${bootable_dir}/${install_dir}/boot"
     local kernel_dir="${boot_dir}/${arch}" \
-          licenses_src="${pacstrap_dir}/usr/share/licenses"
-    local licenses_dest="${boot_dir}/licenses" \
+          licenses_src="${pacstrap_dir}/usr/share/licenses" \
+          licenses_dest="${boot_dir}/licenses" \
           images=("initramfs-*" "vmlinuz-*") \
     _msg_info "${_msg[*]}"
     install -d \
@@ -2200,53 +2264,6 @@ _make_boot_on_iso() {
     done
     _msg_info "Done!"
 }
-
-# Returns UUID for the GRUB plain mount
-_get_archiso_uuid() {
-    #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid "$(_get_epoch airootfs)")"
-}
-
-# Returns UUID for the dongle GRUB plain mount
-_get_dongle_uuid() {
-    #shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid "$(_get_epoch dongle)")"
-}
-
-# Returns UUID for the GRUB cryptomount (i.e. currently the encrypted boot partition)
-_get_cryptomount_uuid() {
-    local _epoch
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _epoch="$(_get_epoch dongle_boot)"
-    else
-        _epoch="$(_get_epoch persistent)"
-    fi
-    _get_epoch_fsuuid "${_epoch}" | sed "s|-||g"
-}
-
-# Returns dongle persistent partition uuid
-_get_dongle_persistent_uuid() {
-    local _epoch
-    _epoch=$(_get_epoch dongle_persistent)
-    _get_epoch_fsuuid "${_epoch}"
-}
-
-# Returns dongle swap partition uuid
-_get_dongle_swap_uuid() {
-    local _epoch
-    _epoch="$(_get_epoch dongle_swap)"
-    _get_epoch_fsuuid "${_epoch}"
-}
-
-# Returns UUID for the dongle swap mount
-_get_swap_uuid() {
-    local _epoch
-    _epoch="$(_get_epoch swap)"
-    [[ "${buildmode}" == 'dongle' ]] && \
-      _epoch="$(_get_epoch dongle_swap)"
-    _get_epoch_fsuuid "${_epoch}"
-}
-
 
 # Produces kernel parameters.
 _get_kernel_params() {
@@ -2340,23 +2357,34 @@ _make_bootmode_bios.grub.mbr_dongle() {
 # Prepares GRUB for El-Torito booting on BIOS systems
 # $1: root file system for grub
 _make_bootmode_bios.grub.eltorito() {
-    local bootable_dir="${1}"
-    _msg_info "Setting up GRUB for BIOS booting from an optical disc..."
-    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" "${bootable_dir}/EFI/BOOT/"
+    local bootable_dir="${1}" \
+          _msg \
+    _msg=("Setting up GRUB for BIOS booting"
+          "from an optical disc...")
+          _msg_info "${_msg[*]}"
+    install -d \
+            -m 0755 -- \
+            "${bootable_dir}/EFI/BOOT"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
+            "${bootable_dir}/EFI/BOOT/"
     _run_once _make_common_bootmode_grub_cfg
+    _grub_opts=(
+      -O i386-pc-eltorito
+      --modules="$(_get_grubmodules "bios")"
+      --locales="en@quot"
+      --themes=""
+      --fonts=""
+      --install-modules="$(_get_grubmodules "bios")"
+      --disable-shim-lock
+      --compress=xz
+      -o "${work_dir}/BOOTIA32.ELTORITO"
+      "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg")
 
-    grub-mkstandalone -O i386-pc-eltorito \
-                      --modules="$(_get_grubmodules "bios")" \
-                      --locales="en@quot" \
-                      --themes="" \
-                      --fonts="" \
-                      --install-modules="$(_get_grubmodules "bios")" \
-                      --disable-shim-lock \
-                      --compress=xz \
-                      -o "${work_dir}/BOOTIA32.ELTORITO" "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg"
-
-    install -m 0644 -- "${work_dir}/BOOTIA32.ELTORITO" "${bootable_dir}/EFI/BOOT"
+    grub-mkstandalone "${_grub_opts[@]}"
+    install -m 0644 -- \
+            "${work_dir}/BOOTIA32.ELTORITO" \
+            "${bootable_dir}/EFI/BOOT"
 
     if [[ "${bootable}" == "iso" ]]; then
         _run_once _make_boot_on_iso9660
@@ -2386,48 +2414,72 @@ _make_bootmode_bios.grub.eltorito_dongle() {
 # $1: root file system for syslinux
 # $2: device type (iso, dongle)
 _make_bootmode_bios.syslinux.mbr() {
-    bootable_dir="${1}"
-    bootable="${2}"
-    _msg_info "Setting up SYSLINUX for BIOS booting from a disk..."
+    local bootable_dir="${1}" \
+          bootable="${2}" \
+          _gpl2 \
+          _memtest="/boot/memtest86+/memtest.bin"
+          _msg=()
+    _gpl2="/usr/share/licenses/common/GPL2/license.txt"
+    _msg=("Setting up SYSLINUX for"
+          "BIOS booting from a disk...")
+    _msg_info "${_msg[*]}"
     install -d -m 0755 -- "${bootable_dir}/syslinux"
     for _cfg in "${profile}/syslinux/"*.cfg; do
-        _build_bootloader_config "${_cfg}" "syslinux" > "${bootable_dir}/syslinux/${_cfg##*/}"
+        _build_bootloader_config "${_cfg}" \
+                                 "syslinux" > \
+          "${bootable_dir}/syslinux/${_cfg##*/}"
     done
-    if [[ -e "${profile}/syslinux/splash.png" ]]; then
-        install -m 0644 -- "${profile}/syslinux/splash.png" "${bootable_dir}/syslinux/"
-    fi
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 "${bootable_dir}/syslinux/"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/syslinux/bios/lpxelinux.0" "${bootable_dir}/syslinux/"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/syslinux/bios/memdisk" "${bootable_dir}/syslinux/"
-
+    [[ -e "${profile}/syslinux/splash.png" ]] && \
+      install -m 0644 -- \
+              "${profile}/syslinux/splash.png" \
+              "${bootable_dir}/syslinux/"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 \
+            "${bootable_dir}/syslinux/"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/syslinux/bios/lpxelinux.0" \
+            "${bootable_dir}/syslinux/"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/syslinux/bios/memdisk" \
+            "${bootable_dir}/syslinux/"
     if [[ "${bootable}" == "iso" ]]; then
         _run_once _make_boot_on_iso9660
-        if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            _run_once _make_boot_on_dongle
-        fi
+        [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+          _run_once _make_boot_on_dongle
     elif [[ "${bootable}" == "dongle" ]]; then
         _run_once _make_boot_on_dongle
     fi
 
     if [[ -e "${bootable_dir}/syslinux/hdt.c32" ]]; then
         install -d -m 0755 -- "${bootable_dir}/syslinux/hdt"
-        if [[ -e "${pacstrap_dir}/usr/share/hwdata/pci.ids" ]]; then
-            gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
-                "${bootable_dir}/syslinux/hdt/pciids.gz"
-        fi
-        find "${pacstrap_dir}/usr/lib/modules" -name 'modules.alias' -print -exec gzip -cn9 '{}' ';' > \
+        [[ -e "${pacstrap_dir}/usr/share/hwdata/pci.ids" ]] && \
+          gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
+            "${bootable_dir}/syslinux/hdt/pciids.gz"
+        find "${pacstrap_dir}/usr/lib/modules" \
+             -name 'modules.alias' \
+             -print \
+             -exec gzip \
+             -cn9 '{}' ';' > \
             "${bootable_dir}/syslinux/hdt/modalias.gz"
     fi
 
-    # Add other aditional/extra files to ${install_dir}/boot/
-    if [[ -e "${pacstrap_dir}/boot/memtest86+/memtest.bin" ]]; then
-        # rename for PXE: https://wiki.archlinux.org/title/Syslinux#Using_memtest
-        install -m 0644 -- "${pacstrap_dir}/boot/memtest86+/memtest.bin" "${bootable_dir}/${install_dir}/boot/memtest"
-        install -d -m 0755 -- "${bootable_dir}/${install_dir}/boot/licenses/memtest86+/"
-        install -m 0644 -- "${pacstrap_dir}/usr/share/licenses/common/GPL2/license.txt" \
-            "${bootable_dir}/${install_dir}/boot/licenses/memtest86+/"
+    # Add other additional/extra files to ${install_dir}/boot/
+    if [[ -e "${pacstrap_dir}${_memtest}" ]]; then
+        # rename for PXE:
+        # https://wiki.archlinux.org/title/Syslinux#Using_memtest
+        install -m 0644 -- \
+                "${pacstrap_dir}${_memtest}" \
+                "${bootable_dir}/${install_dir}/boot/memtest"
+        install -d \
+                -m 0755 -- \
+                "${bootable_dir}/${install_dir}/boot/licenses/memtest86+/"
+        install -m 0644 -- \
+                "${pacstrap_dir}${_gpl2}" \
+                "${bootable_dir}/${install_dir}/boot/licenses/memtest86+/"
     fi
-    _msg_info "Done! SYSLINUX set up for BIOS booting from a disk successfully."
+    _msg=("Done! SYSLINUX set up for BIOS"
+          "booting from a disk successfully.")
+    _msg_info "${_msg[*]}"
 }
 
 # Prepares syslinux for booting from MBR on the ISO
@@ -2443,13 +2495,25 @@ _make_bootmode_bios.syslinux.mbr_dongle() {
 # Prepares syslinux for El-Torito booting
 # $1: root file system for syslinux
 _make_bootmode_bios.syslinux.eltorito() {
-    local bootable_dir="${1}"
-    _msg_info "Setting up SYSLINUX for BIOS booting from an optical disc..."
-    install -d -m 0755 -- "${bootable_dir}/syslinux"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/syslinux/bios/isolinux.bin" "${bootable_dir}/syslinux/"
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/syslinux/bios/isohdpfx.bin" "${bootable_dir}/syslinux/"
-
-    _msg_info "Done! SYSLINUX set up for BIOS booting from an optical disc successfully."
+    local bootable_dir="${1}" \
+          _msg=()
+    _msg=(
+      "Setting up SYSLINUX for BIOS"
+      "booting from an optical disc...")
+    _msg_info "${_msg[*]}"
+    install -d \
+            -m 0755 -- \
+            "${bootable_dir}/syslinux"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/syslinux/bios/isolinux.bin" \
+            "${bootable_dir}/syslinux/"
+    install -m 0644 -- \
+            "${pacstrap_dir}/usr/lib/syslinux/bios/isohdpfx.bin" \
+            "${bootable_dir}/syslinux/"
+    _msg=(
+      "Done! SYSLINUX set up for BIOS booting"
+      "from an optical disc successfully.")
+    _msg_info "${_msg[*]}"
 }
 
 # Prepares syslinux for El-Torito booting on BIOS on the ISO
@@ -2570,43 +2634,52 @@ _build_bootloader_config() {
          s|%INSTALL_DIR%|/${install_dir}|g;
          s|%KERNEL_PARAMS%|$(_get_kernel_params)|g;
          s|%BOOTABLE_UUID%|$(_get_bootable_uuid)|g;
-         s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" "${_template}"
+         s|%FALLBACK_UUID%|$(_get_archiso_uuid)|g" \
+        "${_template}"
 }
 
 # Fills templatized udev rules for the persistent partitions
 # $1: template udev rule file
 _fill_persistent_ro_udev_rules() {
-    local _template="${1}"
+    local _template="${1}" \
+          _sed_cmd
     # shellcheck disable=SC2154
-    if [[ "${persistent_size}" != "" ]]; then
-        sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" "${_template}"
-    else
-        sed -i '/%DONGLE_PERSISTENT_UUID%/d' "${_template}"
-    fi
-    if [[ "${persistent_size}" != "" ]]; then
-        sed -i "s|%PERSISTENT_UUID%|${persistent_uuid}|g" "${_template}"
-    else
-        sed -i '/%PERSISTENT_UUID%/d' "${_template}"
-    fi
+    _sed_cmd='/%DONGLE_PERSISTENT_UUID%/d'
+    [[ "${persistent_size}" != "" ]] && \
+      _sed_cmd="s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g"
+    sed -i "${_sed_cmd}" "${_template}"
+    _sed_cmd='/%PERSISTENT_UUID%/d'
+    [[ "${persistent_size}" != "" ]] && \
+        _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
+    sed -i "${_sed_cmd}" "${_template}"
 }
 
 # Prepare GRUB configuration files
 _make_common_bootmode_grub_cfg(){
-    local _cfg
-
-    install -d -- "${work_dir}/grub"
-
+    local _cfg \ 
+          _work="${work_dir}/grub" \
+          _profile="${profile}/grub"
+          _embed_cfg \
+          embedcfg
+    _embed_cfg="${_grub}/grub-embed.cfg"
+    install -d -- \
+            "${_work}"
     # Fill GRUB configuration files
-    for _cfg in "${profile}/grub/"*'.cfg'; do
-        _build_bootloader_config "${_cfg}" "grub" > "${work_dir}/grub/${_cfg##*/}"
+    for _cfg in "${_profile}/"*'.cfg'; do
+        _build_bootloader_config "${_cfg}" \
+                                 "grub" > \
+          "${_work}/${_cfg##*/}"
     done
-    # Add all GRUB files to the list of files used to calculate the required FAT image size.
-    efi_boot_files+=("${work_dir}/grub/"
-                     "${profile}/grub/"!(*.cfg))
+    # Add all GRUB files to the list of files
+    # used to calculate the required FAT image size.
+    efi_boot_files+=(
+      "${_work}/"
+      "${_profile}/"!(*.cfg))
 
-    IFS='' read -r -d '' grubembedcfg <<'EOF' || true
+    IFS='' read -r -d '' embedcfg <<'EOF' || true
 if ! [ -d "$cmdpath" ]; then
-    # On some firmware, GRUB has a wrong cmdpath when booted from an optical disc.
+    # On some firmware, GRUB has a wrong cmdpath
+    # when booted from an optical disc.
     # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
     if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
         cmdpath="${isodevice}/EFI/BOOT"
@@ -2614,7 +2687,9 @@ if ! [ -d "$cmdpath" ]; then
 fi
 configfile "${cmdpath}/grub.cfg"
 EOF
-    printf '%s\n' "$grubembedcfg" > "${work_dir}/grub-embed.cfg"
+    printf '%s\n' \
+           "${embedcfg}" > \
+      "${_embed_cfg}"
 }
 
 _make_common_bootmode_grub_copy_to_isofs_iso() {
