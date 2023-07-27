@@ -180,7 +180,8 @@ usage: ${app_name} [options] <profile_dir>
                       Passed to gpg as the value for --sender
      -H <gpg_home>    Set the gpg home directory.
      -h               This message
-     -m [mode ..]     Build mode(s) to use (valid modes are: 'bootstrap', 'iso' and 'netboot').
+     -m [mode ..]     Build mode(s) to use (valid modes are: 'bootstrap',
+                      'dongle', 'iso' and 'netboot').
                       Multiple build modes are provided as quoted, space delimited list.
      -o <out_dir>     Set the output directory
                       Default: '${out_dir}'
@@ -392,6 +393,7 @@ _run_mkext4() {
 # Creates a FAT image 
 # $1: image path
 # $2: image size in bytes
+# $3: image label
 _run_mkfat() {
     local _image_path="${1}" \
           _size_bytes=${2} \
@@ -777,6 +779,16 @@ _mkimg_ext4() {
     _msg_info "Done!"
 }
 
+## FAT
+
+# Creates a fat image.
+# $1: image path
+# $2: image size in bytes
+# $3: image label
+_mkimg_fat() {
+    _run_mkfat "${@}"
+}
+
 ## LUKS (encrypted file system container)
 
 # Steps shared by the mkimg+<fs_image_type>+luks functions
@@ -1147,89 +1159,94 @@ _mkimg_ext4+squashfs+luks() {
 # Get opts for a mkimg<fs_type> function
 # $1: file system composed type (ie. ext4+squashfs+luks)
 _get_mkimg_opts() {
-  local fs_type="${1}" \
-        _erofs_opts=() \
-        _erofs+luks_opts=() \
-        _ext4_opts=() \
-        _ext4+luks_opts=() \
-        _ext4+squashfs+luks_opts=() \
-        _squashfs_opts=() \
-        _squashfs+luks_opts=() \
-        _swap_opts=() \
-        _swap+luks_opts=() \
-  _erofs_opts=(
-    "${_image_path}"
-    "${_dir}"
-    "${_epoch}")
-  _ext4_opts=(
+    local fs_type="${1}" \
+          _erofs_opts=() \
+          _erofs+luks_opts=() \
+          _ext4_opts=() \
+          _ext4+luks_opts=() \
+          _ext4+squashfs+luks_opts=() \
+          _fat_opts=() \
+          _squashfs_opts=() \
+          _squashfs+luks_opts=() \
+          _swap_opts=() \
+          _swap+luks_opts=() \
+    _erofs_opts=(
+      "${_image_path}"
+      "${_dir}"
+      "${_epoch}")
+    _ext4_opts=(
       "${_dir}"
       "${_image_path}"
       "${_size}"
       "${_epoch}"
       "${_label}")
-  _squashfs_opts=( 
-    "${_dir}"
-    "${_image_path}")
-  _swap_opts=(
-    "${_image_path}"
-    "${_size}"
-    "${_epoch}"
-    "${_label}")
-  _erofs+luks_opts=(
-    "${_name}"
-    "${_dir}"
-    "${_image_path}"
-    "${_auto_size}"
-    "${_encryption_key}"
-    "${_epoch}"
-    "${_label}"
-    "${_grub}")
-  _ext4+luks_opts=(
-    "${_name}"
-    "${_dir}"
-    "${_image_path}"
-    "${_size}"
-    "${_encryption_key}"
-    "${_epoch}"
-    "${_label}"
-    "${_grub}")
-  _ext4+squashfs_opts=(
-    "${_name}"
-    "${_dir}"
-    "${_image_path}"
-    "${_size}"
-    "${_epoch}"
-    "${_label}"
-    "${_writable}")
-  _squashfs+luks_opts=(
-    "${_name}"
-    "${_dir}"
-    "${_image_path}"
-    "${_size}"
-    "${_encryption_key}"
-    "${_epoch}"
-    "${_label}"
-    "${_writable}"
-    "${_grub}")
-  _swap+luks=(
-    "${_name}"
-    "${_image_path}"
-    "${_size}"
-    "${_encryption_key}"
-    "${_epoch}"
-    "${_label}"
-    "${_grub}")
-  _ext4+squashfs+luks_opts=(
-    "${_name}"
-    "${_dir}"
-    "${_image_path}"
-    "${_size}"
-    "${_encryption_key}"
-    "${_epoch}"
-    "${_writable}"
-    "${_grub}")
-  echo "$(_get_obj_var "${_fs_image}" \
-                       "opts")"
+    _fat_opts=(
+      "${_image_path}"
+      "${_size}"
+      "${_label}")
+    _squashfs_opts=( 
+      "${_dir}"
+      "${_image_path}")
+    _swap_opts=(
+      "${_image_path}"
+      "${_size}"
+      "${_epoch}"
+      "${_label}")
+    _erofs+luks_opts=(
+      "${_name}"
+      "${_dir}"
+      "${_image_path}"
+      "${_auto_size}"
+      "${_encryption_key}"
+      "${_epoch}"
+      "${_label}"
+      "${_grub}")
+    _ext4+luks_opts=(
+      "${_name}"
+      "${_dir}"
+      "${_image_path}"
+      "${_size}"
+      "${_encryption_key}"
+      "${_epoch}"
+      "${_label}"
+      "${_grub}")
+    _ext4+squashfs_opts=(
+      "${_name}"
+      "${_dir}"
+      "${_image_path}"
+      "${_size}"
+      "${_epoch}"
+      "${_label}"
+      "${_writable}")
+    _squashfs+luks_opts=(
+      "${_name}"
+      "${_dir}"
+      "${_image_path}"
+      "${_size}"
+      "${_encryption_key}"
+      "${_epoch}"
+      "${_label}"
+      "${_writable}"
+      "${_grub}")
+    _swap+luks=(
+      "${_name}"
+      "${_image_path}"
+      "${_size}"
+      "${_encryption_key}"
+      "${_epoch}"
+      "${_label}"
+      "${_grub}")
+    _ext4+squashfs+luks_opts=(
+      "${_name}"
+      "${_dir}"
+      "${_image_path}"
+      "${_size}"
+      "${_encryption_key}"
+      "${_epoch}"
+      "${_writable}"
+      "${_grub}")
+    echo "$(_get_obj_var "${_fs_image}" \
+                         "opts")"
 }
 
 # Produces a file system image
@@ -1275,22 +1292,25 @@ _get_fs_ext() {
     fi
 }
 
-# Produces path for a given file system image in work directory
-# $1: value in fs_images
-_get_fs_img() {
-    local _fs_image="${1}"
-    local _img_name
-    _img_name="$(echo "${_fs_image}" | \
-                   tr -d '_')"
-    echo "${work_dir}/${_img_name}.$(_get_fs_ext "${_fs_image}")"
-}
-
-# Returns image filename/device mapper name for a given
-# file system image.
+# Returns <image filename/device mapper name>
+# for a given file system image.
 # $1: a value in 'fs_images' array
 _get_fs_name() {
     local _image="${1}"
     echo "${_image}" | tr -d '_'
+}
+
+# Produces canonical path for an image file
+# given volume name
+# (i.e. efi_boot -> <work_dir>/efiboot.img)
+# $1: value in fs_images
+_get_fs_img() {
+    local _fs_image="${1}" \
+          _ext \
+          _img_name
+    _img_name="$(_get_fs_name "${_fs_image}")"
+    _ext="$(_get_fs_ext "${_fs_image}")"
+    echo "${work_dir}/${_img_name}.${_ext}"
 }
 
 # Returns partition label for a physical partition
@@ -1367,6 +1387,27 @@ _mkairootfs() {
       _msg_error "The path '${_dir}' does not exist" 1
     install -d -m 0755 -- "${airootfs_dir}"
     _mkimg "airootfs"
+}
+
+## EFI System Partition (ESP)
+
+# Creates a FAT image (efiboot.img) which 
+# will serve as the EFI system partition
+# $1: image size in bytes
+_mkefi_boot() {
+    _mkfs_common "efi_boot"
+    _label="ARCHISO_EFI"
+    _size="$(du -bcs -- \
+                "${efi_boot_files[@]}" 2>/dev/null | \
+               awk 'END { print $1 }')"
+    _mkimg "efi_boot"
+
+    # Create the default/fallback boot path in
+    # which boot loaders will be placed later.
+    mmd -D o \
+        -i "${_image_path}" \
+        ::/EFI \
+        ::/EFI/BOOT
 }
 
 ## Persistent (the user data partition)
@@ -2394,7 +2435,8 @@ _get_grubmodules(){
       loadenv loopback luks2 minicmd  normal 
       part_apple part_gpt part_msdos password_pbkdf2
       reboot search search_fs_uuid test usb)
-    if [ "${_mode}" != "bios" ]; then
+    if [[ "${_mode}" != "pc" ]] && \
+       [[ "${_mode}" != "pc-eltorito" ]]; then
         _modules+=(
           at_keyboard all_video btrfs cat echo
           diskfilter echo efifwsetup f2fs fat
@@ -2405,7 +2447,8 @@ _get_grubmodules(){
           tpm trig usbserial_common usbserial_ftdi
           usbserial_pl2303 usbserial_usbdebug video
           xfs zstd)
-    elif [ "${_mode}" == "bios" ] ; then
+    elif [[ "${_mode}" == "pc" ]] || \
+         [[ "${_mode}" == "pc-eltorito" ]]; then
         _modules+=(biosdisk)
     fi
     echo "${_modules[*]}"
@@ -2562,29 +2605,31 @@ _make_bootmodes_dongle() {
 _make_bootmode_bios.grub.mbr() {
     bootable_dir="${1}"
     bootable="${2}"
+    local _code="ia32" \
+          _CODE="IA32" \
+          _platform="pc" \
+          _PLATFORM="MBR"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
-    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
-    _run_once _make_common_bootmode_grub_cfg
+    install -d \
+            -m 0755 -- \
+            "${bootable_dir}/EFI/BOOT"
+    _make_grub "${_code}" \
+               "${_platform}" \
+               "${work_dir}"
 
-    grub-mkstandalone -O i386-pc \
-                      --modules="$(_get_grubmodules "bios")" \
-                      --locales="en@quot" \
-                      --themes="" \
-                      --fonts="" \
-                      --install-modules="$(_get_grubmodules "bios")" \
-                      --disable-shim-lock \
-                      --compress=xz \
-                      -o "${work_dir}/BOOTIA32.MBR" "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg"
-
-    install -D -m 0644 "${work_dir}/BOOTIA32.MBR" "${bootable_dir}/EFI/BOOT"
+    install -D \
+            -m 0644 \
+            "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+            "${bootable_dir}/EFI/BOOT"
 
     if [[ "${bootable}" == "iso" ]]; then
         _run_once _make_boot_on_iso9660
     elif [[ "${bootable}" == "dongle" ]]; then
         _run_once _make_boot_on_dongle
     fi
-
-    _msg_info "Done! GRUB set up for BIOS booting from a disk successfully."
+    _msg=("Done! GRUB set up for BIOS booting"
+          "from a disk successfully.")
+    _msg_info "${_msg[*]}"
 }
 
 # Prepares GRUB for booting from MBR on the ISO
@@ -2602,6 +2647,7 @@ _make_bootmode_bios.grub.mbr_dongle() {
 _make_bootmode_bios.grub.eltorito() {
     local bootable_dir="${1}" \
           _msg \
+          _platform="pc-eltorito"
     _msg=("Setting up GRUB for BIOS booting"
           "from an optical disc...")
           _msg_info "${_msg[*]}"
@@ -2774,23 +2820,6 @@ _make_bootmode_bios.syslinux.eltorito_dongle() {
     _run_once _make_bootmode_bios.syslinux.mbr_dongle
 }
 
-# Creates a FAT image (efiboot.img) which will serve as the EFI system partition
-# $1: image size in bytes
-_make_efi_boot_img() {
-    local _size_bytes=${1} \
-          _size_kib="0" \
-          _msg=()
-    rm -f -- "${efi_boot_img}"
-    _run_mkfat "${efi_boot_img}" \
-               "${_size_bytes}" \
-               "ARCHISO_EFI"
-    # Create the default/fallback boot path in which a boot loaders will be placed later.
-    mmd -D o \
-        -i "${efi_boot_img}" \
-        ::/EFI \
-        ::/EFI/BOOT
-}
-
 # Copies GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
 _make_common_bootmode_grub_copy_to_efi_boot_img() {
     local files_to_copy=()
@@ -2872,26 +2901,119 @@ _get_grubmodules(){
     echo "${_modules[*]}"
 }
 
+# Produces a standalone GRUB binary
+# $1: architecture (x86_64, i386)
+# $2: platform (efi, pc)
+# $3: output file or directory
+#     default name: BOOT<IA32/X64>.EFI
+_make_grub() {
+    local _code="${1}" \
+          _platform="${2}" \
+          _out="${3}"
+    local _arch \
+          _cfg="${work_dir}/grub.cfg"
+          _embed_cfg="${work_dir}/grub-embed.cfg" \
+          _modules="$(_get_grubmodules "${_platform}")" \
+          _grub_options=() \
+          _CODE="${_code}" \
+          _PLATFORM
+    _grub_options=(
+      -O "${_arch}-${_platform}"
+      --modules="${_modules}"
+      --locales="en@quot"
+      --themes=""
+      --sbat=/usr/share/grub/sbat.csv
+      --disable-shim-lock
+      --compress=xz)
+    [[ "${_code}" == "ia32" ]] && \
+      _arch="i386" \
+      _CODE="IA32"
+    [[ "${_code}" == "x64" ]] && \
+      _arch="x86_64"
+    _PLATFORM="$(echo "${_platform}" | \
+                   tr '[:lower:]' '[:upper:]')"
+    [[ "${_platform}" == "pc" ]] && \
+      _grub_options+=(
+        --install-modules="${_modules}") \
+      _PLATFORM="MBR"
+    [[ "${_platform}" == "pc-eltorito" ]] && \
+      _PLATFORM="ELTORITO"
+    [[ "${_platform}" == "pc"* ]] && \
+      _grub_options+=(
+        --fonts="") \
+      _embed_cfg="${_cfg}"
+    [ -d "${_out}" ] && \
+      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
+    _run_once _make_common_bootmode_grub_cfg
+    _grub_options+=(
+      -o "${_out}")
+    grub-mkstandalone "${_grub_options[@]}" \
+                      "boot/grub/grub.cfg=${_embed_cfg}"
+}
+
+# Prepares GRUB (32-bit) for EFI boot
+# $1: device type ('iso', 'dongle')
+_make_grub_esp() {
+    local _bootable="${1}" \
+          _arch="${2}" \
+          _platform="efi" \
+          _code="x64" \
+          _CODE="x64" \
+          _efi_sh
+    [[ "${_arch}" == "i386" ]] && \
+      _code="ia32" \
+      _CODE="IA32"
+      _other_code="x64"
+    _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
+    _make_grub "${_arch}" \
+               "${_platform}" \
+               "${work_dir}"
+    # Add GRUB to the list of files used to
+    # calculate the required FAT image size.
+    efi_boot_files+=(
+      "${work_dir}/BOOT${_CODE}.EFI"
+      "$(_get_efi_sh "${_code}")")
+
+    if [[ " ${bootmodes[*]} " =~ "uefi-${_code}.systemd-boot.esp" ]]; then
+        # TODO: Remove this branch.
+        _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
+    elif [[ " ${bootmodes[*]} " =~ uefi-${_code}.grub.esp ]]; then
+        _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
+    else
+        _mkefi_boot
+    fi
+    # Copy GRUB EFI binary to the default/fallback boot path
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${work_dir}/BOOTI${_CODE}.EFI" \
+          "::/EFI/BOOT/BOOTI${_CODE}.EFI"
+    # Copy GRUB files
+    _run_once "_make_common_bootmode_grub_copy_to_efi_boot_img"
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      mcopy -D o \
+            -i "${efi_boot_img}" \
+            "$(_get_efi_sh "${_code}")" \
+            "::/shell${_code}.efi"
+    _msg_info "Done! GRUB set up for UEFI booting successfully."
+}
+
 # Prepares GRUB (32-bit) for EFI boot
 # $1: device type ('iso', 'dongle')
 _make_bootmode_uefi-ia32.grub.esp() {
-    local bootable="${1}"
-
-    # Prepare configuration files
-    _run_once _make_common_bootmode_grub_cfg
-
-    # Create EFI binary
-    grub-mkstandalone -O i386-efi \
-                      --modules="$(_get_grubmodules "efi")" \
-                      --locales="en@quot" \
-                      --themes="" \
-                      --sbat=/usr/share/grub/sbat.csv \
-                      --disable-shim-lock \
-                      -o "${work_dir}/BOOTIA32.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
-
-    # Add GRUB to the list of files used to calculate the required FAT image size.
-    efi_boot_files+=("${work_dir}/BOOTIA32.EFI"
-                     "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi")
+    local bootable="${1}" \
+          _arch="i386" \
+          _code="ia32" \
+          _CODE="IA32"
+          _platform="efi"
+          _PLATFORM="EFI"
+    _make_grub "${_arch}" \
+               "${_platform}" \
+               "${work_dir}"
+    # Add GRUB to the list of files used to
+    # calculate the required FAT image size.
+    efi_boot_files+=(
+      "${work_dir}/BOOT${_CODE}.EFI"
+      "$(_get_efi_sh "${_code}")")
 
     if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
         # TODO: Remove this branch.
@@ -2899,21 +3021,24 @@ _make_bootmode_uefi-ia32.grub.esp() {
     elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
         _run_once "_make_bootmode_uefi-x64.grub.esp_${bootable}"
     else
-        efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
         # Create a FAT image for the EFI system partition
-        _make_efi_boot_img "${efi_boot_size}"
+        _mkefi_boot
     fi
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efi_boot_img}" "${work_dir}/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+          "::/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
 
     # Copy GRUB files
     _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
 
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efi_boot_img}" "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ::/shellia32.efi
-    fi
-
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      mcopy -D o \
+            -i "${efi_boot_img}" \
+            "$(_get_efi_sh "${_code}")" \
+            "::/shell${_code}.${_platform}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
@@ -2931,32 +3056,41 @@ _make_bootmode_uefi-ia32.grub.esp_dongle() {
 # $1: root file system for GRUB
 # $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-ia32.grub.eltorito() {
-    local bootable_dir="${1}"
-    local bootable="${2}"
-    # El Torito UEFI boot requires an image containing the EFI system partition.
-    # uefi-ia32.grub.eltorito has the same requirements as uefi-ia32.grub.esp
+    local bootable_dir="${1}" \
+          bootable="${2}" \
+          _arch="i386" \
+          _code="ia32"
+    # El Torito UEFI boot requires an image containing 
+    # the EFI system partition.
+    # uefi-ia32.grub.eltorito has the same requirements
+    # as uefi-ia32.grub.esp
     _run_once "_make_bootmode_uefi-ia32.grub.esp_${bootable}"
-
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
-
-    # Additionally set up systemd-boot in ISO 9660. This allows creating a medium for the live environment by using
-    # manual partitioning and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and no firmware uses these files.
-    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
-
+    # Additionally set up systemd-boot in ISO 9660.
+    # This allows creating a medium for the live
+    # environment by using manual partitioning
+    # and simply copying the ISO 9660 file system contents.
+    # This is not related to El Torito booting and
+    # no firmware uses these files.
+    _msg=(
+      "Preparing an /EFI directory for"
+      "the ISO 9660 file system...")
+    _msg_info "${_msg[*]}"
+    install -d \
+            -m 0755 -- \
+            "${bootable_dir}/EFI/BOOT"
     # Copy GRUB EFI binary to the default/fallback boot path
-    install -m 0644 -- "${work_dir}/BOOTIA32.EFI" "${bootable_dir}/EFI/BOOT/BOOTIA32.EFI"
-
+    install -m 0644 -- \
+            "${work_dir}/BOOTIA32.EFI" \
+            "${bootable_dir}/EFI/BOOT/BOOTIA32.EFI"
     # Copy GRUB configuration files
     _run_once "_make_common_bootmode_grub_copy_to_isofs_${bootable}"
-
     # edk2-shell based UEFI shell
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" ]]; then
-        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/ia32/Shell_Full.efi" "${bootable_dir}/shellia32.efi"
-    fi
-
+    [[ -e "${pacstrap_dir}${_efish}" ]] && \
+      install -m 0644 -- \
+              "${pacstrap_dir}${_efish}" \
+              "${bootable_dir}/shellia32.efi"
     _msg_info "Done!"
 }
 
@@ -2972,38 +3106,35 @@ _make_bootmode_uefi-ia32.grub.eltorito_dongle() {
 
 # Prepares GRUB for EFI boot
 _make_bootmode_uefi-x64.grub.esp() {
-    # Prepare configuration files
-    _run_once _make_common_bootmode_grub_cfg
-
-    # Create EFI binary
-    grub-mkstandalone -O x86_64-efi \
-                      --modules="$(_get_grubmodules "efi")" \
-                      --locales="en@quot" \
-                      --themes="" \
-                      --sbat=/usr/share/grub/sbat.csv \
-                      --disable-shim-lock \
-                      -o "${work_dir}/BOOTx64.EFI" "boot/grub/grub.cfg=${work_dir}/grub-embed.cfg"
-    # Add GRUB to the list of files used to calculate the required FAT image size.
-    efi_boot_files+=("${work_dir}/BOOTx64.EFI"
-                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi")
-
-    efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
-
+    local _arch \
+          _efi_sh \
+          _code \
+          _CODE \
+          _platform
+    _arch="x86_64"
+    _platform="efi"
+    _code="x64"
+    _CODE="x64"
+    _make_grub "${_arch}" \
+               "${_platform}" \
+               "${work_dir}"
     # Create a FAT image for the EFI system partition
-    _make_efi_boot_img "${efi_boot_size}"
-
+    _mkefi_boot
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efi_boot_img}" "${work_dir}/BOOTx64.EFI" ::/EFI/BOOT/BOOTx64.EFI
-
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${work_dir}/BOOT${_CODE}.EFI" \
+          "::/EFI/BOOT/BOOT${_CODE}.EFI"
     # Copy GRUB files
     _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
-
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efi_boot_img}" \
-                      "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" \
-                      "::/shellx64.efi"
-    fi
-
+    # _add_efi_sh "${_code}" \
+    #             "${_install_dir}" \
+    #             "${_install_path}"
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      mcopy -D o \
+            -i "${efi_boot_img}" \
+            "$(_get_efi_sh "${_code}")" \
+            "::/shell${_code}.efi"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
  
@@ -3030,15 +3161,24 @@ _make_bootmode_uefi-x64.grub.eltorito() {
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
 
-    # Additionally set up systemd-boot in ISO 9660. This allows creating a medium for the live environment by using
-    # manual partitioning and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and no firmware uses these files.
-    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
+    # Additionally set up systemd-boot in ISO 9660.
+    # This allows creating a medium for the 
+    # live environment by using manual partitioning
+    # and simply copying the ISO 9660 file system contents.
+    # This is not related to El Torito booting and
+    # no firmware uses these files.
+    _msg=(
+      "Preparing an /EFI directory for"
+      "the ISO 9660 file system...")
+    _msg_info "${_msg[*]}"
+    install -d \
+            -m 0755 -- \
+            "${bootable_dir}/EFI/BOOT"
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    install -m 0644 -- "${work_dir}/BOOTx64.EFI" \
-        "${bootable_dir}/EFI/BOOT/BOOTx64.EFI"
+    install -m 0644 -- \
+            "${work_dir}/BOOTx64.EFI" \
+            "${bootable_dir}/EFI/BOOT/BOOTx64.EFI"
 
     # Copy GRUB files
     _run_once "_make_common_bootmode_grub_copy_to_isofs_${bootable}"
@@ -3061,50 +3201,80 @@ _make_bootmode_uefi-x64.grub.eltorito_dongle() {
     _make_bootmode_uefi-x64.grub.eltorito "${dongle_isofs_dir}" "dongle"
 }
 
+_get_efi_sh() {
+    local _code="${1}" \
+          _efi_sh
+    _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
+    echo "${pacstrap_dir}${_efi_sh}"
+}
+
 # Prepares systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
-    local _file efi_boot_size _results
     local _available_ucodes=()
+          _bl \
+          _code="x64" \
+          _file \
+          _results \
+          efi_boot_size \
+          _systemd_boot
+    _bl="/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     _msg_info "Setting up systemd-boot for UEFI booting..."
 
     for _file in "${ucodes[@]}"; do
-        if [[ -e "${pacstrap_dir}/boot/${_file}" ]]; then
-            _available_ucodes+=("${pacstrap_dir}/boot/${_file}")
-        fi
+        [[ -e "${pacstrap_dir}/boot/${_file}" ]] && \
+          _available_ucodes+=("${pacstrap_dir}/boot/${_file}")
     done
     # Calculate the required FAT image size in bytes
-    efi_boot_files+=("${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
-                     "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi"
-                     "${profile}/efiboot/"
-                     "${_available_ucodes[@]}")
+    efi_boot_files+=(
+      "${pacstrap_dir}${_bl}"
+      "$(_get_efi_sh "${_code}")"
+      "${profile}/efiboot/"
+      "${_available_ucodes[@]}")
     _images=("initramfs-*" "vmlinuz-*")
     for _query in "${_images[@]}"; do
-        mapfile -t efi_boot_files < <(find "${work_dir}" -iname "${_query}" -exec echo {} \; -quit)
+        mapfile -t efi_boot_files < \
+          <(find "${work_dir}" \
+                 -iname "${_query}" \
+                 -exec echo {} \; \
+                 -quit)
     done
 
-    efi_boot_size="$(du -bcs -- "${efi_boot_files[@]}" 2>/dev/null | awk 'END { print $1 }')"
     # Create a FAT image for the EFI system partition
-    _make_efi_boot_img "${efi_boot_size}"
+    _mkefi_boot
 
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    mcopy -D o -i "${efi_boot_img}" \
-        "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" ::/EFI/BOOT/BOOTx64.EFI
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${pacstrap_dir}${_bl}" \
+          "::/EFI/BOOT/BOOT${_CODE}.EFI"
 
     # Copy systemd-boot configuration files
-    mmd -D o -i "${efi_boot_img}" ::/loader ::/loader/entries
-    mcopy -D o -i "${efi_boot_img}" "${profile}/efiboot/loader/loader.conf" ::/loader/
+    mmd -D o \
+        -i "${efi_boot_img}" \
+        ::/loader \
+        ::/loader/entries
+    mcopy -D o \
+          -i "${efi_boot_img}" \
+          "${profile}/efiboot/loader/loader.conf" \
+          ::/loader/
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _build_bootloader_config "${_conf}" "systemd-boot" | mcopy -D o -i "${efi_boot_img}" - "::/loader/entries/${_conf##*/}"
+        _build_bootloader_config "${_conf}" \
+                                 "systemd-boot" | \
+          mcopy -D o \
+                -i "${efi_boot_img}" - \
+                "::/loader/entries/${_conf##*/}"
         done
 
     # shellx64.efi is picked up automatically when on /
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        mcopy -D o -i "${efi_boot_img}" \
-            "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ::/shellx64.efi
-    fi
+    [[ -e "$(_get_efi_sh "${_code}" ]] && \
+      mcopy -D o \
+            -i "${efi_boot_img}" \
+            "$(_get_efi_sh "${_code}")" \
+            "::/shell${_code}.efi"
 
     # Copy kernel and initramfs to FAT image.
-    # systemd-boot can only access files from the EFI system partition it was launched from.
+    # systemd-boot can only access files from
+    # the EFI system partition it was launched from.
     _make_boot_on_fat
 
     _msg_info "Done! systemd-boot set up for UEFI booting successfully."
@@ -4737,6 +4907,7 @@ _set_overrides() {
       ["dongle_boot_image_type"]="ext4+luks"
       ["dongle_persistent_image_type"]="ext4+luks"
       ["dongle_swap_image_type"]="swap+luks"
+      ["efi_boot_image_type"]="fat"
       ["keys_image_type"]="squashfs+luks"
       ["persistent_image_type"]="ext4+luks"
       ["recovery_image_type"]="ext4+luks"
