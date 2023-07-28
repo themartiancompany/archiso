@@ -36,7 +36,6 @@ iso_label=""
 iso_publisher=""
 iso_application=""
 iso_version=""
-isofs_dir=""
 install_dir=""
 arch=""
 pacman_conf=""
@@ -48,7 +47,6 @@ buildmodes=()
 bootmodes=()
 xorriso_options=()
 xorrisofs_options=()
-dongle_isofs_dir=""
 dongle_xorriso_options=()
 dongle_xorrisofs_options=()
 cert_list=()
@@ -56,10 +54,12 @@ sign_netboot_artifacts=""
 declare -A file_permissions=()
 declare -A images=()
 fs_images=(
+  'iso'
   'airootfs'
   'persistent'
   'keys'
   'swap'
+  'dongle_iso'
   'dongle_boot'
   'dongle_persistent'
   'dongle_swap'
@@ -229,7 +229,7 @@ _show_config() {
 # given object
 # $1: an object
 # $2: a variable value attached to object
-_get_obj_var() {
+_get() {
     local _obj="${1}" \
           _var="${2}" \
           _ref
@@ -238,7 +238,7 @@ _get_obj_var() {
 }
 
 # Sets object attribute variables
-_set_obj_var() {
+_set() {
     local _obj="${1}" \
           _var="${2}" \
           _value="${3}"
@@ -1245,8 +1245,8 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_writable}"
       "${_grub}")
-    echo "$(_get_obj_var "${_fs_image}" \
-                         "opts")"
+    echo "$(_get "${_fs_image}" \
+                 "opts")"
 }
 
 # Produces a file system image
@@ -1256,8 +1256,8 @@ _mkimg() {
           _image_type \
           _mkimg_opts=()
     rm -f -- "${_image_path}"
-    _image_type="$(_get_obj_var "${_image_type}" \
-                                "image_type")")
+    _image_type="$(_get "${_image_type}" \
+                        "image_type")")
     _mkimg_opts=("$(_get_mkimg_opts "${_image_type}")")
     "_mkimg_${_image_type}" "${_mkimg_opts[@]}"
 }
@@ -1269,37 +1269,59 @@ _mkimg() {
 # Install public files to a given volume
 # $1: volume
 # $@: files
-# $#: destination
+# $#: destination as path in volume 
 _install_cmd(){
     local _volume="${1}" \
-          _cmd
-    _cmd=(
-      install -D
-              -m 0644 --)
-    [[ "${_volume}" == "efi_boot" ]] && \
-      _cmd=(
-        mcopy -D o \
-              -i "$(_get_obj_var "efi_boot" \
-                                 "img")")
-    echo "${_cmd[@]}"
+          _cmd \
+          _dest \
+          _files=() \
+          _root
+    shift
+    while [ "${#}" -gt 1 ]; do
+        _files+=("${1}")
+        shift
+    done
+    printf -v _dest '%s\n' "${1}"
+    if [[ "${_volume}" == "efi_boot" ]]; then
+        _root="$(_get "${_volume}" \
+                    "img")"
+        _cmd=(
+          mcopy -D o \
+                -i "${_root}" --)
+        _dest="::${_dest}"
+    else
+      _root="$(_get "${_volume}" \
+                    "dir")"
+         _cmd=(
+           install -D
+                   -m 0644 --)
+        _dest="${_root}${_dest}"
+    fi
+    "${_cmd[@]}" "${_files[@]}" \
+                 "${_dest}"
 }
 
 # Install files to a given volume
 # $1: volume
 # $@: files
-# $#: destination
+# $#: destination as path in volume
 _install_dir_cmd(){
     local _volume="${1}" \
-          _cmd
+          _cmd \
+          _dir \
+          _dirs=()
+    shift
+    _dirs=("${@}")
     _cmd=(
       install -d
               -m 0755 --)
     [[ "${_volume}" == "efi_boot" ]] && \
       _cmd=(
         mmd -D o
-            -i "$(_get_obj_var "efi_boot" \
-                               "img")")
-    echo "${_cmd[@]}"
+            -i "$(_get "efi_boot" \
+                       "img")" --) \
+      _dirs=("${_dirs[@]/#/::}")
+    "${_cmd[@]}" "${_dirs[@]}"
 }
 
 ### Utility fuctions
@@ -1309,8 +1331,8 @@ _install_dir_cmd(){
 # $1: a value in the 'fs_images' array
 _get_fs_type() {
     local _fs_image="${1}" _tmp
-    _tmp="$(_get_obj_var "${_fs_image}" \
-                         "image_type")"
+    _tmp="$(_get "${_fs_image}" \
+                 "image_type")"
     _tmp="${_tmp%%+luks}"
     echo "${_tmp##*"+"}"
 }
@@ -1361,7 +1383,7 @@ _get_iso_partition_label() {
     [[ "${_suffix}" != "airootfs" ]] && \
       _label+=("${_suffix}")
     echo "$(IFS=, ; \
-            +echo "${_label[*]}")" 
+            echo "${_label[*]}")" 
 }
 
 # Sets correct file system guid given type
@@ -1369,8 +1391,8 @@ _set_fs_guid() {
     local _fs_image="${1}" \
           _guid \
           _image_type
-    _image_type="$(_get_obj_var "${_fs_image}" \
-                                "image_type")"
+    _image_type="$(_get "${_fs_image}" \
+                        "image_type")"
     if [[ "${_image_type}" == *luks ]]; then
         _guid="${luks_guid}"
     elif [[ "${_image_type}" == *swap ]]; then
@@ -1378,9 +1400,9 @@ _set_fs_guid() {
     elif [[ "${_image_type}" == *ext4 ]]; then
         _guid="${linux_guid};"
     fi
-    _set_obj_var "${_fs_image}" \
-                 "guid" \
-                 "${_guid}"
+    _set "${_fs_image}" \
+         "guid" \
+         "${_guid}"
 }
 
 # Sets parameters for _mk<fs_image> functions
@@ -1388,13 +1410,13 @@ _set_fs_guid() {
 _mkfs_common() {
     local _fs_image="${1}"
     _name="$(_get_fs_name "${_fs_image}")"
-    _dir="$(_get_obj_var "${_fs_image}" \
-                         "dir")"
+    _dir="$(_get "${_fs_image}" \
+                 "dir")"
     _epoch="$(_get_epoch "${_fs_image}")"
-    _encryption_key="$(_get_obj_var "${_fs_image}" \
-                                    "encryption_key")"
+    _encryption_key="$(_get "${_fs_image}" \
+                            "encryption_key")"
     _label="$(_get_iso_partition_label "${_fs_image}")"
-    _size="$(_get_obj_var "${_fs_image}" \
+    _size="$(_get "${_fs_image}" \
                           "size")"
     _image_path="$(_get_fs_img "${_fs_image}")"
     _grub="false"
@@ -1408,8 +1430,8 @@ _mkfs_common() {
 
 # Returns workdir airootfs image path
 _get_airootfs_img(){
-    echo "$(_get_obj_var "airootfs" \
-                         "dir")/airootfs.$(_get_fs_ext "airootfs")"
+    echo "$(_get "airootfs" \
+                 "dir")/airootfs.$(_get_fs_ext "airootfs")"
 }
 
 # Produces airootfs image
@@ -1421,8 +1443,8 @@ _mkairootfs() {
     _auto_size=""
     [[ -e "${_dir}" ]] || \
       _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "$(_get_obj_var "airootfs" \
-                                          "dir")"
+    install -d -m 0755 -- "$(_get "airootfs" \
+                                  "dir")"
     _mkimg "airootfs"
 }
 
@@ -1441,8 +1463,8 @@ _mkefi_boot() {
 
     # Create the default/fallback boot path in
     # which boot loaders will be placed later.
-    "$(_install_dir_cmd "efi_boot")" "::/EFI" \
-                                     "::/EFI/BOOT"
+    _install_dir_cmd "efi_boot" "/EFI" \
+                                "/EFI/BOOT"
 }
 
 ## Persistent (the user data partition)
@@ -1592,16 +1614,16 @@ _mksignature() {
 _build_crypttab() {
     local _template="${1}"
     local _out="${2}"
-    if [[ "$(_get_obj_var "persistent" \
-                          "image_type")" == *"luks" ]]; then
+    if [[ "$(_get "persistent" \
+                  "image_type")" == *"luks" ]]; then
         sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
             "${_template}" > "${_out}"
     else
         sed '/%PERSISTENT_UUID%/d' \
             "${_template}" > "${_out}"
     fi
-    if [[ "$(_get_obj_var "dongle_persistent" \
-                          "image_type")" == *"luks" ]]; then
+    if [[ "$(_get "dongle_persistent" \
+                  "image_type")" == *"luks" ]]; then
         sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" \
             "${_out}"
     else
@@ -1664,14 +1686,14 @@ _resolve_fs_encryption_key(){
     local _encryption_key \
           _msg=() \
           _out_dir
-    _encryption_key="$(_get_obj_var "${fs_image}" \
-                                    "encryption_key")"
+    _encryption_key="$(_get "${fs_image}" \
+                            "encryption_key")"
     _out_dir="$(dirname "${_auto_key}")"
     [ ! -f "${_encryption_key}" ] && \
       if [ "${_encryption_key}" = 'auto' ]; then
-          _set_obj_var "${_fs_image}" \
-                       "encryption_key" \
-                       "${_auto_key}"
+          _set "${_fs_image}" \
+               "encryption_key" \
+               "${_auto_key}"
           [ ! -d "${_out_dir}" ] && \
             install -d -m 700 "${_out_dir}"
           _gen_key "${_auto_key}" \
@@ -1694,12 +1716,12 @@ _resolve_secondary_encryption_key() {
           _image_type \
           _install_dir \
           _mode="binary"
-    _at_rest_image_type="$(_get_obj_var "airootfs" \
-                                        "image_type")"
-    _image_type="$(_get_obj_var "${_name}" \
+    _at_rest_image_type="$(_get "airootfs" \
                                 "image_type")"
-    _encryption_key="$(_get_obj_var "${_name}" \
-                                    "encryption_key")"
+    _image_type="$(_get "${_name}" \
+                        "image_type")"
+    _encryption_key="$(_get "${_name}" \
+                            "encryption_key")"
     [[ "${_image_type}" == *"luks" ]] && \
       if [[ "${_encryption_key}" == "auto" ]]; then
           _msg_info "Random plaintext password for ${_name}"
@@ -1724,14 +1746,14 @@ _resolve_secondary_encryption_key() {
                 "You will be prompted to insert a password for"
                 "the ${_name} partition.")
           _msg_warning "${_msg[*]}"
-          _set_obj_var "${_name}" \
-                       "encryption_key" \
-                       ""
+          _set "${_name}" \
+               "encryption_key" \
+               ""
           return
       fi
-      _set_obj_var "${_name}" \
-                    "encryption_key" \
-                    "${_auto_key}"
+      _set "${_name}" \
+           "encryption_key" \
+           "${_auto_key}"
       _gen_key "${_encryption_key}" \
                "${_mode}"
       install -d -m700 "${_install_dir}"
@@ -1958,8 +1980,8 @@ _make_custom_airootfs() {
                 # shellcheck disable=SC2034
                 _set_var_obj "dongle_boot" \
                              "_encryption_key" \
-                             "$(_get_obj_var "keys" \
-                                              "encryption_key")"
+                             "$(_get "keys" \
+                                     "encryption_key")"
                 cp "${_etc}/mkinitcpio.conf" \
                    "${_etc}/mkinitcpio.dongle_boot.conf"
                 _build_archiso_mkinitcpio_conf \
@@ -1970,8 +1992,8 @@ _make_custom_airootfs() {
                    "${profile}/airootfs/etc/mkinitcpio.recovery.conf"
                 _build_archiso_mkinitcpio_conf \
                     "${_etc}/mkinitcpio.recovery.conf" \
-                    "$(_get_obj_var "recovery" \
-                                    "encryption_key")"
+                    "$(_get "recovery" \
+                            "encryption_key")"
             fi
         fi
         _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" 
@@ -2012,7 +2034,7 @@ _make_packages() {
 # Produces version files
 _make_version() {
     local _grubenv \
-          _install_dir="${isofs_dir}/${install_dir}" \
+          _install_dir="${iso_dir}/${install_dir}" \
           _msg \
           _os_release \
           _version_iso \
@@ -2164,7 +2186,7 @@ _make_pkglist() {
     local _msg=() \
           _pkglist="pkglist.${arch}.txt"
     local _bootstrap="${pacstrap_dir}/${_pkglist}" \
-          _iso="${isofs_dir}/${install_dir}/${_pkglist}"
+          _iso="${iso_dir}/${install_dir}/${_pkglist}"
     _msg=("Creating a list of installed"
           "packages on live-enviroment..."
     _msg_info "${_msg[*]}"
@@ -2177,7 +2199,7 @@ _make_pkglist() {
         "iso")
             install -d \
                     -m 0755 -- \
-                    "${isofs_dir}/${install_dir}"
+                    "${iso_dir}/${install_dir}"
             if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
                 pacman -Q \
                        --sysroot \
@@ -2187,7 +2209,7 @@ _make_pkglist() {
         "netboot")
             install -d \
                     -m 0755 -- \
-                    "${isofs_dir}/${install_dir}"
+                    "${iso_dir}/${install_dir}"
             pacman -Q \
                    --sysroot \
                    "${pacstrap_dir}" > "${_iso}"
@@ -2344,8 +2366,8 @@ _get_device_select_cmdline() {
              --set=root
              --fs-uuid "$(_get_bootable_uuid)")
     #shellcheck disable=SC2005
-    [[ "$(_get_obj_var "persistent" \
-                       "image_type")" == *luks ]] && \
+    [[ "$(_get "persistent" \
+               "image_type")" == *luks ]] && \
       _cmd=(cryptomount -u "$(_get_cryptomount_uuid)")
     echo "${_cmd[*]}"
 }
@@ -2368,7 +2390,7 @@ _get_crypto_params() {
       _cparams+=(
         "root=/dev/mapper/root"
         "cryptdevice=$(IFS=: ; \
-                       echo "${_cryptdevice[@]}")") && \
+                       echo "${_cryptdevice[*]}")") && \
       [ "${airootfs_encryption_key}" != "" ] && \
         _cryptkey=(
           "UUID=$(_get_dongle_uuid)"
@@ -2376,7 +2398,7 @@ _get_crypto_params() {
           "${_keys_path},airootfs.key") && \
         _cparams+=(
           "cryptkey=$(IFS=: ; \
-                      echo "${_cryptkey[@]}")")
+                      echo "${_cryptkey[*]}")")
     echo "${_cparams[@]}"
 }
 
@@ -2395,7 +2417,7 @@ _get_kernel_params() {
         "iso9660"
         "$(_get_airootfs_path).sig") && \
       _kparams+=("sigdevice=$(IFS=: ; \
-                              echo "${_sigdevice[@]}")"
+                              echo "${_sigdevice[*]}")"
                  "verify=y")
     echo "${_kparams[@]}"
 }
@@ -2610,8 +2632,8 @@ _make_boot_on_iso() {
 
 # Copy kernel and initramfs to ISO 9660
 _make_boot_on_iso9660() {
-    isofs_dir="${work_dir}/iso"
-    _make_boot_on_iso "${isofs_dir}" \
+    iso_dir="${work_dir}/iso"
+    _make_boot_on_iso "${iso_dir}" \
                       "ISO 9660"
     _make_boot_on_iso "${persistent_dir}" \
                       "ISO 9660"
@@ -2631,7 +2653,7 @@ _make_boot_on_dongle() {
 
 # Copies kernel and initramfs to FAT image
 _make_boot_on_fat() {
-    local _images _msg _ucode
+    local _images _msg _results=() _ucode
     _msg=(
       "Preparing kernel and initramfs"
       "for the FAT file system...")
@@ -2639,24 +2661,27 @@ _make_boot_on_fat() {
     _images=(
       "initramfs-*"
       "vmlinuz-*")
-    "$(_install_dir_cmd "efi_boot")"
-        "::/${install_dir}" \
-        "::/${install_dir}/boot" \
-        "::/${install_dir}/boot/${arch}"
+    _install_dir_cmd "efi_boot" \
+                     "/${install_dir}" \
+                     "/${install_dir}/boot" \
+                     "/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
-        find "${work_dir}" \
-             -iname "${_query}" \
-             -exec "$(_install_cmd "efi_boot")" \
-                       {} \
-                       "::/${install_dir}/boot/${arch}/" \; \
-             -quit
+        _results=("$(find "${work_dir}" \
+                        -iname "${_query}" \
+                        -exec echo {} \; \
+                        -quit)")
+        _install_cmd "efi_boot" \
+                     "${_results[@]}" \
+                     "/${install_dir}/boot/${arch}/"
     done
     for _ucode in "${ucodes[@]}"; do
-        find "${work_dir}" \
-             -iname "${_ucode_image}" \
-             -exec "$(_install_cmd "efi_boot")" \
-                       {} \
-                       "::/${install_dir}/boot/" \;
+        _results=("$(find "${work_dir}" \
+                        -iname "${_ucode}" \
+                        -exec echo {} \; \
+                        -quit)")
+        "$(_install_cmd "efi_boot")" \
+            "${_results[@]}" \
+            "::/${install_dir}/boot/" \;
     done
     _msg_info "Done!"
 }
@@ -2676,10 +2701,10 @@ _make_bootmodes_iso() {
 }
 
 # Set up boot loaders
-_make_bootmodes_dongle() {
+_make_bootmodes_dongle_iso() {
     local bootmode
     for bootmode in "${bootmodes[@]}"; do
-        _run_once "_make_bootmode_${bootmode}_dongle"
+        _run_once "_make_bootmode_${bootmode}_dongle_iso"
     done
 }
 
@@ -2722,12 +2747,12 @@ _make_bootmode_bios.grub.mbr() {
 
 # Prepares GRUB for booting from MBR on the ISO
 _make_bootmode_bios.grub.mbr_iso() {
-    _make_bootmode_bios.grub.mbr "${isofs_dir}" "iso"
+    _make_bootmode_bios.grub.mbr "iso" # "${iso_dir}" "iso"
 }
 
 # Prepares GRUB for booting from MBR on the dongle ISO
-_make_bootmode_bios.grub.mbr_dongle() {
-    _make_bootmode_bios.grub.mbr "${dongle_isofs_dir}" "dongle"
+_make_bootmode_bios.grub.mbr_dongle_iso() {
+    _make_bootmode_bios.grub.mbr "dongle_iso" # "${dongle_iso_dir}" "dongle"
 }
 
 # Prepares GRUB for El-Torito booting on BIOS systems
@@ -2768,16 +2793,16 @@ _make_bootmode_bios.grub.eltorito() {
 
 # Prepares GRUB El Torito on BIOS for the ISO image
 _make_bootmode_bios.grub.eltorito_iso() {
-    _make_bootmode_bios.grub.eltorito "${isofs_dir}"
+    _make_bootmode_bios.grub.eltorito "${iso_dir}"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.grub.mbr_iso
 }
 
 # Prepares GRUB El Torito on BIOS for the dongle ISO image
-_make_bootmode_bios.grub.eltorito_dongle() {
-    _make_bootmode_bios.grub.eltorito "${dongle_isofs_dir}"
+_make_bootmode_bios.grub.eltorito_dongle_iso() {
+    _make_bootmode_bios.grub.eltorito "${dongle_iso_dir}"
     # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.grub.mbr_dongle
+    _run_once _make_bootmode_bios.grub.mbr_dongle_iso
 }
 
 # Prepares syslinux for booting from MBR (isohybrid)
@@ -2854,12 +2879,12 @@ _make_bootmode_bios.syslinux.mbr() {
 
 # Prepares syslinux for booting from MBR on the ISO
 _make_bootmode_bios.syslinux.mbr_iso() {
-    _make_bootmode_bios.syslinux.mbr "${isofs_dir}" "iso"
+    _make_bootmode_bios.syslinux.mbr "iso" # "${iso_dir}" "iso"
 }
 
 # Prepares syslinux for booting from MBR on the ISO
-_make_bootmode_bios.syslinux.mbr_dongle() {
-    _make_bootmode_bios.syslinux.mbr "${dongle_isofs_dir}" "dongle"
+_make_bootmode_bios.syslinux.mbr_dongle_iso() {
+    _make_bootmode_bios.syslinux.mbr "dongle_iso" # "${dongle_iso_dir}" "dongle"
 }
 
 # Prepares syslinux for El-Torito booting
@@ -2888,17 +2913,17 @@ _make_bootmode_bios.syslinux.eltorito() {
 
 # Prepares syslinux for El-Torito booting on BIOS on the ISO
 _make_bootmode_bios.syslinux.eltorito_iso() {
-    _make_bootmode_bios.syslinux.eltorito "${isofs_dir}"
+    _make_bootmode_bios.syslinux.eltorito "${iso_dir}"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.syslinux.mbr_iso
 
 }
 
 # Prepares syslinux for El-Torito booting on BIOS on the dongle ISO
-_make_bootmode_bios.syslinux.eltorito_dongle() {
-    _make_bootmode_bios.syslinux.eltorito "${dongle_isofs_dir}"
+_make_bootmode_bios.syslinux.eltorito_dongle_iso() {
+    _make_bootmode_bios.syslinux.eltorito "${dongle_iso_dir}"
     # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.syslinux.mbr_dongle
+    _run_once _make_bootmode_bios.syslinux.mbr_dongle_iso
 }
 
 # Copies GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
@@ -2929,25 +2954,25 @@ _fill_persistent_ro_udev_rules() {
 }
 
 _make_common_bootmode_grub_copy_to_isofs_iso() {
-    isofs_dir="${work_dir}/iso"
-    _make_common_bootmode_grub_copy_to_isofs "${isofs_dir}"
+    iso_dir="${work_dir}/iso"
+    _make_common_bootmode_grub_copy_to_isofs "${iso_dir}"
 }
 
-_make_common_bootmode_grub_copy_to_isofs_dongle() {
-    dongle_isofs_dir="${work_dir}/dongle_iso"
-    _make_common_bootmode_grub_copy_to_isofs "${dongle_isofs_dir}"
+_make_common_bootmode_grub_copy_to_isofs_dongle_iso() {
+    dongle_iso_dir="${work_dir}/dongle_iso"
+    _make_common_bootmode_grub_copy_to_isofs "${dongle_iso_dir}"
 }
 
 # $1: directory where the content of the ISO file system resides
 _make_common_bootmode_grub_copy_to_isofs() {
-    local isofs_dir="${1}"
+    local iso_dir="${1}"
     local files_to_copy=()
 
     files_to_copy+=("${work_dir}/grub/"*'.cfg')
     if compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null; then
         files_to_copy+=("${profile}/grub/"!(*.cfg))
     fi
-    install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/EFI/BOOT/"
+    install -m 0644 -- "${files_to_copy[@]}" "${iso_dir}/EFI/BOOT/"
 }
 
 # Prepares GRUB (32-bit) for EFI boot
@@ -3041,8 +3066,8 @@ _make_bootmode_uefi-ia32.grub.esp_iso() {
 }
 
 # Prepares GRUB (32 bit) for UEFI the dongle ISO image
-_make_bootmode_uefi-ia32.grub.esp_dongle() {
-    _make_bootmode_uefi-ia32.grub.esp "dongle"
+_make_bootmode_uefi-ia32.grub.esp_dongle_iso() {
+    _make_bootmode_uefi-ia32.grub.esp "dongle_iso"
 }
 
 # Prepares GRUB (32 bit) for El Torito booting
@@ -3089,12 +3114,12 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
 
 # Prepares GRUB (32 bit) El Torito for UEFI on the ISO image
 _make_bootmode_uefi-ia32.grub.eltorito_iso() {
-    _make_bootmode_uefi-ia32.grub.eltorito "${isofs_dir}" "iso"
+    _make_bootmode_uefi-ia32.grub.eltorito "iso" # "${iso_dir}" "iso"
 }
  
 # Prepares GRUB (32 bit) El Torito for UEFI on the dongle ISO image
-_make_bootmode_uefi-ia32.grub.eltorito_dongle() {
-    _make_bootmode_uefi-ia32.grub.eltorito "${dongle_isofs_dir}" "dongle"
+_make_bootmode_uefi-ia32.grub.eltorito_dongle_iso() {
+    _make_bootmode_uefi-ia32.grub.eltorito "dongle_iso" # "${dongle_iso_dir}" "dongle"
 }
 
 # Prepares GRUB for EFI boot
@@ -3132,7 +3157,7 @@ _make_bootmode_uefi-x64.grub.esp_iso() {
 }
 
 # Prepares GRUB for the dongle ISO image
-_make_bootmode_uefi-x64.grub.esp_dongle() {
+_make_bootmode_uefi-x64.grub.esp_dongle_iso() {
     _make_bootmode_uefi-x64.grub.esp
 }
 
@@ -3140,11 +3165,15 @@ _make_bootmode_uefi-x64.grub.esp_dongle() {
 # $1: root file system for GRUB
 # $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-x64.grub.eltorito() {
-    local bootable_dir="${1}"
-    local bootable="${2}"
+    local _bootable="${1}"\
+          _code="x64" \
+          _CODE="x64"
+
+    # local bootable_dir="${1}"
+    # local bootable="${2}"
     # El Torito UEFI boot requires an image containing the EFI system partition.
     # uefi-x64.grub.eltorito has the same requirements as uefi-x64.grub.esp
-    _run_once "_make_bootmode_uefi-x64.grub.esp_${bootable}"
+    _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
 
     # Prepare configuration files
     _run_once _make_common_bootmode_grub_cfg
@@ -3159,34 +3188,35 @@ _make_bootmode_uefi-x64.grub.eltorito() {
       "Preparing an /EFI directory for"
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
-    install -d \
-            -m 0755 -- \
-            "${bootable_dir}/EFI/BOOT"
+
+    _install_dir_cmd "${_bootable}" \
+                     "/EFI/BOOT"
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    install -m 0644 -- \
-            "${work_dir}/BOOTx64.EFI" \
-            "${bootable_dir}/EFI/BOOT/BOOTx64.EFI"
+    _install_cmd "${_bootable}" \
+                 "${work_dir}/BOOT${_CODE}.EFI" \
+                 "/EFI/BOOT/BOOT${_CODE}.EFI"
 
     # Copy GRUB files
-    _run_once "_make_common_bootmode_grub_copy_to_isofs_${bootable}"
+    _run_once "_make_common_bootmode_grub_copy_to_isofs_${_bootable}"
 
     # edk2-shell based UEFI shell
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" "${bootable_dir}/shellx64.efi"
-    fi
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      _install_cmd "${_bootable}" \
+                   "$(get_efi_sh "${_code}")" \
+                   "/shellx64.efi"
 
     _msg_info "Done!"
 }
 
 # Prepares GRUB El Torito for UEFI on the ISO image
 _make_bootmode_uefi-x64.grub.eltorito_iso() {
-    _make_bootmode_uefi-x64.grub.eltorito "${isofs_dir}" "iso"
+    _make_bootmode_uefi-x64.grub.eltorito "iso" # "${iso_dir}" "iso"
 }
 
 # Prepares GRUB El Torito for UEFI the dongle ISO image
-_make_bootmode_uefi-x64.grub.eltorito_dongle() {
-    _make_bootmode_uefi-x64.grub.eltorito "${dongle_isofs_dir}" "dongle"
+_make_bootmode_uefi-x64.grub.eltorito_dongle_iso() {
+    _make_bootmode_uefi-x64.grub.eltorito "dongle_iso" # "${dongle_iso_dir}" "dongle"
 }
 
 _get_efi_sh() {
@@ -3204,7 +3234,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
           _file \
           _results \
           efi_boot_size \
-          _systemd_boot
+          _systemd_boot \
+          _tmp_cfg="${work_dir}/bl_tmp.cfg"
     _bl="/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     _msg_info "Setting up systemd-boot for UEFI booting..."
 
@@ -3231,29 +3262,31 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     _mkefi_boot
 
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    "$(_install_dir_cmd "efi_boot")" \
-        "${pacstrap_dir}${_bl}" \
-        "::/EFI/BOOT/BOOT${_CODE}.EFI"
+    _install_cmd "efi_boot" \
+                 "${pacstrap_dir}${_bl}" \
+                 "/EFI/BOOT/BOOT${_CODE}.EFI"
 
     # Copy systemd-boot configuration files
-    "$(_install_dir_cmd "efi_boot")" \
-        "::/loader"
-        "::/loader/entries"
-    "$(_install_cmd "efi_boot")" \
-        "${profile}/efiboot/loader/loader.conf" \
-        "::/loader/"
+    _install_dir_cmd "efi_boot" \
+                     "/loader" \
+                     "/loader/entries"
+    _install_cmd "efi_boot" \
+                 "${profile}/efiboot/loader/loader.conf" \
+                 "/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
         _build_bootloader_config "${_conf}" \
-                                 "systemd-boot" | \
-          "$(_install_dir_cmd "efi_boot")" - \
-              "::/loader/entries/${_conf##*/}"
-        done
+                                 "systemd-boot" > \
+          "${_tmp_cfg}" 
+        _install_cmd "efi_boot" \
+                     "${_tmp_cfg}" \
+                     "/loader/entries/${_conf##*/}"
+    done
 
     # shellx64.efi is picked up automatically when on /
     [[ -e "$(_get_efi_sh "${_code}" ]] && \
-      "$(_install_cmd "efi_boot")" \
-          "$(_get_efi_sh "${_code}")" \
-          "::/shell${_code}.efi"
+      _install_cmd "efi_boot" \
+                   "$(_get_efi_sh "${_code}")" \
+                   "/shell${_code}.efi"
 
     # Copy kernel and initramfs to FAT image.
     # systemd-boot can only access files from
@@ -3275,52 +3308,61 @@ _make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
 
 # Prepares systemd-boot for El Torito booting
 _make_bootmode_uefi-x64.systemd-boot.eltorito() {
-    local bootable_dir="${1}"
-    local bootable="${2}"
+    # local bootable_dir="${1}"
+    local _bootable="${2}" \
+          _bl \
+          _code="x64" \
+          _CODE="x64" \
+          _tmp_cfg="${work_dir}/bl_tmp.cfg"
+    _bl="${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     # El Torito UEFI boot requires an image containing the EFI system partition.
     # uefi-x64.systemd-boot.eltorito has the same requirements as
     # uefi-x64.systemd-boot.esp
-    _run_once "_make_bootmode_uefi-x64.systemd-boot.esp_${bootable}"
+    _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
 
     # Additionally set up systemd-boot in ISO 9660.
     # This allows creating a medium for the live environment by using
     # manual partitioning and simply copying the ISO 9660 file system contents.
     # This is not related to El Torito booting and no firmware uses these files.
     _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    "$(_install_dir_cmd "bootable")" \
-        "${bootable_dir}/EFI/BOOT"
+    # marker here
+    _install_dir_cmd "${_bootable}" \
+                     "/EFI/BOOT"
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    "$(_install_cmd "bootable")" \
-        "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" \
-        "${bootable_dir}/EFI/BOOT/BOOTx64.EFI"
+    _install_cmd "${_bootable}"
+                 "${_bl}" \
+                 "/EFI/BOOT/BOOT${_CODE}.EFI"
     # Copy systemd-boot configuration files
-    "$(_install_dir_cmd "bootable")" \
-        "${bootable_dir}/loader/entries"
-    "$(_install_cmd "bootable")" \
-        "${profile}/efiboot/loader/loader.conf" \
-        "${bootable_dir}/loader/"
+    _install_dir_cmd "${_bootable}"
+                     "/loader/entries"
+    _install_cmd "${_bootable}" \
+                 "${profile}/efiboot/loader/loader.conf" \
+                 "/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
         _build_bootloader_config "${_conf}" \
                                   "systemd-boot" > \
-          "${bootable_dir}/loader/entries/${_conf##*/}"
+          "${_tmp_cfg}"
+        _install_cmd "${_bootable}" \
+                     "${_tmp_cfg}" \
+                     "/loader/entries/${_conf##*/}"
     done
     # edk2-shell based UEFI shell
     # shellx64.efi is picked up automatically when on /
     [[ -e "$(_get_efi_sh "${_code}")" ]] && \
-      "$(_install_cmd "bootable")" \
+      _install_cmd "${_bootable}"
           "$(_get_efi_sh "${_code}")" \
-          "${bootable_dir}/shellx64.efi"
+          "/shellx64.efi"
     _msg_info "Done!"
 }
 
 # Prepares systemd-boot for El Torito booting on the ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_iso() {
-    _make_bootmode_uefi-x64.systemd-boot.eltorito "${isofs_dir}" "iso"
+    _make_bootmode_uefi-x64.systemd-boot.eltorito "iso" # "${iso_dir}" "iso"
 }
 
 # Prepares systemd-boot for El Torito booting on the dongle ISO
-_make_bootmode_uefi-x64.systemd-boot.eltorito_dongle() {
-    _make_bootmode_uefi-x64.systemd-boot.eltorito "${dongle_isofs_dir}" "dongle"
+_make_bootmode_uefi-x64.systemd-boot.eltorito_dongle_iso() {
+    _make_bootmode_uefi-x64.systemd-boot.eltorito "dongle_iso" # "${dongle_iso_dir}" "dongle"
 }
 
 ##################################
@@ -3395,10 +3437,10 @@ _validate_requirements_airootfs_image_type_ext4() {
 _validate_requirements_airootfs_image_type_luks() {
     local _encryption_key \
           _key_auto
-    _encryption_key="$(_get_obj_var "airootfs" \
-                                    "encryption_key")"
-    _key_auto="$(_get_obj_var "airootfs" \
-                              "encryption_key_auto")"
+    _encryption_key="$(_get "airootfs" \
+                            "encryption_key")"
+    _key_auto="$(_get "airootfs" \
+                      "encryption_key_auto")"
     _validate_requirements_image_type_luks
     [[ -n "${_encryption_key}" ]] && \
       _resolve_fs_encryption_key "airootfs" \
@@ -3465,8 +3507,8 @@ _validate_requirements_persistent_image_type_ext4() {
     fi
     if [ ! -e "${_dongle_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '$(_get_obj_var "dongle_persistent" \
-                                          "image_type")' "
+        _msg=("Validating '$(_get "dongle_persistent" \
+                                  "image_type")' "
               "for dongle persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
@@ -3749,8 +3791,8 @@ _get_airootfs_path(){
 
 # Returns workdir airootfs image path
 _get_keys_img(){
-    echo "$(_get_obj_var "dongle_isofs" \
-                         "dir")/${_name}.$(_get_fs_ext "keys")"
+    echo "$(_get "dongle_isofs" \
+                 "dir")/${_name}.$(_get_fs_ext "keys")"
 }
 
 # Builds airootfs filesystem image
@@ -3763,10 +3805,10 @@ _prepare_airootfs_image() {
     [[ -n "${gpg_key}" ]] && \
       _mksignature "$(_get_airootfs_img)" && \
       [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-        dongle_isofs_dir="${work_dir}/dongle_iso" \
+        dongle_iso_dir="${work_dir}/dongle_iso" \
         dongle_persistent_dir="${work_dir}/dongle_persistent" \
         dongle_boot_dir="${work_dir}/dongle_boot" && \
-        _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}" &&
+        _sig_dir="${dongle_iso_dir}/${install_dir}/${arch}" &&
         install -d -m711 "${_sig_dir}" &&
         cp "$(_get_airootfs_img).sig" \
            "${_sig_dir}"
@@ -3871,7 +3913,7 @@ _prepare_dongle_boot_image() {
 _export_netboot_artifacts() {
     _msg_info "Exporting netboot artifacts..."
     install -d -m 0755 "${out_dir}"
-    cp -a -- "${isofs_dir}/${install_dir}/" "${out_dir}/"
+    cp -a -- "${iso_dir}/${install_dir}/" "${out_dir}/"
     _msg_info "Done!"
     du -hs -- "${out_dir}/${install_dir}"
 }
@@ -3888,7 +3930,7 @@ _sign_netboot_artifacts() {
       -inkey "${cert_list[1]}"
       -outform DER)
     _msg_info "Signing netboot artifacts..."
-    _dir="${isofs_dir}/${install_dir}/boot"
+    _dir="${iso_dir}/${install_dir}/boot"
     for _file in "${ucodes[@]}"; do
         [[ -e "${_dir}/${_file}" ]] && \
           _files_to_sign+=("${_dir}/${_file}")
@@ -3924,8 +3966,8 @@ _validate_requirements_persistent_image_type_ext4() {
     fi
     if [ ! -e "${_dongle_ro_udev_rule}" ]; then
         (( validation_error=validation_error+1 ))
-        _msg=("Validating '$(_get_obj_var "dongle_persistent" \
-                                          "image_type")' "
+        _msg=("Validating '$(_get "dongle_persistent" \
+                                  "image_type")' "
               "for dongle persistent partition: udev rule not found!")
         _msg_error "${_msg[*]}" 0
     fi
@@ -3951,8 +3993,8 @@ _validate_common_requirements_buildmode_all() {
     _check_missing_cmd "find" "findutils"
     _check_missing_cmd "gzip"
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       [[ "$(_get_obj_var "persistent" \
-                          "image_type")" != *"luks" ]]; then
+       [[ "$(_get "persistent" \
+                  "image_type")" != *"luks" ]]; then
         _msg=("Validating build mode '${_buildmode}':"
               "'dongle' build mode not selected;"
               "persistent partition encryption disabled."
@@ -4022,8 +4064,8 @@ _validate_requirements_fs_image_type() {
     local _error_msg \
           _image_type
           _validate_fun_error_msg=()
-    _image_type="$(_get_obj_var "${_fs_image}" \
-                                "image_type")"
+    _image_type="$(_get "${_fs_image}" \
+                        "image_type")"
     _error_msg="Unsupported image type: '${_image_type}'"
     _validate_fun_error_msg=(
       "Validating the requirements"
@@ -4217,14 +4259,14 @@ _add_xorrisofs_options_bios.grub.mbr() {
 _add_xorrisofs_options_bios.grub.mbr_iso() {
     xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.grub.mbr \
-             "${isofs_dir}" \
+             "${iso_dir}" \
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_bios.grub.mbr_dongle() {
+_add_xorrisofs_options_bios.grub.mbr_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.grub.mbr \
-             "${dongle_isofs_dir}" \
+             "${dongle_iso_dir}" \
              "${dongle_xorrisofs_options[@]}")")
 }
 
@@ -4251,7 +4293,7 @@ _add_xorrisofs_options_bios.grub.eltorito_iso() {
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_bios.grub.eltorito_dongle() {
+_add_xorrisofs_options_bios.grub.eltorito_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.grub.eltorito \
              "${dongle_xorrisofs_options[@]}")")
@@ -4286,14 +4328,14 @@ _add_xorrisofs_options_bios.syslinux.mbr() {
 _add_xorrisofs_options_bios.syslinux.mbr_iso() {
     xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.syslinux.mbr \
-             "${isofs_dir}" \
+             "${iso_dir}" \
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_bios.syslinux.mbr_dongle() {
+_add_xorrisofs_options_bios.syslinux.mbr_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.syslinux.mbr \
-             "${dongle_isofs_dir}" \
+             "${dongle_iso_dir}" \
              "${dongle_xorrisofs_options[@]}")")
 }
 
@@ -4317,7 +4359,7 @@ _add_xorrisofs_options_bios.syslinux.eltorito_iso() {
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_bios.syslinux.eltorito_dongle() {
+_add_xorrisofs_options_bios.syslinux.eltorito_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_bios.syslinux.eltorito \
              "${dongle_xorrisofs_options[@]}")")
@@ -4345,7 +4387,7 @@ _add_xorrisofs_options_uefi-ia32.grub.esp_iso() {
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_uefi-ia32.grub.esp_dongle() {
+_add_xorrisofs_options_uefi-ia32.grub.esp_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-ia32.grub.esp \
              "${dongle_xorrisofs_options[@]}")")
@@ -4369,7 +4411,7 @@ _add_xorrisofs_options_uefi-ia32.grub.eltorito_iso() {
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_uefi-ia32.grub.eltorito_dongle() {
+_add_xorrisofs_options_uefi-ia32.grub.eltorito_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-ia32.grub.eltorito \
              "${dongle_xorrisofs_options[@]}")")
@@ -4492,14 +4534,14 @@ _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito() {
 _add_xorrisofs_options_uefi-x64.systemd-boot.eltorito_iso() {
     xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
-             "${isofs_dir}" \
+             "${iso_dir}" \
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito_dongle() {
+_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-x64.systemd-boot.eltorito \
-             "${dongle_isofs_dir}" \
+             "${dongle_iso_dir}" \
              "${dongle_xorrisofs_options[@]}")")
 }
 
@@ -4554,7 +4596,7 @@ _add_xorrisofs_options_uefi-x64.grub.esp_iso() {
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_uefi-x64.grub.esp_dongle() {
+_add_xorrisofs_options_uefi-x64.grub.esp_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-x64.grub.esp \
              "${dongle_xorrisofs_options[@]}")")
@@ -4626,14 +4668,14 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
 _add_xorrisofs_options_uefi-x64.grub.eltorito_iso() {
     xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
-             "${isofs_dir}" \
+             "${iso_dir}" \
              "${xorrisofs_options[@]}")")
 }
 
-_add_xorrisofs_options_uefi-x64.grub.eltorito_dongle() {
+_add_xorrisofs_options_uefi-x64.grub.eltorito_dongle_iso() {
     dongle_xorrisofs_options=(
       "$(_add_xorrisofs_options_uefi-x64.grub.eltorito \
-             "${dongle_isofs_dir}" \
+             "${dongle_iso_dir}" \
              "${dongle_xorrisofs_options[@]}")")
 }
 
@@ -4661,7 +4703,7 @@ _build_dongle_image() {
           dongle_xorriso_cmd_line \
           dongle_xorriso_options=() \
           dongle_xorrisofs_options=()
-    dongle_isofs_dir="${work_dir}/dongle_iso"
+    dongle_iso_dir="${work_dir}/dongle_iso"
 
     # Add required xorrisofs options for each boot mode
     for bootmode in "${bootmodes[@]}"; do
@@ -4720,7 +4762,7 @@ _build_dongle_image() {
       '-preparer' "\"prepared by ${app_name}\""
       "${dongle_xorrisofs_options[@]}"
       '-output' "\"${out_dir}/${image_name}\""
-      "${dongle_isofs_dir}/")
+      "${dongle_iso_dir}/")
     eval "xorriso ${dongle_xorriso_cmd_line[*]}"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
@@ -4729,7 +4771,7 @@ _build_dongle_image() {
 # Builds ISO image
 _build_iso_image() {
     local xorriso_cmd_line
-    isofs_dir="${work_dir}/iso"
+    iso_dir="${work_dir}/iso"
     local bootmode
 
     [[ -d "${out_dir}" ]] || \
@@ -4774,18 +4816,18 @@ _build_iso_image() {
       '-preparer' "\"prepared by ${app_name}\""
       "${xorrisofs_options[@]}"
       '-output' "${out_dir}/${image_name}"
-      "${isofs_dir}/")
+      "${iso_dir}/")
     _msg_info "Creating ISO image..."
     _msg_info "xorriso args: ${xorriso_cmd_line[*]}"
     eval "xorriso ${xorriso_cmd_line[*]}"
     _msg_info "Done!"
     du -h -- "${out_dir}/${image_name}"
 
-    if [[ "$(_get_obj_var "airootfs" \
-                          "image_type")" == *"luks"* ]] && \
+    if [[ "$(_get "airootfs" \
+                  "image_type")" == *"luks"* ]] && \
        [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        cp "$(_get_obj_var "airootfs" \
-                           "encryption_key")" \
+        cp "$(_get "airootfs" \
+                   "encryption_key")" \
            "${out_dir}"
         cp "${persistent_encryption_key}" \
            "${out_dir}"
@@ -4906,8 +4948,8 @@ _set_overrides() {
       ["recovery_encryption_key"]="auto"
       ["swap_encryption_key"]="auto"
       ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
-      ["isofs_dir"]="${work_dir}/iso"
-      ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+      ["iso_dir"]="${work_dir}/iso"
+      ["dongle_iso_dir"]="${work_dir}/dongle_iso"
       ["recovery"]="false"
       ["iso_name"]="${app_name}"
     )
@@ -5002,8 +5044,8 @@ _set_overrides() {
       ["recovery_encryption_key"]="auto"
       ["swap_encryption_key"]="auto"
       ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
-      ["isofs_dir"]="${work_dir}/iso"
-      ["dongle_isofs_dir"]="${work_dir}/dongle_iso"
+      ["iso_dir"]="${work_dir}/iso"
+      ["dongle_iso_dir"]="${work_dir}/dongle_iso"
       ["recovery"]="false"
       ["iso_name"]="${app_name}")
 
@@ -5039,7 +5081,7 @@ _export_gpg_publickey() {
 _build_dongle_base() {
     local run_once_mode="base"
     local _sig_dir
-    _sig_dir="${dongle_isofs_dir}/${install_dir}/${arch}"
+    _sig_dir="${dongle_iso_dir}/${install_dir}/${arch}"
     keys_dir="${work_dir}/keys"
 
     _setup_work_dir "keys"
@@ -5057,17 +5099,17 @@ _build_dongle_base() {
       _run_once _prepare_keys_image
 
     _run_once _make_boot_on_dongle
-    _make_bootmodes_dongle
+    _make_bootmodes_dongle_iso
 }
 
 # Create working directory
 # $1: value in fs_images
 _setup_work_dir() {
     local _image="${1}"
-    [[ -d "$(_get_obj_var "${_image}" \
-                          "dir")" ]] || \
-      install -d -- "$(_get_obj_var "${_image}" \
-                                    "dir")"
+    [[ -d "$(_get "${_image}" \
+                  "dir")" ]] || \
+      install -d -- "$(_get "${_image}" \
+                            "dir")"
 }
 
 # build the base for an ISO and/or a netboot target
@@ -5078,9 +5120,9 @@ _build_iso_base() {
     local buildmode_pkg_list=("${pkg_list[@]}")
     # Set up essential directory paths
     pacstrap_dir="${work_dir}/${arch}/airootfs"
-    isofs_dir="${work_dir}/iso"
+    iso_dir="${work_dir}/iso"
     keys_dir="${work_dir}/keys"
-    airootfs_dir="${isofs_dir}/${install_dir}/${arch}"
+    airootfs_dir="${iso_dir}/${install_dir}/${arch}"
     persistent_dir="${work_dir}/persistent"
     dongle_persistent_dir="${work_dir}/dongle_persistent"
     dongle_boot_dir="${work_dir}/dongle_boot"
@@ -5168,7 +5210,7 @@ _build_buildmode_iso() {
       "${iso_version}"
       "${arch}")
     local image_name="$(IFS="-" ;
-                       echo "${_image_name[*]}.iso")" \
+                        echo "${_image_name[*]}.iso")" \
           run_once_mode="${buildmode}"
     efi_boot_img="${work_dir}/efiboot.img"
     _build_iso_base
