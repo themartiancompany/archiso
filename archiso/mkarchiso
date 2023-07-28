@@ -1266,6 +1266,42 @@ _mkimg() {
 # Volumes functions
 ###################################
 
+# Install public files to a given volume
+# $1: volume
+# $@: files
+# $#: destination
+_install_cmd(){
+    local _volume="${1}" \
+          _cmd
+    _cmd=(
+      install -D
+              -m 0644 --)
+    [[ "${_volume}" == "efi_boot" ]] && \
+      _cmd=(
+        mcopy -D o \
+              -i "$(_get_obj_var "efi_boot" \
+                                 "img")")
+    echo "${_cmd[@]}"
+}
+
+# Install files to a given volume
+# $1: volume
+# $@: files
+# $#: destination
+_install_dir_cmd(){
+    local _volume="${1}" \
+          _cmd
+    _cmd=(
+      install -d
+              -m 0755 --)
+    [[ "${_volume}" == "efi_boot" ]] && \
+      _cmd=(
+        mmd -D o
+            -i "$(_get_obj_var "efi_boot" \
+                               "img")")
+    echo "${_cmd[@]}"
+}
+
 ### Utility fuctions
 
 # Returns the outest file system type for
@@ -1385,7 +1421,8 @@ _mkairootfs() {
     _auto_size=""
     [[ -e "${_dir}" ]] || \
       _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "${airootfs_dir}"
+    install -d -m 0755 -- "$(_get_obj_var "airootfs" \
+                                          "dir")"
     _mkimg "airootfs"
 }
 
@@ -1404,10 +1441,8 @@ _mkefi_boot() {
 
     # Create the default/fallback boot path in
     # which boot loaders will be placed later.
-    mmd -D o \
-        -i "${_image_path}" \
-        ::/EFI \
-        ::/EFI/BOOT
+    "$(_install_dir_cmd "efi_boot")" "::/EFI" \
+                                     "::/EFI/BOOT"
 }
 
 ## Persistent (the user data partition)
@@ -1631,14 +1666,14 @@ _resolve_fs_encryption_key(){
           _out_dir
     _encryption_key="$(_get_obj_var "${fs_image}" \
                                     "encryption_key")"
-    _outdir="$(dirname "${_auto_key}")"
+    _out_dir="$(dirname "${_auto_key}")"
     [ ! -f "${_encryption_key}" ] && \
       if [ "${_encryption_key}" = 'auto' ]; then
           _set_obj_var "${_fs_image}" \
                        "encryption_key" \
                        "${_auto_key}"
           [ ! -d "${_out_dir}" ] && \
-            install -d "${_out_dir}"
+            install -d -m 700 "${_out_dir}"
           _gen_key "${_auto_key}" \
                    "binary"
       elif [ "${_encryption_key}" != 'auto' ]; then
@@ -2298,7 +2333,7 @@ _get_cryptomount_uuid() {
 }
 
 ###############################################
-# Bootloaders utility functions
+# Bootloaders related functions
 ###############################################
 
 # Returns the correct device selection command line for use in a templatized GRUB
@@ -2422,7 +2457,7 @@ EOF
       "${_embed_cfg}"
 }
 
-# Minimum GRUB module list to open a luks2 image
+# Get correct GRUB module list for a given platform
 # Module list from 
 # https://bugs.archlinux.org/task/71382#comment202911
 # $1: 'bios' or 'efi'
@@ -2430,11 +2465,15 @@ _get_grubmodules(){
     local _mode="${1}"
     _modules=(
       afsplitter boot bufio chain configfile
-      cryptodisk disk echo ext2 gcry_rijndael
-      gcry_sha256 gcry_sha512 halt iso9660 linux
-      loadenv loopback luks2 minicmd  normal 
-      part_apple part_gpt part_msdos password_pbkdf2
+      disk echo ext2
+      gcry_sha256 halt iso9660 linux
+      loadenv loopback minicmd  normal 
+      part_apple part_gpt part_msdos
       reboot search search_fs_uuid test usb)
+    # Encryption specific modules
+    _modules+=(
+      cryptodisk gcry_rijndael gcry_sha512
+      luks2 password_pbkdf2)
     if [[ "${_mode}" != "pc" ]] && \
        [[ "${_mode}" != "pc-eltorito" ]]; then
         _modules+=(
@@ -2454,8 +2493,60 @@ _get_grubmodules(){
     echo "${_modules[*]}"
 }
 
+## GRUB image making
+
+# Produces a standalone GRUB binary
+# $1: architecture (x86_64, i386)
+# $2: platform (efi, pc)
+# $3: output file or directory
+#     default name: BOOT<IA32/X64>.EFI
+_make_grub() {
+    local _code="${1}" \
+          _platform="${2}" \
+          _out="${3}"
+    local _arch \
+          _cfg="${work_dir}/grub.cfg"
+          _embed_cfg="${work_dir}/grub-embed.cfg" \
+          _modules="$(_get_grubmodules "${_platform}")" \
+          _grub_options=() \
+          _CODE="${_code}" \
+          _PLATFORM
+    _grub_options=(
+      -O "${_arch}-${_platform}"
+      --modules="${_modules}"
+      --locales="en@quot"
+      --themes=""
+      --sbat=/usr/share/grub/sbat.csv
+      --disable-shim-lock
+      --compress=xz)
+    [[ "${_code}" == "ia32" ]] && \
+      _arch="i386" \
+      _CODE="IA32"
+    [[ "${_code}" == "x64" ]] && \
+      _arch="x86_64"
+    _PLATFORM="$(echo "${_platform}" | \
+                   tr '[:lower:]' '[:upper:]')"
+    [[ "${_platform}" == "pc" ]] && \
+      _grub_options+=(
+        --install-modules="${_modules}") \
+      _PLATFORM="MBR"
+    [[ "${_platform}" == "pc-eltorito" ]] && \
+      _PLATFORM="ELTORITO"
+    [[ "${_platform}" == "pc"* ]] && \
+      _grub_options+=(
+        --fonts="") \
+      _embed_cfg="${_cfg}"
+    [ -d "${_out}" ] && \
+      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
+    _run_once _make_common_bootmode_grub_cfg
+    _grub_options+=(
+      -o "${_out}")
+    grub-mkstandalone "${_grub_options[@]}" \
+                      "boot/grub/grub.cfg=${_embed_cfg}"
+}
+
 ###########################
-# Kernel related functions
+# Kernel install functions
 ###########################
 
 ## ISO file system
@@ -2548,27 +2639,24 @@ _make_boot_on_fat() {
     _images=(
       "initramfs-*"
       "vmlinuz-*")
-    mmd -D o \
-        -i "${efi_boot_img}" \
+    "$(_install_dir_cmd "efi_boot")"
         "::/${install_dir}" \
         "::/${install_dir}/boot" \
         "::/${install_dir}/boot/${arch}"
     for _query in "${_images[@]}"; do
         find "${work_dir}" \
              -iname "${_query}" \
-             -exec mcopy -D "o" \
-                         -i "${efi_boot_img}" \
-                         {} \
-                         "::/${install_dir}/boot/${arch}/" \; \
+             -exec "$(_install_cmd "efi_boot")" \
+                       {} \
+                       "::/${install_dir}/boot/${arch}/" \; \
              -quit
     done
     for _ucode in "${ucodes[@]}"; do
         find "${work_dir}" \
              -iname "${_ucode_image}" \
-             -exec mcopy -D "o" \
-                         -i "${efi_boot_img}" \
-                         {} \
-                         "::/${install_dir}/boot/" \;
+             -exec "$(_install_cmd "efi_boot")" \
+                       {} \
+                       "::/${install_dir}/boot/" \;
     done
     _msg_info "Done!"
 }
@@ -2647,32 +2735,25 @@ _make_bootmode_bios.grub.mbr_dongle() {
 _make_bootmode_bios.grub.eltorito() {
     local bootable_dir="${1}" \
           _msg \
-          _platform="pc-eltorito"
+          _platform="pc-eltorito" \
+          _code="ia32" \
+          _CODE="IA32" 
     _msg=("Setting up GRUB for BIOS booting"
           "from an optical disc...")
-          _msg_info "${_msg[*]}"
+    _msg_info "${_msg[*]}"
     install -d \
             -m 0755 -- \
             "${bootable_dir}/EFI/BOOT"
     install -m 0644 -- \
             "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
             "${bootable_dir}/EFI/BOOT/"
-    _run_once _make_common_bootmode_grub_cfg
-    _grub_opts=(
-      -O i386-pc-eltorito
-      --modules="$(_get_grubmodules "bios")"
-      --locales="en@quot"
-      --themes=""
-      --fonts=""
-      --install-modules="$(_get_grubmodules "bios")"
-      --disable-shim-lock
-      --compress=xz
-      -o "${work_dir}/BOOTIA32.ELTORITO"
-      "boot/grub/grub.cfg=${work_dir}/grub/grub.cfg")
 
-    grub-mkstandalone "${_grub_opts[@]}"
+    _make_grub "${_code}" \
+               "${_platform}" \
+               "${work_dir}"
+
     install -m 0644 -- \
-            "${work_dir}/BOOTIA32.ELTORITO" \
+            "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
             "${bootable_dir}/EFI/BOOT"
 
     if [[ "${bootable}" == "iso" ]]; then
@@ -2824,13 +2905,11 @@ _make_bootmode_bios.syslinux.eltorito_dongle() {
 _make_common_bootmode_grub_copy_to_efi_boot_img() {
     local files_to_copy=()
     files_to_copy+=("${work_dir}/grub/"*'.cfg')
-    if compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null; then
-        files_to_copy+=("${profile}/grub/"!(*.cfg))
-    fi
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${files_to_copy[@]}" \
-          "::/EFI/BOOT/"
+    (compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null) && \
+      files_to_copy+=("${profile}/grub/"!(*.cfg))
+    "$(_install_cmd "efi_boot")" \
+        "${files_to_copy[@]}" \
+        "::/EFI/BOOT/"
 }
 
 # Fills templatized udev rules for the persistent partitions
@@ -2871,86 +2950,6 @@ _make_common_bootmode_grub_copy_to_isofs() {
     install -m 0644 -- "${files_to_copy[@]}" "${isofs_dir}/EFI/BOOT/"
 }
 
-# Minimum GRUB module list to open a luks2 image
-# Module list from 
-# https://bugs.archlinux.org/task/71382#comment202911
-# $1: 'bios' or 'efi'
-_get_grubmodules(){
-    local _mode="${1}"
-    _modules=(
-      afsplitter boot bufio chain configfile
-      cryptodisk disk echo ext2 gcry_rijndael
-      gcry_sha256 gcry_sha512 halt iso9660 linux
-      loadenv loopback luks2 minicmd  normal 
-      part_apple part_gpt part_msdos password_pbkdf2
-      reboot search search_fs_uuid test usb)
-    if [ "${_mode}" != "bios" ]; then
-        _modules+=(
-          at_keyboard all_video btrfs cat echo
-          diskfilter echo efifwsetup f2fs fat
-          font gcry_crc gfxmenu gfxterm gzio
-          hfsplus jpeg keylayouts ls lsefi
-          lsefimmap lzopio ntfs png read regexp
-          search_fs_file search_label serial sleep
-          tpm trig usbserial_common usbserial_ftdi
-          usbserial_pl2303 usbserial_usbdebug video
-          xfs zstd)
-    elif [ "${_mode}" == "bios" ] ; then
-        _modules+=(biosdisk)
-    fi
-    echo "${_modules[*]}"
-}
-
-# Produces a standalone GRUB binary
-# $1: architecture (x86_64, i386)
-# $2: platform (efi, pc)
-# $3: output file or directory
-#     default name: BOOT<IA32/X64>.EFI
-_make_grub() {
-    local _code="${1}" \
-          _platform="${2}" \
-          _out="${3}"
-    local _arch \
-          _cfg="${work_dir}/grub.cfg"
-          _embed_cfg="${work_dir}/grub-embed.cfg" \
-          _modules="$(_get_grubmodules "${_platform}")" \
-          _grub_options=() \
-          _CODE="${_code}" \
-          _PLATFORM
-    _grub_options=(
-      -O "${_arch}-${_platform}"
-      --modules="${_modules}"
-      --locales="en@quot"
-      --themes=""
-      --sbat=/usr/share/grub/sbat.csv
-      --disable-shim-lock
-      --compress=xz)
-    [[ "${_code}" == "ia32" ]] && \
-      _arch="i386" \
-      _CODE="IA32"
-    [[ "${_code}" == "x64" ]] && \
-      _arch="x86_64"
-    _PLATFORM="$(echo "${_platform}" | \
-                   tr '[:lower:]' '[:upper:]')"
-    [[ "${_platform}" == "pc" ]] && \
-      _grub_options+=(
-        --install-modules="${_modules}") \
-      _PLATFORM="MBR"
-    [[ "${_platform}" == "pc-eltorito" ]] && \
-      _PLATFORM="ELTORITO"
-    [[ "${_platform}" == "pc"* ]] && \
-      _grub_options+=(
-        --fonts="") \
-      _embed_cfg="${_cfg}"
-    [ -d "${_out}" ] && \
-      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
-    _run_once _make_common_bootmode_grub_cfg
-    _grub_options+=(
-      -o "${_out}")
-    grub-mkstandalone "${_grub_options[@]}" \
-                      "boot/grub/grub.cfg=${_embed_cfg}"
-}
-
 # Prepares GRUB (32-bit) for EFI boot
 # $1: device type ('iso', 'dongle')
 _make_grub_esp() {
@@ -2959,13 +2958,11 @@ _make_grub_esp() {
           _platform="efi" \
           _code="x64" \
           _CODE="x64" \
-          _efi_sh
     [[ "${_arch}" == "i386" ]] && \
       _code="ia32" \
-      _CODE="IA32"
+      _CODE="IA32" \
       _other_code="x64"
-    _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
-    _make_grub "${_arch}" \
+    _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
     # Add GRUB to the list of files used to
@@ -2983,17 +2980,15 @@ _make_grub_esp() {
         _mkefi_boot
     fi
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${work_dir}/BOOTI${_CODE}.EFI" \
-          "::/EFI/BOOT/BOOTI${_CODE}.EFI"
+    "$(_install_cmd "efi_boot")" \
+        "${work_dir}/BOOTI${_CODE}.EFI" \
+        "::/EFI/BOOT/BOOTI${_CODE}.EFI"
     # Copy GRUB files
     _run_once "_make_common_bootmode_grub_copy_to_efi_boot_img"
     [[ -e "$(_get_efi_sh "${_code}")" ]] && \
-      mcopy -D o \
-            -i "${efi_boot_img}" \
-            "$(_get_efi_sh "${_code}")" \
-            "::/shell${_code}.efi"
+      "$(_install_cmd "efi_boot")" \
+          "$(_get_efi_sh "${_code}")" \
+          "::/shell${_code}.efi"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
@@ -3006,7 +3001,7 @@ _make_bootmode_uefi-ia32.grub.esp() {
           _CODE="IA32"
           _platform="efi"
           _PLATFORM="EFI"
-    _make_grub "${_arch}" \
+    _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
     # Add GRUB to the list of files used to
@@ -3026,19 +3021,17 @@ _make_bootmode_uefi-ia32.grub.esp() {
     fi
 
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
-          "::/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
+    "$(_install_cmd "efi_boot")" \
+        "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+        "::/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
 
     # Copy GRUB files
     _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
 
     [[ -e "$(_get_efi_sh "${_code}")" ]] && \
-      mcopy -D o \
-            -i "${efi_boot_img}" \
-            "$(_get_efi_sh "${_code}")" \
-            "::/shell${_code}.${_platform}"
+      "$(_install_cmd "efi_boot")" \
+          "$(_get_efi_sh "${_code}")" \
+           "::/shell${_code}.${_platform}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
@@ -3115,26 +3108,21 @@ _make_bootmode_uefi-x64.grub.esp() {
     _platform="efi"
     _code="x64"
     _CODE="x64"
-    _make_grub "${_arch}" \
+    _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
     # Create a FAT image for the EFI system partition
     _mkefi_boot
     # Copy GRUB EFI binary to the default/fallback boot path
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${work_dir}/BOOT${_CODE}.EFI" \
-          "::/EFI/BOOT/BOOT${_CODE}.EFI"
+    "$(_install_cmd "efi_boot")" \
+        "${work_dir}/BOOT${_CODE}.EFI" \
+        "::/EFI/BOOT/BOOT${_CODE}.EFI"
     # Copy GRUB files
     _run_once _make_common_bootmode_grub_copy_to_efi_boot_img
-    # _add_efi_sh "${_code}" \
-    #             "${_install_dir}" \
-    #             "${_install_path}"
     [[ -e "$(_get_efi_sh "${_code}")" ]] && \
-      mcopy -D o \
-            -i "${efi_boot_img}" \
-            "$(_get_efi_sh "${_code}")" \
-            "::/shell${_code}.efi"
+      "$(_install_cmd "efi_boot")" \
+          "$(_get_efi_sh "${_code}")" \
+          "::/shell${_code}.efi"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
  
@@ -3243,34 +3231,29 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     _mkefi_boot
 
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${pacstrap_dir}${_bl}" \
-          "::/EFI/BOOT/BOOT${_CODE}.EFI"
+    "$(_install_dir_cmd "efi_boot")" \
+        "${pacstrap_dir}${_bl}" \
+        "::/EFI/BOOT/BOOT${_CODE}.EFI"
 
     # Copy systemd-boot configuration files
-    mmd -D o \
-        -i "${efi_boot_img}" \
-        ::/loader \
-        ::/loader/entries
-    mcopy -D o \
-          -i "${efi_boot_img}" \
-          "${profile}/efiboot/loader/loader.conf" \
-          ::/loader/
+    "$(_install_dir_cmd "efi_boot")" \
+        "::/loader"
+        "::/loader/entries"
+    "$(_install_cmd "efi_boot")" \
+        "${profile}/efiboot/loader/loader.conf" \
+        "::/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
         _build_bootloader_config "${_conf}" \
                                  "systemd-boot" | \
-          mcopy -D o \
-                -i "${efi_boot_img}" - \
-                "::/loader/entries/${_conf##*/}"
+          "$(_install_dir_cmd "efi_boot")" - \
+              "::/loader/entries/${_conf##*/}"
         done
 
     # shellx64.efi is picked up automatically when on /
     [[ -e "$(_get_efi_sh "${_code}" ]] && \
-      mcopy -D o \
-            -i "${efi_boot_img}" \
-            "$(_get_efi_sh "${_code}")" \
-            "::/shell${_code}.efi"
+      "$(_install_cmd "efi_boot")" \
+          "$(_get_efi_sh "${_code}")" \
+          "::/shell${_code}.efi"
 
     # Copy kernel and initramfs to FAT image.
     # systemd-boot can only access files from
@@ -3295,32 +3278,38 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     local bootable_dir="${1}"
     local bootable="${2}"
     # El Torito UEFI boot requires an image containing the EFI system partition.
-    # uefi-x64.systemd-boot.eltorito has the same requirements as uefi-x64.systemd-boot.esp
+    # uefi-x64.systemd-boot.eltorito has the same requirements as
+    # uefi-x64.systemd-boot.esp
     _run_once "_make_bootmode_uefi-x64.systemd-boot.esp_${bootable}"
 
-    # Additionally set up systemd-boot in ISO 9660. This allows creating a medium for the live environment by using
+    # Additionally set up systemd-boot in ISO 9660.
+    # This allows creating a medium for the live environment by using
     # manual partitioning and simply copying the ISO 9660 file system contents.
     # This is not related to El Torito booting and no firmware uses these files.
     _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    install -d -m 0755 -- "${bootable_dir}/EFI/BOOT"
-
+    "$(_install_dir_cmd "bootable")" \
+        "${bootable_dir}/EFI/BOOT"
     # Copy systemd-boot EFI binary to the default/fallback boot path
-    install -m 0644 -- "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" \
+    "$(_install_cmd "bootable")" \
+        "${pacstrap_dir}/usr/lib/systemd/boot/efi/systemd-bootx64.efi" \
         "${bootable_dir}/EFI/BOOT/BOOTx64.EFI"
-
     # Copy systemd-boot configuration files
-    install -d -m 0755 -- "${bootable_dir}/loader/entries"
-    install -m 0644 -- "${profile}/efiboot/loader/loader.conf" "${bootable_dir}/loader/"
+    "$(_install_dir_cmd "bootable")" \
+        "${bootable_dir}/loader/entries"
+    "$(_install_cmd "bootable")" \
+        "${profile}/efiboot/loader/loader.conf" \
+        "${bootable_dir}/loader/"
     for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _build_bootloader_config "${_conf}" "systemd-boot" > "${bootable_dir}/loader/entries/${_conf##*/}"
-        done
-
+        _build_bootloader_config "${_conf}" \
+                                  "systemd-boot" > \
+          "${bootable_dir}/loader/entries/${_conf##*/}"
+    done
     # edk2-shell based UEFI shell
     # shellx64.efi is picked up automatically when on /
-    if [[ -e "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" ]]; then
-        install -m 0644 -- "${pacstrap_dir}/usr/share/edk2-shell/x64/Shell_Full.efi" "${bootable_dir}/shellx64.efi"
-    fi
-
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      "$(_install_cmd "bootable")" \
+          "$(_get_efi_sh "${_code}")" \
+          "${bootable_dir}/shellx64.efi"
     _msg_info "Done!"
 }
 
@@ -4609,11 +4598,10 @@ _add_xorrisofs_options_uefi-x64.grub.eltorito() {
         # The ISO will not contain a GPT partition table, so to be 
         # able to reference efiboot.img, place it as a
         # file inside the ISO 9660 file system
-        install -d \
-                -m 0755 -- \
-                "${bootable_dir}/EFI/archiso"
-        cp -a -- "${efi_boot_img}" \
-                 "${bootable_dir}/EFI/archiso/efiboot.img"
+        "$(_install_dir_cmd "bootable")" \
+            "${bootable_dir}/EFI/archiso"
+        "$(_install_cmd "bootable")" \
+            "${bootable_dir}/EFI/archiso/efiboot.img"
         # grub in an embedded efiboot.img via El Torito
         _xorrisofs_options+=(
           # Start a new El Torito boot entry for UEFI
