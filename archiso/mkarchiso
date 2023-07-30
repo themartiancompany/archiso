@@ -67,11 +67,14 @@ fs_images=(
   'efi_boot')
 fs_images_str_vars=(
   'dir'
+  'encryption_key'
+  'epoch'
   'image_type'
   'image_tool_options'
   'img'
   'size' # All sizes are in kib
-  'encryption_key')
+         # except when specified
+  'uuid')
 fs_images_arr_vars=(
   'files'
   'image_tool_options')
@@ -1386,6 +1389,13 @@ _get_iso_partition_label() {
             echo "${_label[*]}")" 
 }
 
+_set_fs_dir() {
+    local _fs_image="${1}"
+    _set "${_fs_image}" \
+         "dir" \
+         "${work_dir}/${_fs_image}"
+}
+
 # Sets correct file system guid given type
 _set_fs_guid() {
     local _fs_image="${1}" \
@@ -1724,9 +1734,9 @@ _resolve_secondary_encryption_key() {
     local _name="${1}"
     local _at_rest_image_type \
           _auto_key="${work_dir}/${_name}.key" \
+          _dest \
           _encryption_key \
           _image_type \
-          _install_dir \
           _mode="binary"
     _at_rest_image_type="$(_get "airootfs" \
                                 "image_type")"
@@ -1739,20 +1749,19 @@ _resolve_secondary_encryption_key() {
           _msg_info "Random plaintext password for ${_name}"
           if [[ "${_at_rest_image_type}" != *"luks" ]] && \
              [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-              _install_dir="${dongle_persistent_dir}/etc/cryptsetup-keys.d"
+              _dest="dongle_persistent"
               _mode="plain"
           fi
       elif [[ "${_at_rest_image_type}" == *"luks" ]] && \
            [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-          _install_dir="${pacstrap_dir}/etc/keys"
-          #_install_dir="${pacstrap_dir}/etc/cryptsetup-keys.d/${_name}.keys"
+          _dest="pacstrap"
       elif [[ "${_at_rest_image_type}" != *"luks" ]] && \
            [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-          _install_dir="${dongle_persistent_dir}/etc/keys"
+          _dest="dongle_persistent"
       elif [[ "${_at_rest_image_type}" != *"luks" ]] && \
            [[ "${_name}" != "persistent" ]] && \
            ( ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] ); then
-          _install_dir="${persistent_dir}/etc/cryptsetup-keys.d"
+          _dest="persistent"
       else
           _msg=("Rootfs encryption and dongle buildmode disabled."
                 "You will be prompted to insert a password for"
@@ -1768,9 +1777,16 @@ _resolve_secondary_encryption_key() {
            "${_auto_key}"
       _gen_key "${_encryption_key}" \
                "${_mode}"
-      install -d -m700 "${_install_dir}"
-      install -D -m400 "${_auto_key}" \
-                       "${_install_dir}"
+      _install_dir_cmd "${_dest}" \
+                       "/etc"
+      install -d \
+              -m700 \
+              "$(_get "${_dest}" \
+                      "dir")/etc/cryptsetup-keys.d"
+      install -D \
+              -m400 "${_auto_key}" \
+              "$(_get "${_dest}" \
+                      "dir")/etc/cryptsetup-keys.d"
 }
 
 # Adds archiso hooks to profile's mkinitcpio.conf
@@ -3272,7 +3288,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
     # Calculate the required FAT image size in bytes
     efi_boot_files+=(
-      "${pacstrap_dir}${_bl}"
+      "${_bl}"
       "$(_get_efi_sh "${_code}")"
       "${profile}/efiboot/"
       "${_available_ucodes[@]}")
@@ -3834,7 +3850,7 @@ _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
 
 # Fills templatized udev rules for the persistent partitions
 # $1: template udev rule file
-_fill_persistent_ro_udev_rules() {
+_make_persistent_ro_udev_rules() {
     local _template="${1}" \
           _sed_cmd
     # shellcheck disable=SC2154
@@ -3852,6 +3868,7 @@ _fill_persistent_ro_udev_rules() {
 # Volume preparing functions
 ################################
 
+
 ## Airootfs
 
 # Builds airootfs filesystem image
@@ -3864,13 +3881,14 @@ _prepare_airootfs_image() {
     [[ -n "${gpg_key}" ]] && \
       _mksignature "$(_get_airootfs_img)" && \
       [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-        dongle_iso_dir="${work_dir}/dongle_iso" \
-        dongle_persistent_dir="${work_dir}/dongle_persistent" \
-        dongle_boot_dir="${work_dir}/dongle_boot" && \
-        _sig_dir="${dongle_iso_dir}/${install_dir}/${arch}" &&
-        install -d -m711 "${_sig_dir}" &&
-        cp "$(_get_airootfs_img).sig" \
-           "${_sig_dir}"
+        _set_fs_dir "dongle_iso" && \
+        _set_fs_dir "dongle_persistent" && \
+        _set_fs_dir "dongle_boot" && \
+        _install_dir_cmd "dongle_iso" \
+                         "${install_dir}/${arch}"
+        _install_cmd "dongle_iso" \
+                     "$(_get_airootfs_img).sig" \
+                     "/${nstall_dir}/${arch}"
 }
 
 ## Keys
@@ -3890,41 +3908,62 @@ _prepare_keys_image() {
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
-    local _img_type \
+    local _bootable="persistent" \
+          _bootable_ro_udev_rule \
+          _img_type \
           _udev_rules="${pacstrap_dir}/etc/udev/rules.d" \
-          crypttab="${profile}/airootfs/etc/crypttab" \
-          pacstrap_dir="${work_dir}/${arch}/airootfs" \
-          persistent_dir="${work_dir}/persistent" \
+          _crypttab="${profile}/airootfs/etc/crypttab" \
+          _dongle_bootable_ro_udev_rule \
           persistent_dir_size \
-          persistent_epoch \
-          persistent_uuid
-    persistent_epoch="$(_get_epoch "persistent")"
-    persistent_uuid="$(_get_epoch_fsuuid "${persistent_epoch}")"
-    # dongle_persistent_epoch=$(_get_epoch "dongle_persistent")
-    dongle_persistent_uuid=$(_get_dongle_persistent_uuid)
-
-    local persistent_ro_udev_rule="${_udev_rules}/98_persistent.rules"
-    local dongle_persistent_ro_udev_rule="${_udev_rules}/99_donglepersistent.rules"
-    if [ -d "${profile}/persistent" ]; then
-        _copy_custom_files "persistent" "${persistent_dir}"
-        persistent_dir_size=$(du -s "${persistent_dir}" | cut -f 1)
-        persistent_size=$(( persistent_dir_size > persistent_size ? \
-                            persistent_dir_size : persistent_size ))
+    _set "pacstrap" \
+          "dir" \
+         "${work_dir}/${arch}/airootfs" \
+    _set_fs_dir "${_bootable}"
+    _set "${_bootable}" \
+         "epoch" \
+         "$(_get_epoch "${_bootable}")"
+    _set "${_bootable}" \
+         "uuid" \
+         "$(_get_epoch_fsuuid "$(_get "${_bootable}" \
+                                      "epoch")")"
+    _set "dongle_${_bootable}" \
+         "uuid" \
+         $("_get_dongle_${_bootable}_uuid")
+    _bootable_ro_udev_rule="${_udev_rules}/98_${_bootable}.rules"
+    _dongle_bootable_ro_udev_rule="${_udev_rules}/99_dongle${_bootable}.rules"
+    if [ -d "${profile}/${_bootable}" ]; then
+        _copy_custom_files "${_bootable}" \
+                           "$(_get "${_bootable}" \
+                                   "dir")"
+        _set "${_bootable}_dir" \
+             "size" \
+             $(du -s "$(_get "${_bootable}" \
+                             "dir")" | \
+                          cut -f 1)
+        _set "persistent" \
+             "size"
+             $(( ${_bootable}_dir_size > ${_bootable}_size ? \
+                 ${_bootable}_dir_size : ${_bootable}_size ))
         _msg_info "Done!"
     fi
     _build_crypttab "${crypttab}" \
                     "${pacstrap_dir}/etc/crypttab"
-    _fill_persistent_ro_udev_rules "${persistent_ro_udev_rule}"
-    _fill_persistent_ro_udev_rules "${dongle_persistent_ro_udev_rule}"
-    if [ "${persistent_size}" != "" ] || \
+    _make_persistent_ro_udev_rules "${_bootable_ro_udev_rule}"
+    _make_persistent_ro_udev_rules "${_dongle_bootable_ro_udev_rule}"
+    if [ "$(_get "${_bootable}" \
+                 "size")" != "" ] || \
        [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_secondary_encryption_key "persistent"
+        _resolve_secondary_encryption_key "${_bootable}"
         _run_once _make_kernel_on_dongle_iso
-        _run_once "_mkpersistent"
+        _run_once "_mk${_bootable}"
         if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-            [ "${dongle_persistent_size}" = "" ] && \
-                dongle_persistent_size="${persistent_size}"
-            _run_once "_mkdongle_persistent"
+            [ "$(_get "dongle_${_bootable}" \
+                      "size")" = "" ] && \
+              _set "dongle_${_bootable}" \
+                   "size" \
+                   $(_get "${_bootable}" \
+                          "size")
+            _run_once "_mkdongle_${_bootable}"
         fi
     fi
 }
