@@ -1434,6 +1434,11 @@ _get_airootfs_img(){
                  "dir")/airootfs.$(_get_fs_ext "airootfs")"
 }
 
+# Returns install path of airootfs image
+_get_airootfs_path(){
+    echo "${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
+}
+
 # Produces airootfs image
 _mkairootfs() {
     _mkfs_common "airootfs"
@@ -1497,6 +1502,12 @@ _mkswap() {
 ### Dongle ISO volumes
 
 ## Keys (the keys file system image)
+
+# Returns workdir airootfs image path
+_get_keys_img(){
+    echo "$(_get "dongle_isofs" \
+                 "dir")/${_name}.$(_get_fs_ext "keys")"
+}
 
 # Builds keys image
 _mkkeys() {
@@ -2456,28 +2467,25 @@ _gen_bootloader_config() {
 
 ### GRUB
 
-## GRUB configuration files
-
 # Prepare GRUB configuration files
 _make_common_bootmode_grub_cfg(){
-    local _cfg \ 
-          _work="${work_dir}/grub" \
-          _profile="${profile}/grub"
+    local _bootable="work" \
+          _cfg_files=() \
+          _cfg_path="grub" \
           _embed_cfg \
           embedcfg
-    _embed_cfg="${_grub}/grub-embed.cfg"
-    install -d -- \
-            "${_work}"
-    # Fill GRUB configuration files
-    for _cfg in "${_profile}/"*'.cfg'; do
-        _gen_bootloader_config "${_cfg}" > \
-          "${_work}/${_cfg##*/}"
-    done
+    _cfg_files=("${profile}/${_cfg_path}"*'.cfg')
+    _embed_cfg="${profile}/${_cfg_path}/grub-embed.cfg"
+    _install_dir_cmd "${_bootable}" \
+                     "/${_cfg_path}"
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
     # Add all GRUB files to the list of files
     # used to calculate the required FAT image size.
     efi_boot_files+=(
-      "${_work}/"
-      "${_profile}/"!(*.cfg))
+      "${work_dir}/${_cfg_path}"
+      "${profile}/${_cfg_path}/"!(*.cfg))
 
     IFS='' read -r -d '' embedcfg <<'EOF' || true
 if ! [ -d "$cmdpath" ]; then
@@ -2531,8 +2539,6 @@ _get_grubmodules(){
     echo "${_modules[*]}"
 }
 
-## GRUB image making
-
 # Produces a standalone GRUB binary
 # $1: architecture (x86_64, i386)
 # $2: platform (efi, pc)
@@ -2581,6 +2587,56 @@ _make_grub() {
       -o "${_out}")
     grub-mkstandalone "${_grub_options[@]}" \
                       "boot/grub/grub.cfg=${_embed_cfg}"
+}
+
+### SYSLINUX
+
+## SYSLINUX install
+
+# Install SYSLINUX on a volume
+# $1: volume
+_make_syslinux() {
+    _local _bootable="${1}"
+    _install_dir_cmd "${_bootable}" \
+                     "/syslinux"
+    [[ -e "${profile}/syslinux/splash.png" ]] && \
+      _install_cmd "${_bootable}" \
+                   "${profile}/syslinux/splash.png" \
+                   "/syslinux"
+    _install_cmd "${_bootable}" \
+                 "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 \
+                 "/syslinux"
+    _install_cmd "${_bootable}" \
+                 "${pacstrap_dir}/usr/lib/syslinux/bios/lpxelinux.0" \
+                 "/syslinux"
+    _install_cmd "${_bootable}" \
+                 "${pacstrap_dir}/usr/lib/syslinux/bios/memdisk" \
+                 "/syslinux"
+    if [[ -e "$(_get "${_bootable}" \
+                     "dir")/syslinux/hdt.c32" ]]; then
+        _install_dir_cmd "${_bootable}" \
+                         "/syslinux/hdt"
+        [[ -e "${pacstrap_dir}/usr/share/hwdata/pci.ids" ]] && \
+          gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
+            "$(_get "${_bootable}" \
+                    "dir")/syslinux/hdt/pciids.gz"
+        find "${pacstrap_dir}/usr/lib/modules" \
+             -name 'modules.alias' \
+             -print \
+             -exec gzip \
+             -cn9 '{}' ';' > \
+          "$(_get "${_bootable}" \
+                  "dir")/syslinux/hdt/modalias.gz"
+    fi
+}
+
+_make_systemd_boot_common() {
+    local _bootable="${1}"
+    _install_dir_cmd "${_bootable}" \
+                     "/loader" \
+    _install_cmd "${_bootable}" \
+                 "${profile}/efiboot/loader/loader.conf" \
+                 "/loader"
 }
 
 ###########################
@@ -2642,7 +2698,7 @@ _make_ucodes() {
                            "${_licenses_dest}/${_ucode%.*}/" && \
           _install_cmd "${_bootable}" \
                        "${_licenses_src}/${_ucode%.*}/"* \
-                       "${_licenses_dest}/${_ucode%.*}/"
+                       "${_licenses_dest}/${_ucode%.*}"
     done
 }
 
@@ -2691,9 +2747,143 @@ _make_kernel_on_dongle_iso() {
     _make_kernel "dongle_persistent"
 }
 
+_make_kernel_on_isos() {
+    if [[ "${_bootable}" == "iso" ]]; then
+        _run_once _make_kernel_on_iso
+        [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+          _run_once _make_kernel_on_dongle_iso
+    elif [[ "${_bootable}" == "dongle" ]]; then
+        _run_once _make_kernel_on_dongle_iso
+    fi
+}
+
 ##################################
 # Bootmodes utility functions
 #################################
+
+### GRUB
+
+## GRUB configuration files
+
+# Install GRUB configuration files on volume
+# $1: volume on which to install grub configuration files
+_make_common_bootmode_grub_cfg_install() {
+    local _bootable="${1}" \
+          _files=()
+    _files+=(
+      "${work_dir}/grub/"*'.cfg')
+    (compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null) && \
+      _files+=(
+        "${profile}/grub/"!(*.cfg))
+    _install_cmd "${_bootable}" \
+                 "${_files[@]}" \
+                 "/EFI/BOOT"
+}
+
+# Copies GRUB files to dongle ISO file sysem
+_make_common_bootmode_grub_cfg_iso() {
+    _make_common_bootmode_grub_cfg_install "iso"
+}
+
+# Copies GRUB files to dongle ISO file system
+_make_common_bootmode_grub_cfg_dongle_iso() {
+    _make_common_bootmode_grub_cfg_install "dongle_iso"
+}
+
+# Copies GRUB files to ESP FAT image
+_make_common_bootmode_grub_cfg_efi_boot() {
+    _make_common_bootmode_grub_cfg_install "efi_boot"
+}
+
+## GRUB Eltorito
+
+# Install GRUB Eltorito hybrid image
+# $1: volume on which to install the loader
+_make_grub_hybrid() {
+    local _bootable="${1}"
+    _install_dir_cmd "${_bootable}" \
+                     "/EFI"
+                     "/EFI/BOOT"
+    _install_cmd "${_bootable}" \
+                 "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
+                 "/EFI/BOOT"
+}
+
+### BIOS
+
+## MEMTEST
+
+# Install memtest86+ in a volume
+# $1: destination volume
+#     (a value in 'fs_images')
+_make_memtest() {
+    local _bootable="${1}" \
+          _memtest="/boot/memtest86+/memtest.bin" \
+          _gpl2
+    _gpl2="/usr/share/licenses/common/GPL2/license.txt"
+    [[ -e "${pacstrap_dir}${_memtest}" ]] && \
+        # rename for PXE:
+        # https://wiki.archlinux.org/title/Syslinux#Using_memtest
+        _install_cmd "${_bootable}" \
+                     "${pacstrap_dir}${_memtest}" \
+                     "/${install_dir}/boot/memtest" && \
+        _install_dir_cmd "${_bootable}" \
+                         "/${install_dir}/boot/licenses/memtest86+" && \
+        _install_cmd "${_bootable}" \
+                     "${pacstrap_dir}${_gpl2}" \
+                     "/${install_dir}/boot/licenses/memtest86+"
+}
+
+### UEFI
+
+## EFI Shell
+
+# Returns source path for the edk2 UEFI shell
+# $1: efi architecture code (ia32, x64)
+_get_efi_sh() {
+    local _code="${1}" \
+          _efi_sh
+    _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
+    echo "${pacstrap_dir}${_efi_sh}"
+}
+
+# Install the edk2 UEFI shell on a volume
+# $1: volume to install efi shell
+#     (value in 'fs_images')
+# $2: efi architecture code (ia32, x64)
+_make_efi_sh() {
+    local _volume="${1}" \
+          _code="${2}"
+    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+      _install_cmd "${_volume}" \
+                   "$(_get_efi_sh "${_code}")" \
+                   "/shell${_code}.efi"
+}
+
+### Common
+
+## Configuration files
+
+# Install bootloader configurations
+# $1: install volume
+# $2: destination directory path
+#     in the volume
+_make_bootloader_config() {
+    local _bootable="${1}" \
+          _dest="${2}"
+    shift
+    local _cfgs=("${@}")
+    local _tmp_cfg="${work_dir}/bl_tmp.cfg"
+    for _cfg in "${_cfgs[@]}"; do
+        _gen_bootloader_config "${_cfg}" > \
+          "${_tmp_cfg}"
+        _install_cmd "${_bootable}" \
+                     "${_tmp_cfg}" \
+                     "${_dest}/${_cfg##*/}"
+    done
+}
+
+## Install functions
 
 _install_bootloader() {
     local _volume="${1}" \
@@ -2710,30 +2900,15 @@ _install_bootloader() {
                  "/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
 }
 
-#### UEFI
-
-### EFI Shell
-
-# Returns source path for the edk2 UEFI shell
-# $1: arch code (ia32, x64)
-_get_efi_sh() {
-    local _code="${1}" \
-          _efi_sh
-    _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
-    echo "${pacstrap_dir}${_efi_sh}"
-}
-
-# Install the edk2 UEFI shell on a volume
-# $1: volume to install efi shell
-#     (value in 'fs_images')
-# $2: arch code (ia32, x64)
-_make_efi_sh() {
-    local _volume="${1}" \
-          _code="${2}"
-    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
-      _install_cmd "${_volume}" \
-                   "$(_get_efi_sh "${_code}")" \
-                   "/shell${_code}.efi"
+_make_bootloader_common() {
+    [[ "${bootmode}" != *"syslinux"* ]] && \
+      _install_bootloader "${_bootable}" \
+                          "${_code}" \
+                          "${_PLATFORM}" \
+                          "${_bl}"
+    [[  "${bootmode}"  == "uefi-"* ]] && \
+      _make_efi_sh "${_bootable}" \
+                   "${_code}"
 }
 
 ##################################
@@ -2760,7 +2935,7 @@ _make_bootmodes_dongle_iso() {
 
 #### BIOS
 
-### MBR
+### BIOS MBR
 
 ## GRUB BIOS MBR
 
@@ -2772,21 +2947,13 @@ _make_bootmode_bios.grub.mbr() {
           _CODE="IA32" \
           _platform="pc" \
           _PLATFORM="MBR"
-    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-
-    if [[ "${bootable}" == "iso" ]]; then
-        _run_once _make_kernel_on_iso
-    elif [[ "${bootable}" == "dongle" ]]; then
-        _run_once _make_kernel_on_dongle_iso
-    fi
+    _make_bootloader_common
+    _make_kernel_on_isos
     _msg=("Done! GRUB set up for BIOS booting"
           "from a disk successfully.")
     _msg_info "${_msg[*]}"
@@ -2802,71 +2969,7 @@ _make_bootmode_bios.grub.mbr_dongle_iso() {
     _make_bootmode_bios.grub.mbr "dongle_iso"
 }
 
-# Prepares GRUB for El-Torito booting on BIOS systems
-# $1: root file system for grub
-_make_bootmode_bios.grub.eltorito() {
-    local _bootable="${1}" \
-          _msg \
-          _platform="pc-eltorito" \
-          _code="ia32" \
-          _CODE="IA32" 
-    _msg=("Setting up GRUB for BIOS booting"
-          "from an optical disc...")
-    _msg_info "${_msg[*]}"
-    _install_dir_cmd "${_bootable}" \
-                     "/EFI/BOOT"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
-                 "/EFI/BOOT/"
-
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
-
-    _install_cmd "${_bootable}" \
-                 "${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
-                 "/EFI/BOOT"
-
-    if [[ "${_bootable}" == "iso" ]]; then
-        _run_once _make_kernel_on_iso
-        [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-          _run_once _make_kernel_on_dongle_iso
-    elif [[ "${_bootable}" == "dongle" ]]; then
-        _run_once _make_kernel_on_dongle_iso
-    fi
-}
-
-# Prepares GRUB El Torito on BIOS for the ISO image
-_make_bootmode_bios.grub.eltorito_iso() {
-    _make_bootmode_bios.grub.eltorito "iso"
-    # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.grub.mbr_iso
-}
-
-# Prepares GRUB El Torito on BIOS for the dongle ISO image
-_make_bootmode_bios.grub.eltorito_dongle_iso() {
-    _make_bootmode_bios.grub.eltorito "${dongle_iso_dir}"
-    # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.grub.mbr_dongle_iso
-}
-
-_make_memtest() {
-    local _bootable="${1}" \
-          _memtest="/boot/memtest86+/memtest.bin" \
-          _gpl2
-    _gpl2="/usr/share/licenses/common/GPL2/license.txt"
-    [[ -e "${pacstrap_dir}${_memtest}" ]] && \
-        # rename for PXE:
-        # https://wiki.archlinux.org/title/Syslinux#Using_memtest
-        _install_cmd "${_bootable}" \
-                     "${pacstrap_dir}${_memtest}" \
-                     "/${install_dir}/boot/memtest" && \
-        _install_dir_cmd "${_bootable}" \
-                         "/${install_dir}/boot/licenses/memtest86+/" && \
-        _install_cmd "${_bootable}" \
-                     "${pacstrap_dir}${_gpl2}" \
-                     "/${install_dir}/boot/licenses/memtest86+/"
-}
+## SYSLINUX BIOS MBR
 
 # Prepares syslinux for booting from MBR (isohybrid)
 # $1: volume on which to install syslinux
@@ -2874,59 +2977,18 @@ _make_memtest() {
 # $2: device type (iso, dongle)
 _make_bootmode_bios.syslinux.mbr() {
     local _bootable="${1}" \
+          _cfg_files=() \
+          _cfg_path="syslinux"
           _msg=() \
-          _tmp_cfg="${work_dir}/bl_tmp.cfg"
+    _cfg_files=("${profile}/syslinux/"*.cfg)
     _msg=("Setting up SYSLINUX for"
           "BIOS booting from a disk...")
     _msg_info "${_msg[*]}"
-    _install_dir_cmd "${_bootable}" \
-                     "/syslinux"
-    for _cfg in "${profile}/syslinux/"*.cfg; do
-        _gen_bootloader_config "${_cfg}" > \
-          "${_tmp_cfg}"
-        _install_cmd "${_bootable}" \
-                     "${_tmp_cfg}" \
-                     "/syslinux/${_cfg##*/}"
-    done
-    [[ -e "${profile}/syslinux/splash.png" ]] && \
-      _install_cmd "${_bootable}" \
-                   "${profile}/syslinux/splash.png" \
-                   "/syslinux/"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 \
-                 "/syslinux/"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/lpxelinux.0" \
-                 "/syslinux/"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/memdisk" \
-                 "/syslinux/"
-    if [[ "${_bootable}" == "iso" ]]; then
-        _run_once _make_kernel_on_iso
-        [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-          _run_once _make_kernel_on_dongle_iso
-    elif [[ "${_bootable}" == "dongle" ]]; then
-        _run_once _make_kernel_on_dongle_iso
-    fi
-
-    if [[ -e "$(_get "${_bootable}" \
-                     "dir")/syslinux/hdt.c32" ]]; then
-        _install_dir_cmd "${_bootable}" \
-                         "/syslinux/hdt"
-        [[ -e "${pacstrap_dir}/usr/share/hwdata/pci.ids" ]] && \
-          gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
-            "$(_get "${_bootable}" \
-                    "dir")/syslinux/hdt/pciids.gz"
-        find "${pacstrap_dir}/usr/lib/modules" \
-             -name 'modules.alias' \
-             -print \
-             -exec gzip \
-             -cn9 '{}' ';' > \
-          "$(_get "${_bootable}" \
-                  "dir")/syslinux/hdt/modalias.gz"
-    fi
-
-    # Add other additional/extra files to ${install_dir}/boot/
+    _make_syslinux "${_bootable}"
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
+    _make_kernel_on_isos
     _make_memtest "${_bootable}"
     _msg=("Done! SYSLINUX set up for BIOS"
           "booting from a disk successfully.")
@@ -2943,6 +3005,48 @@ _make_bootmode_bios.syslinux.mbr_dongle_iso() {
     _make_bootmode_bios.syslinux.mbr "dongle_iso"
 }
 
+### BIOS ELTORITO
+
+## GRUB BIOS ELTORITO
+
+# Prepares GRUB for El-Torito booting on BIOS systems
+# $1: root file system for grub
+_make_bootmode_bios.grub.eltorito() {
+    local _bootable="${1}" \
+          _bl \
+          _msg \
+          _code="ia32" \
+          _CODE="IA32" \
+          _platform="pc-eltorito" \
+          _PLATFORM="ELTORITO"
+    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+    _msg=("Setting up GRUB for BIOS booting"
+          "from an optical disc...")
+    _msg_info "${_msg[*]}"
+    _make_grub_hybrid "${_bootable}"
+    _make_grub "${_code}" \
+               "${_platform}" \
+               "${work_dir}"
+    _make_bootloader_common
+    _make_kernel_on_isos
+}
+
+# Prepares GRUB El Torito on BIOS for the ISO image
+_make_bootmode_bios.grub.eltorito_iso() {
+    _make_bootmode_bios.grub.eltorito "iso"
+    # ISOLINUX and SYSLINUX installation is shared
+    _run_once _make_bootmode_bios.grub.mbr_iso
+}
+
+# Prepares GRUB El Torito on BIOS for the dongle ISO image
+_make_bootmode_bios.grub.eltorito_dongle_iso() {
+    _make_bootmode_bios.grub.eltorito "${dongle_iso_dir}"
+    # ISOLINUX and SYSLINUX installation is shared
+    _run_once _make_bootmode_bios.grub.mbr_dongle_iso
+}
+
+## SYSLINUX BIOS ELTORITO
+
 # Prepares syslinux for El-Torito booting
 # $1: volume on which to install syslinux
 _make_bootmode_bios.syslinux.eltorito() {
@@ -2956,10 +3060,10 @@ _make_bootmode_bios.syslinux.eltorito() {
                      "/syslinux"
     _install_cmd "${_bootable}" \
                  "${pacstrap_dir}/usr/lib/syslinux/bios/isolinux.bin" \
-                 "/syslinux/"
+                 "/syslinux"
     _install_cmd "${_bootable}"
                  "${pacstrap_dir}/usr/lib/syslinux/bios/isohdpfx.bin" \
-                 "/syslinux/"
+                 "/syslinux"
     _msg=(
       "Done! SYSLINUX set up for BIOS booting"
       "from an optical disc successfully.")
@@ -2971,7 +3075,6 @@ _make_bootmode_bios.syslinux.eltorito_iso() {
     _make_bootmode_bios.syslinux.eltorito "iso"
     # ISOLINUX and SYSLINUX installation is shared
     _run_once _make_bootmode_bios.syslinux.mbr_iso
-
 }
 
 # Prepares syslinux for El-Torito booting on BIOS on the dongle ISO
@@ -2981,97 +3084,11 @@ _make_bootmode_bios.syslinux.eltorito_dongle_iso() {
     _run_once _make_bootmode_bios.syslinux.mbr_dongle_iso
 }
 
-# Fills templatized udev rules for the persistent partitions
-# $1: template udev rule file
-_fill_persistent_ro_udev_rules() {
-    local _template="${1}" \
-          _sed_cmd
-    # shellcheck disable=SC2154
-    _sed_cmd='/%DONGLE_PERSISTENT_UUID%/d'
-    [[ "${persistent_size}" != "" ]] && \
-      _sed_cmd="s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g"
-    sed -i "${_sed_cmd}" "${_template}"
-    _sed_cmd='/%PERSISTENT_UUID%/d'
-    [[ "${persistent_size}" != "" ]] && \
-        _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
-    sed -i "${_sed_cmd}" "${_template}"
-}
+#### UEFI
 
-_make_common_bootmode_grub_copy_to_iso_iso() {
-    _make_common_bootmode_grub_cfg_install "iso"
-}
+### UEFI IA32
 
-_make_common_bootmode_grub_copy_to_iso_dongle_iso() {
-    _make_common_bootmode_grub_cfg_install "dongle_iso"
-}
-
-# $1: volume on which to install grub configuration files
-_make_common_bootmode_grub_cfg_install() {
-    local _bootable="${1}" \
-          _files=()
-    _files+=(
-      "${work_dir}/grub/"*'.cfg')
-    (compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null) && \
-      _files+=(
-        "${profile}/grub/"!(*.cfg))
-    _install_cmd "${_bootable}" \
-                 "${_files[@]}" \
-                 "/EFI/BOOT/"
-}
-
-# $1: directory where the content of the ISO file system resides
-_make_common_bootmode_grub_cfg_iso() {
-    _make_common_bootmode_grub_cfg_install "iso"
-}
-
-_make_common_bootmode_grub_cfg_dongle_iso() {
-    _make_common_bootmode_grub_cfg_install "dongle_iso"
-}
-
-# Copies GRUB files to efiboot.img which is used by both IA32 UEFI and x64 UEFI.
-_make_common_bootmode_grub_cfg_efi_boot() {
-    _make_common_bootmode_grub_cfg_install "efi_boot"
-}
-
-# Prepares GRUB (32-bit) for EFI boot
-# $1: device type ('iso', 'dongle')
-_make_grub_esp() {
-    local _bootable="${1}" \
-          _code="${2}" \
-          _CODE="x64" \
-          _platform="efi" \
-          _PLATFORM="EFI" 
-    [[ "${_code}" == "ia32" ]] && \
-      _CODE="IA32" \
-      _other_code="x64"
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
-    # Add GRUB to the list of files used to
-    # calculate the required FAT image size.
-    efi_boot_files+=(
-      "${_bl}"
-      "$(_get_efi_sh "${_code}")")
-
-    if [[ " ${bootmodes[*]} " =~ "uefi-${_code}.systemd-boot.esp" ]]; then
-        # TODO: Remove this branch.
-        _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
-    elif [[ " ${bootmodes[*]} " =~ uefi-${_code}.grub.esp ]]; then
-        _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
-    else
-        _run_once "_mkefi_boot"
-    fi
-    # Copy GRUB EFI binary to the default/fallback boot path
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _make_efi_sh "${_bootable}" \
-                 "${_code}"
-    # Copy GRUB files
-    _run_once "_make_common_bootmode_grub_cfg_efi_boot"
-    _msg_info "Done! GRUB set up for UEFI booting successfully."
-}
+## GRUB UEFI IA32 ESP
 
 # Prepares GRUB (32-bit) for EFI boot
 # $1: device type ('iso', 'dongle')
@@ -3098,18 +3115,10 @@ _make_bootmode_uefi-ia32.grub.esp() {
     elif [[ " ${bootmodes[*]} " =~ uefi-${_other_code}.grub.esp ]]; then
         _run_once "_make_bootmode_uefi-${_other_code}.grub.esp_${_bootable}"
     else
-        # Create a FAT image for the EFI system partition
         _run_once "_mkefi_boot"
     fi
-    # Copy GRUB EFI binary to the default/fallback boot path
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-    _make_efi_sh "${_volume}" \
-                 "${_code}"
-    # Copy GRUB files
-    _run_once "_make_common_bootmode_grub_cfg_install_${_bootable}"
+    _make_bootloader_common
+    _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
@@ -3122,6 +3131,10 @@ _make_bootmode_uefi-ia32.grub.esp_iso() {
 _make_bootmode_uefi-ia32.grub.esp_dongle_iso() {
     _make_bootmode_uefi-ia32.grub.esp "dongle_iso"
 }
+
+### UEFI IA32 ELTORITO
+
+## GRUB UEFI IA32 ELTORITO
 
 # Prepares GRUB (32 bit) for El Torito booting
 # $1: root file system for GRUB
@@ -3150,12 +3163,7 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
     # Copy GRUB EFI binary to the default/fallback boot path
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-    _make_efi_sh "${_bootable}" \
-                 "${_code}"
+    _make_bootloader_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done!"
 }
@@ -3170,6 +3178,12 @@ _make_bootmode_uefi-ia32.grub.eltorito_dongle_iso() {
     _make_bootmode_uefi-ia32.grub.eltorito "dongle_iso"
 }
 
+#### UEFI x64
+
+### UEFI x64 ESP
+
+## GRUB UEFI x64 ESP
+
 # Prepares GRUB for EFI boot
 _make_bootmode_uefi-x64.grub.esp() {
     local _bl \
@@ -3183,13 +3197,7 @@ _make_bootmode_uefi-x64.grub.esp() {
                "${_platform}" \
                "${work_dir}"
     _run_once "_mkefi_boot"
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-    _make_efi_sh "${_bootable}" \
-                 "${_code}"
-
+    _make_bootloader_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
@@ -3203,6 +3211,76 @@ _make_bootmode_uefi-x64.grub.esp_iso() {
 _make_bootmode_uefi-x64.grub.esp_dongle_iso() {
     _make_bootmode_uefi-x64.grub.esp
 }
+
+## SYSTEMD-BOOT UEFI x64 ESP
+
+# Prepares systemd-boot for booting when written to a disk (isohybrid)
+_make_bootmode_uefi-x64.systemd-boot.esp() {
+    local _available_ucodes=() \
+          _bootable="efi_boot" \
+          _bl \
+          _code="x64" \
+          _cfg_path="loader/entries" \
+          _cfg_files=() \
+          _file \
+          _lib="/usr/lib/systemd/boot" \
+          _platform="efi" \
+          _PLATFORM="EFI" \
+          _results \
+          _systemd_boot \
+          efi_boot_size
+    _systemd_boot="systemd-boot${_code}.${_platform}"
+    _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
+    _cfg_files=(
+      "${profile}/efiboot/${_cfg_path}/"*".conf")
+    _msg_info "Setting up systemd-boot for UEFI booting..."
+    for _file in "${ucodes[@]}"; do
+        [[ -e "${pacstrap_dir}/boot/${_file}" ]] && \
+          _available_ucodes+=(
+            "${pacstrap_dir}/boot/${_file}")
+    done
+    # Calculate the required FAT image size in bytes
+    efi_boot_files+=(
+      "${pacstrap_dir}${_bl}"
+      "$(_get_efi_sh "${_code}")"
+      "${profile}/efiboot/"
+      "${_available_ucodes[@]}")
+    _images=(
+      "initramfs-*"
+      "vmlinuz-*")
+    for _query in "${_images[@]}"; do
+        mapfile -t efi_boot_files < \
+          <(find "${work_dir}" \
+                 -iname "${_query}" \
+                 -exec echo {} \; \
+                 -quit)
+    done
+    # Create a FAT image for the EFI system partition
+    _run_once "_mkefi_boot"
+    _make_systemd_boot_common "${_bootable}"
+    _install_dir_cmd "${_bootable}" \
+                     "/${_cfg_path}"
+    _make_bootloader_common
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
+    _make_kernel "${_bootable}"
+    _msg_info "Done! systemd-boot set up for UEFI booting successfully."
+}
+
+# Prepares systemd-boot for the ISO image
+_make_bootmode_uefi-x64.systemd-boot.esp_iso() {
+    _make_bootmode_uefi-x64.systemd-boot.esp
+}
+
+# Prepares systemd-boot for the dongle ISO image
+_make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
+    _make_bootmode_uefi-x64.systemd-boot.esp
+}
+
+### UEFI x64 ELTORITO
+
+## GRUB UEFI x64 ELTORITO
 
 # Prepares GRUB for El Torito booting
 # $1: root file system for GRUB
@@ -3229,12 +3307,7 @@ _make_bootmode_uefi-x64.grub.eltorito() {
       "Preparing an /EFI directory for"
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-    _make_efi_sh "${_bootable}" \
-                 "${_code}"
+    _make_bootloader_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done!"
 }
@@ -3249,88 +3322,20 @@ _make_bootmode_uefi-x64.grub.eltorito_dongle_iso() {
     _make_bootmode_uefi-x64.grub.eltorito "dongle_iso"
 }
 
-# Prepares systemd-boot for booting when written to a disk (isohybrid)
-_make_bootmode_uefi-x64.systemd-boot.esp() {
-    local _available_ucodes=() \
-          _bootable="efi_boot" \
-          _bl \
-          _code="x64" \
-          _file \
-          _lib="/usr/lib/systemd/boot" \
-          _platform="efi" \
-          _PLATFORM="EFI" \
-          _results \
-          _systemd_boot \
-          _tmp_cfg="${work_dir}/bl_tmp.cfg" \
-          efi_boot_size
-    _systemd_boot="systemd-boot${_code}.${_platform}"
-    _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
-
-    _msg_info "Setting up systemd-boot for UEFI booting..."
-
-    for _file in "${ucodes[@]}"; do
-        [[ -e "${pacstrap_dir}/boot/${_file}" ]] && \
-          _available_ucodes+=("${pacstrap_dir}/boot/${_file}")
-    done
-    # Calculate the required FAT image size in bytes
-    efi_boot_files+=(
-      "${pacstrap_dir}${_bl}"
-      "$(_get_efi_sh "${_code}")"
-      "${profile}/efiboot/"
-      "${_available_ucodes[@]}")
-    _images=("initramfs-*" "vmlinuz-*")
-    for _query in "${_images[@]}"; do
-        mapfile -t efi_boot_files < \
-          <(find "${work_dir}" \
-                 -iname "${_query}" \
-                 -exec echo {} \; \
-                 -quit)
-    done
-
-    # Create a FAT image for the EFI system partition
-    _run_once "_mkefi_boot"
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}"
-    _make_efi_sh "efi_boot" \
-                 "${_code}"
-    _install_dir_cmd "${_bootable}" \
-                     "/loader" \
-                     "/loader/entries"
-    _install_cmd "${_bootable}" \
-                 "${profile}/efiboot/loader/loader.conf" \
-                 "/loader/"
-    for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _gen_bootloader_config "${_conf}" > \
-          "${_tmp_cfg}" 
-        _install_cmd "efi_boot" \
-                     "${_tmp_cfg}" \
-                     "/loader/entries/${_conf##*/}"
-    done
-    _make_kernel "efi_boot"
-    _msg_info "Done! systemd-boot set up for UEFI booting successfully."
-}
-
-# Prepares systemd-boot for the ISO image
-_make_bootmode_uefi-x64.systemd-boot.esp_iso() {
-    _make_bootmode_uefi-x64.systemd-boot.esp
-}
-
-# Prepares systemd-boot for the dongle ISO image
-_make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
-    _make_bootmode_uefi-x64.systemd-boot.esp
-}
+## SYSTEMD-BOOT UEFI x64 ELTORITO
 
 # Prepares systemd-boot for El Torito booting
 _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     local _bootable="${1}" \
           _bl \
+          _cfg_path="loader/entries"
           _code="x64" \
-          _tmp_cfg="${work_dir}/bl_tmp.cfg" \
-          _PLATFORM="EFI"
+          _PLATFORM="EFI" \
+          _cfg_files=()
     _systemd_boot="/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     _bl="${pacstrap_dir}${_systemd_boot}"
+    _cfg_files=(
+      "${profile}/efiboot/${_cfg_path}/"*".conf"
     # El Torito UEFI boot requires an image containing the EFI system partition.
     # uefi-x64.systemd-boot.eltorito has the same requirements as
     # uefi-x64.systemd-boot.esp
@@ -3340,37 +3345,24 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     # manual partitioning and simply copying the ISO 9660 file system contents.
     # This is not related to El Torito booting and no firmware uses these files.
     _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
-    _install_bootloader "${_bootable}" \
-                        "${_code}" \
-                        "${_PLATFORM}" \
-                        "${_bl}" \
-    _make_efi_sh "${_bootable}" \
-                 "${_code}"
- 
-    # Copy systemd-boot configuration files
+    _make_systemd_boot_common "${_bootable}"
     _install_dir_cmd "${_bootable}" \
-                     "/loader/entries"
-    _install_cmd "${_bootable}" \
-                 "${profile}/efiboot/loader/loader.conf" \
-                 "/loader/"
-    for _conf in "${profile}/efiboot/loader/entries/"*".conf"; do
-        _gen_bootloader_config "${_conf}" > \
-          "${_tmp_cfg}"
-        _install_cmd "${_bootable}" \
-                     "${_tmp_cfg}" \
-                     "/loader/entries/${_conf##*/}"
-    done
+                     "/${_cfg_path}"
+    _make_bootloader_common
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
     _msg_info "Done!"
 }
 
 # Prepares systemd-boot for El Torito booting on the ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_iso() {
-    _make_bootmode_uefi-x64.systemd-boot.eltorito "iso" # "${iso_dir}" "iso"
+    _make_bootmode_uefi-x64.systemd-boot.eltorito "iso"
 }
 
 # Prepares systemd-boot for El Torito booting on the dongle ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_dongle_iso() {
-    _make_bootmode_uefi-x64.systemd-boot.eltorito "dongle_iso" # "${dongle_iso_dir}" "dongle"
+    _make_bootmode_uefi-x64.systemd-boot.eltorito "dongle_iso"
 }
 
 ##################################
@@ -3532,8 +3524,9 @@ _validate_requirements_persistent_image_type_ext4+luks() {
     _validate_requirements_persistent_image_type_ext4
     [ ! -e "${_crypttab}" ] && \
       (( validation_error=validation_error+1 )) \
-      _msg=("Validating '${persistent_image_type}'"
-            "for persistent partition: crypttab not found!") && \
+      _msg=(
+        "Validating '${persistent_image_type}'"
+        "for persistent partition: crypttab not found!") && \
       _msg_error "${_msg[*]}" 0
 }
 
@@ -3622,20 +3615,31 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
     # shellcheck disable=SC2076
     if [[ ! " ${bootmodes[*]} " =~ ' bios.syslinux.eltorito ' ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Using 'bios.syslinux.mbr' boot mode without 'bios.syslinux.eltorito' is not supported." 0
+        _msg=(
+          "Using 'bios.syslinux.mbr' boot mode"
+          "without 'bios.syslinux.eltorito'"
+          "is not supported.")
+        _msg_error "${_msg[*]}" 0
     fi
 
     # Check if the syslinux package is in the package list
     # shellcheck disable=SC2076
     if [[ ! " ${pkg_list[*]} " =~ ' syslinux ' ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The 'syslinux' package is missing from the package list!" 0
+        _msg=(
+          "Validating '${bootmode}':"
+          "The 'syslinux' package is missing"
+          "from the package list!")
+        _msg_error "${_msg[*]}" 0
     fi
 
     # Check if syslinux configuration files exist
     if [[ ! -d "${profile}/syslinux" ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The '${profile}/syslinux' directory is missing!" 0
+        _msg=(
+          "Validating '${bootmode}':"
+          "The '${profile}/syslinux' directory is missing!")
+        _msg_error "${_msg[*]}" 0
     else
         local cfgfile
         for cfgfile in "${profile}/syslinux/"*'.cfg'; do
@@ -3643,7 +3647,11 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
                 break
             else
                 (( validation_error=validation_error+1 ))
-                _msg_error "Validating '${bootmode}': No configuration file found in '${profile}/syslinux/'!" 0
+                _msg=(
+                  "Validating '${bootmode}':"
+                  "No configuration file found"
+                  "in '${profile}/syslinux/'!")
+                _msg_error "${_msg[*]}" 0
             fi
         done
     fi
@@ -3651,8 +3659,10 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
     # Check for optional packages
     # shellcheck disable=SC2076
     if [[ ! " ${pkg_list[*]} " =~ ' memtest86+ ' ]]; then
-        _msg=("Validating '${bootmode}': 'memtest86+' is not in the package list."
-              "Memory testing will not be available from syslinux.")
+        _msg=("Validating '${bootmode}': 'memtest86+'"
+              "is not in the package list."
+              "Memory testing will not be available"
+              "from syslinux.")
         _msg_info "${_msg[*]}"
     fi
 }
@@ -3669,14 +3679,15 @@ _validate_common_requirements_bootmode_uefi(){
     _validate_requirements_image_type_fat
 }
 
-### UEFI 64-bit
+### UEFI x64
 
-# GRUB UEFI64 ESP
+# GRUB UEFI x64 ESP
 _validate_requirements_bootmode_uefi-x64.grub.esp() {
     local _conflict_msg=() \
           _no_efi_shell_msg=()
     _conflict_msg=(
-      "Validating '${bootmode}': cannot be used with bootmode"
+      "Validating '${bootmode}':"
+      "cannot be used with bootmode"
       "uefi-x64.systemd-boot.esp!")
     _no_efi_shell_msg=(
       "'edk2-shell' is not in the package list."
@@ -3695,7 +3706,7 @@ _validate_requirements_bootmode_uefi-x64.grub.esp() {
     fi
 }
 
-# GRUB UEFI64 ELTORITO
+# GRUB UEFI x64 ELTORITO
 _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
     local _msg=()
     _msg=(
@@ -3712,31 +3723,45 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
 
 ## SYSTEMD-BOOT
 
-## SYSTEMD-BOOT UEFI64 ESP
+## SYSTEMD-BOOT UEFI x64 ESP
 _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
+    local _msg=()
     # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
-        _msg_error "Validating '${bootmode}': cannot be used with bootmode uefi-x64.grub.esp!" 0
-    fi
+    [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]] && \
+      _msg=(
+        "Validating '${bootmode}':"
+        "cannot be used with bootmode uefi-x64.grub.esp!") && \
+      _msg_error "${_msg[*]}" 0
 
     _validate_common_requirements_bootmode_uefi
 
     # Check if systemd-boot configuration files exist
     if [[ ! -d "${profile}/efiboot/loader/entries" ]]; then
         (( validation_error=validation_error+1 ))
-        _msg_error "Validating '${bootmode}': The '${profile}/efiboot/loader/entries' directory is missing!" 0
+        _msg=(
+          "Validating '${bootmode}':"
+          "The '${profile}/efiboot/loader/entries'"
+          "directory is missing!"
+        _msg_error "${_msg[*]}" 0
     else
-        if [[ ! -e "${profile}/efiboot/loader/loader.conf" ]]; then
-            (( validation_error=validation_error+1 ))
-            _msg_error "Validating '${bootmode}': File '${profile}/efiboot/loader/loader.conf' not found!" 0
-        fi
+        [[ ! -e "${profile}/efiboot/loader/loader.conf" ]] && \
+          (( validation_error=validation_error+1 )) \
+          _msg=(
+            "Validating '${bootmode}':"
+            "File '${profile}/efiboot/loader/loader.conf'"
+            "not found!") && \
+          _msg_error "${_msg[*]}" 0
         local conffile
         for conffile in "${profile}/efiboot/loader/entries/"*'.conf'; do
             if [[ -e "${conffile}" ]]; then
                 break
             else
                 (( validation_error=validation_error+1 ))
-                _msg_error "Validating '${bootmode}': No configuration file found in '${profile}/efiboot/loader/entries/'!" 0
+                _msg=(
+                  "Validating '${bootmode}':"
+                  "No configuration file found in"
+                  "'${profile}/efiboot/loader/entries/'!")
+            _msg_error "${_msg[*]}" 0
             fi
         done
     fi
@@ -3744,7 +3769,10 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
     # Check for optional packages
     # shellcheck disable=SC2076
     if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
-        _msg_info "'edk2-shell' is not in the package list. The ISO will not contain a bootable UEFI shell."
+        _msg=(
+          "'edk2-shell' is not in the package list."
+          "The ISO will not contain a bootable UEFI shell.")
+        _msg_info "${_msg[*]}"
     fi
 }
 
@@ -3765,9 +3793,9 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
     _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
 }
 
-### UEFI 32-bit 
+### UEFI IA32
 
-# GRUB UEFI32 ESP
+# GRUB UEFI IA32 ESP
 _validate_requirements_bootmode_uefi-ia32.grub.esp() {
     local _msg=()
     _msg=("Validating '${bootmode}': requires one of bootmode"
@@ -3785,23 +3813,34 @@ _validate_requirements_bootmode_uefi-ia32.grub.esp() {
     fi
 }
 
-# GRUB UEFI32 ELTORITO
+# GRUB UEFI IA32 ELTORITO
 _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
     # uefi-ia32.grub.eltorito has the exact 
     # same requirements as uefi-ia32.grub.esp
     _validate_requirements_bootmode_uefi-ia32.grub.esp
 }
 
-# Returns install path of airootfs image
-_get_airootfs_path(){
-    echo "${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
+# Fills templatized udev rules for the persistent partitions
+# $1: template udev rule file
+_fill_persistent_ro_udev_rules() {
+    local _template="${1}" \
+          _sed_cmd
+    # shellcheck disable=SC2154
+    _sed_cmd='/%DONGLE_PERSISTENT_UUID%/d'
+    [[ "${persistent_size}" != "" ]] && \
+      _sed_cmd="s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g"
+    sed -i "${_sed_cmd}" "${_template}"
+    _sed_cmd='/%PERSISTENT_UUID%/d'
+    [[ "${persistent_size}" != "" ]] && \
+        _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
+    sed -i "${_sed_cmd}" "${_template}"
 }
 
-# Returns workdir airootfs image path
-_get_keys_img(){
-    echo "$(_get "dongle_isofs" \
-                 "dir")/${_name}.$(_get_fs_ext "keys")"
-}
+#################################
+# Volume preparing functions
+################################
+
+## Airootfs
 
 # Builds airootfs filesystem image
 _prepare_airootfs_image() {
@@ -3822,6 +3861,8 @@ _prepare_airootfs_image() {
            "${_sig_dir}"
 }
 
+## Keys
+
 # Builds keys filesystem image
 _prepare_keys_image() {
     keys_size=69420
@@ -3833,41 +3874,7 @@ _prepare_keys_image() {
       _mksignature "$(_get_keys_img)"
 }
 
-# Builds swap filesystem image
-_prepare_swap_image() {
-    if [ "${swap_size}" != "" ] || \
-       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_secondary_encryption_key "swap"
-        _run_once "_mkswap"
-    fi
-}
-
-# Builds dongle swap filesystem image
-_prepare_dongle_swap_image() {
-    if [ "${swap_size}" != "" ] && \
-       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _resolve_secondary_encryption_key "dongle_swap"
-        if [[ "${dongle_swap_size}" == "" ]]; then
-            dongle_swap_size="${swap_size}"
-        fi
-        _run_once "_mkdongle_swap"
-    fi
-}
-
-# Builds recovery filesystem image
-_prepare_recovery_image() {
-    local _pacstrap_size
-    # shellcheck disable=SC2154
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-       [[ "${recovery}" == "true" ]]; then
-        if [ "${airootfs_size}" = "" ]; then
-            _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
-            airootfs_size=$((_pacstrap_size+200000))
-            recovery_size="${airootfs_size}"
-        fi
-        _run_once "_mkrecovery"
-    fi
-}
+## Persistent
 
 # Build persistent filesystem image
 _prepare_persistent_image() {
@@ -3910,10 +3917,63 @@ _prepare_persistent_image() {
     fi
 }
 
+## SWAP
+
+# Builds swap filesystem image
+_prepare_swap_image() {
+    if [ "${swap_size}" != "" ] || \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _resolve_secondary_encryption_key "swap"
+        _run_once "_mkswap"
+    fi
+}
+
+# Dongle boot
+
 _prepare_dongle_boot_image() {
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         dongle_boot_size=169042 # 169.042 MB
         _run_once "_mkdongle_boot"
+    fi
+}
+
+# Recovery
+
+# Builds recovery filesystem image
+_prepare_recovery_image() {
+    local _pacstrap_size
+    # shellcheck disable=SC2154
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+       [[ "${recovery}" == "true" ]]; then
+        if [ "${airootfs_size}" = "" ]; then
+            _pacstrap_size=$(du -s "${pacstrap_dir}" | cut -f 1)
+            airootfs_size=$((_pacstrap_size+200000))
+            recovery_size="${airootfs_size}"
+        fi
+        _run_once "_mkrecovery"
+    fi
+}
+
+# Dongle boot
+
+_prepare_dongle_boot_image() {
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        dongle_boot_size=169042 # 169.042 MB
+        _run_once "_mkdongle_boot"
+    fi
+}
+
+# Dongle swap
+
+# Builds dongle swap filesystem image
+_prepare_dongle_swap_image() {
+    if [ "${swap_size}" != "" ] && \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+        _resolve_secondary_encryption_key "dongle_swap"
+        if [[ "${dongle_swap_size}" == "" ]]; then
+            dongle_swap_size="${swap_size}"
+        fi
+        _run_once "_mkdongle_swap"
     fi
 }
 
