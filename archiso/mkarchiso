@@ -2539,6 +2539,26 @@ _get_grubmodules(){
     echo "${_modules[*]}"
 }
 
+# Install bootloader configurations
+# $1: install volume
+# $2: destination directory path
+#     in the volume
+# $@: configuration files
+_make_bootloader_config() {
+    local _bootable="${1}" \
+          _dest="${2}"
+    shift
+    local _cfgs=("${@}")
+    local _tmp_cfg="${work_dir}/bl_tmp.cfg"
+    for _cfg in "${_cfgs[@]}"; do
+        _gen_bootloader_config "${_cfg}" > \
+          "${_tmp_cfg}"
+        _install_cmd "${_bootable}" \
+                     "${_tmp_cfg}" \
+                     "${_dest}/${_cfg##*/}"
+    done
+}
+
 # Produces a standalone GRUB binary
 # $1: architecture (x86_64, i386)
 # $2: platform (efi, pc)
@@ -2764,6 +2784,42 @@ _make_kernel_on_isos() {
 ### GRUB
 
 ## GRUB configuration files
+# Prepare GRUB configuration files
+_make_common_bootmode_grub_cfg(){
+    local _bootable="work" \
+          _cfg_files=() \
+          _cfg_path="grub" \
+          _embed_cfg \
+          embedcfg
+    _cfg_files=("${profile}/${_cfg_path}"*'.cfg')
+    _embed_cfg="${profile}/${_cfg_path}/grub-embed.cfg"
+    _install_dir_cmd "${_bootable}" \
+                     "/${_cfg_path}"
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
+    # Add all GRUB files to the list of files
+    # used to calculate the required FAT image size.
+    efi_boot_files+=(
+      "${work_dir}/${_cfg_path}"
+      "${profile}/${_cfg_path}/"!(*.cfg))
+
+    IFS='' read -r -d '' embedcfg <<'EOF' || true
+if ! [ -d "$cmdpath" ]; then
+    # On some firmware, GRUB has a wrong cmdpath
+    # when booted from an optical disc.
+    # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
+    if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
+        cmdpath="${isodevice}/EFI/BOOT"
+    fi
+fi
+configfile "${cmdpath}/grub.cfg"
+EOF
+    printf '%s\n' \
+           "${embedcfg}" > \
+      "${_embed_cfg}"
+}
+
 
 # Install GRUB configuration files on volume
 # $1: volume on which to install grub configuration files
@@ -2860,31 +2916,15 @@ _make_efi_sh() {
                    "/shell${_code}.efi"
 }
 
-### Common
+## Common functions
 
-## Configuration files
-
-# Install bootloader configurations
-# $1: install volume
-# $2: destination directory path
-#     in the volume
-_make_bootloader_config() {
-    local _bootable="${1}" \
-          _dest="${2}"
-    shift
-    local _cfgs=("${@}")
-    local _tmp_cfg="${work_dir}/bl_tmp.cfg"
-    for _cfg in "${_cfgs[@]}"; do
-        _gen_bootloader_config "${_cfg}" > \
-          "${_tmp_cfg}"
-        _install_cmd "${_bootable}" \
-                     "${_tmp_cfg}" \
-                     "${_dest}/${_cfg##*/}"
-    done
-}
-
-## Install functions
-
+# Install a bootloader binary onto a volume
+# $1: value in 'fs_images'
+# $2: architecture code in UEFI format (ia32, x64)
+# $3: extension representing the platform for which
+#     the bootloader is targeted to (MBR, ELTORITO,
+#     EFI)
+# $4: source bootloader binary
 _install_bootloader() {
     local _volume="${1}" \
           _code="${2}"
@@ -2900,7 +2940,8 @@ _install_bootloader() {
                  "/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
 }
 
-_make_bootloader_common() {
+# Common bootmode making routine
+_make_bootmode_common() {
     [[ "${bootmode}" != *"syslinux"* ]] && \
       _install_bootloader "${_bootable}" \
                           "${_code}" \
@@ -2909,6 +2950,10 @@ _make_bootloader_common() {
     [[  "${bootmode}"  == "uefi-"* ]] && \
       _make_efi_sh "${_bootable}" \
                    "${_code}"
+    [[ "${bootmade}" != *"grub"* ]] && \
+      _make_bootloader_config "${_bootable}" \ 
+                              "/${_cfg_path}" \
+                              "${_cfg_files[@]}"
 }
 
 ##################################
@@ -2952,7 +2997,7 @@ _make_bootmode_bios.grub.mbr() {
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _make_bootloader_common
+    _make_bootmode_common
     _make_kernel_on_isos
     _msg=("Done! GRUB set up for BIOS booting"
           "from a disk successfully.")
@@ -2985,9 +3030,7 @@ _make_bootmode_bios.syslinux.mbr() {
           "BIOS booting from a disk...")
     _msg_info "${_msg[*]}"
     _make_syslinux "${_bootable}"
-    _make_bootloader_config "${_bootable}" \
-                            "/${_cfg_path}" \
-                            "${_cfg_files[@]}"
+    _make_bootmode_common
     _make_kernel_on_isos
     _make_memtest "${_bootable}"
     _msg=("Done! SYSLINUX set up for BIOS"
@@ -3027,7 +3070,7 @@ _make_bootmode_bios.grub.eltorito() {
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _make_bootloader_common
+    _make_bootmode_common
     _make_kernel_on_isos
 }
 
@@ -3117,7 +3160,7 @@ _make_bootmode_uefi-ia32.grub.esp() {
     else
         _run_once "_mkefi_boot"
     fi
-    _make_bootloader_common
+    _make_bootmode_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
@@ -3145,25 +3188,13 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
           _CODE="IA32" \
           _PLATFORM="EFI"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    # El Torito UEFI boot requires an image containing 
-    # the EFI system partition.
-    # uefi-ia32.grub.eltorito has the same requirements
-    # as uefi-ia32.grub.esp
     _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
-    # Prepare configuration files
     _run_once "_make_common_bootmode_grub_cfg"
-    # Additionally set up systemd-boot in ISO 9660.
-    # This allows creating a medium for the live
-    # environment by using manual partitioning
-    # and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and
-    # no firmware uses these files.
     _msg=(
       "Preparing an /EFI directory for"
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
-    # Copy GRUB EFI binary to the default/fallback boot path
-    _make_bootloader_common
+    _make_bootmode_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done!"
 }
@@ -3197,7 +3228,7 @@ _make_bootmode_uefi-x64.grub.esp() {
                "${_platform}" \
                "${work_dir}"
     _run_once "_mkefi_boot"
-    _make_bootloader_common
+    _make_bootmode_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
@@ -3260,10 +3291,7 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     _make_systemd_boot_common "${_bootable}"
     _install_dir_cmd "${_bootable}" \
                      "/${_cfg_path}"
-    _make_bootloader_common
-    _make_bootloader_config "${_bootable}" \
-                            "/${_cfg_path}" \
-                            "${_cfg_files[@]}"
+    _make_bootmode_common
     _make_kernel "${_bootable}"
     _msg_info "Done! systemd-boot set up for UEFI booting successfully."
 }
@@ -3292,22 +3320,13 @@ _make_bootmode_uefi-x64.grub.eltorito() {
           _CODE="x64" \
           _PLATFORM="EFI"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    # El Torito UEFI boot requires an image containing the EFI system partition.
-    # uefi-x64.grub.eltorito has the same requirements as uefi-x64.grub.esp
     _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
-    # Prepare configuration files
     _run_once "_make_common_bootmode_grub_cfg"
-    # Additionally set up systemd-boot in ISO 9660.
-    # This allows creating a medium for the 
-    # live environment by using manual partitioning
-    # and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and
-    # no firmware uses these files.
     _msg=(
       "Preparing an /EFI directory for"
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
-    _make_bootloader_common
+    _make_bootmode_common
     _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done!"
 }
@@ -3331,27 +3350,20 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
           _cfg_path="loader/entries"
           _code="x64" \
           _PLATFORM="EFI" \
-          _cfg_files=()
+          _cfg_files=() \
+          _msg=()
     _systemd_boot="/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     _bl="${pacstrap_dir}${_systemd_boot}"
     _cfg_files=(
       "${profile}/efiboot/${_cfg_path}/"*".conf"
-    # El Torito UEFI boot requires an image containing the EFI system partition.
-    # uefi-x64.systemd-boot.eltorito has the same requirements as
-    # uefi-x64.systemd-boot.esp
     _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
-    # Additionally set up systemd-boot in ISO 9660.
-    # This allows creating a medium for the live environment by using
-    # manual partitioning and simply copying the ISO 9660 file system contents.
-    # This is not related to El Torito booting and no firmware uses these files.
-    _msg_info "Preparing an /EFI directory for the ISO 9660 file system..."
+    _msg=("Preparing an /EFI directory"
+          "for the ISO 9660 file system...")
+    _msg_info "${_msg[*]}"
     _make_systemd_boot_common "${_bootable}"
     _install_dir_cmd "${_bootable}" \
                      "/${_cfg_path}"
-    _make_bootloader_common
-    _make_bootloader_config "${_bootable}" \
-                            "/${_cfg_path}" \
-                            "${_cfg_files[@]}"
+    _make_bootmode_common
     _msg_info "Done!"
 }
 
