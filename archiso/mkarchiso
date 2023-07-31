@@ -2598,27 +2598,14 @@ _gen_bootloader_config() {
 
 ### GRUB
 
-# Prepare GRUB configuration files
-_make_common_bootmode_grub_cfg(){
-    local _bootable="work" \
-          _cfg_files=() \
-          _cfg_path="grub" \
-          _embed_cfg \
-          embedcfg
-    _cfg_files=("${profile}/${_cfg_path}"*'.cfg')
-    _embed_cfg="${profile}/${_cfg_path}/grub-embed.cfg"
-    _install_dir_cmd "${_bootable}" \
-                     "/${_cfg_path}"
-    _make_bootloader_config "${_bootable}" \
-                            "/${_cfg_path}" \
-                            "${_cfg_files[@]}"
-    # Add all GRUB files to the list of files
-    # used to calculate the required FAT image size.
-    efi_boot_files+=(
-      "${work_dir}/${_cfg_path}"
-      "${profile}/${_cfg_path}/"!(*.cfg))
-
-    IFS='' read -r -d '' embedcfg <<'EOF' || true
+# generate an 'external loader' embedded GRUB
+# configuration file for use on UEFI platforms
+_gen_grub_embed_cfg() {
+    local _embed_cfg
+    IFS='' \
+      read -r \
+           -d '' \
+           _embed_cfg <<'EOF' || true
 if ! [ -d "$cmdpath" ]; then
     # On some firmware, GRUB has a wrong cmdpath
     # when booted from an optical disc.
@@ -2630,9 +2617,32 @@ fi
 configfile "${cmdpath}/grub.cfg"
 EOF
     printf '%s\n' \
-           "${embedcfg}" > \
-      "${_embed_cfg}"
+           "${_embed_cfg}" > \
+      "${profile}/grub/grub-embed.cfg"
 }
+
+## Copy configuration files
+# Prepare bootloader configuration files
+_make_common_bootloader_cfg(){
+    local _bootable="${1}" \
+          _cfg_path="${2}" \
+          _cfg_files=() \
+    _cfg_files=("${profile}/${_cfg_path}/"*'.cfg')
+    _install_dir_cmd "${_bootable}" \
+                     "/${_cfg_path}"
+    _make_bootloader_config "${_bootable}" \
+                            "/${_cfg_path}" \
+                            "${_cfg_files[@]}"
+}
+
+## GRUB configuration files
+# Prepare GRUB configuration files
+_make_common_bootmode_grub_cfg(){
+    _make_common_bootloader_cfg "work" "grub"
+    _gen_grub_embed_cfg
+}
+
+
 
 # Get correct GRUB module list for a given platform
 # Module list from 
@@ -2912,45 +2922,111 @@ _make_kernel_on_isos() {
 # Bootmodes utility functions
 #################################
 
-### GRUB
-
-## GRUB configuration files
-# Prepare GRUB configuration files
-_make_common_bootmode_grub_cfg(){
-    local _bootable="work" \
-          _cfg_files=() \
-          _cfg_path="grub" \
-          _embed_cfg \
-          embedcfg
-    _cfg_files=("${profile}/${_cfg_path}"*'.cfg')
-    _embed_cfg="${profile}/${_cfg_path}/grub-embed.cfg"
-    _install_dir_cmd "${_bootable}" \
-                     "/${_cfg_path}"
-    _make_bootloader_config "${_bootable}" \
-                            "/${_cfg_path}" \
-                            "${_cfg_files[@]}"
-    # Add all GRUB files to the list of files
-    # used to calculate the required FAT image size.
-    efi_boot_files+=(
-      "${work_dir}/${_cfg_path}"
-      "${profile}/${_cfg_path}/"!(*.cfg))
-
-    IFS='' read -r -d '' embedcfg <<'EOF' || true
-if ! [ -d "$cmdpath" ]; then
-    # On some firmware, GRUB has a wrong cmdpath
-    # when booted from an optical disc.
-    # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
-    if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
-        cmdpath="${isodevice}/EFI/BOOT"
-    fi
-fi
-configfile "${cmdpath}/grub.cfg"
-EOF
-    printf '%s\n' \
-           "${embedcfg}" > \
-      "${_embed_cfg}"
+_parse_bootmode() {
+    local _bootmode="${1}"\
+          _bootmode_array=() \
+          _arch \
+          _arr=() \
+          _boot_loader \
+          _boot_method \
+          _code \
+          _CODE \
+          _platform_code \
+          _platform_code_array \
+          _platform \
+          _PLATFORM
+    IFS='.' \
+      read -ra \
+           _bootmode_array <<< \
+        "${_bootmode}" 
+    _platform_code="${_bootmode[0]}"
+    _boot_loader="${_bootmode[1]}"
+    _boot_method="${_bootmode[2]}"
+    IFS="-" \
+      read -ra \
+           _platform_code_array <<< \
+        "${_platform_code}"
+    _platform="${_platform_code_array[1]}"
+    _code="${_platform_code_array[2]}"
+    _arch="x86_64"
+    _CODE="x64"
+    _PLATFORM="EFI"
+    [[ "${_code}" == "ia32" ]] && \
+      _arch="i386" \
+      _CODE="IA32"
+    [[ "${_platform}" == "bios" ]] && \
+      _arch="i386" \
+      _code="ia32" \
+      _CODE="IA32" \
+      _platform="pc" \
+      _PLATFORM="MBR" && \
+      [[ "${_boot_method}" == "eltorito" ]] && \
+        _platform="pc-eltorito" \
+        _PLATFORM="ELTORITO"
+    echo "${_boot_loader}" \
+         "${_arch}" \
+         "${_code}" \
+         "${_CODE}" \
+         "${_platform}" \
+         "${_PLATFORM}" \
+         "${_boot_method}"
 }
 
+_get_parent_bootmode() {
+    local _bootmode="${1}" \
+          _candidate_array=()
+    for _candidate in "${bootmodes[@]}"; do
+        _candidate_array=(
+          $(_parse_bootmode "${_candidate}"))
+        [[ "${_platform}" == "efi" ]] && \
+        [[ "${_boot_method}" == "eltorito" ]] && \
+          echo "u${_platform}-${_code}.${_candidate_array[0]}.${_boot_method}"
+    done
+}
+
+_sort_bootmodes() {
+    local _bootmodes=(${@}) \
+          _bootmode \
+          _sorted=()
+    for _bootmode in "${_bootmodes[@]}"; do
+        [[ "${_bootmode}" == "bios"*"mbr" ]] & \
+          _sorted+=(
+            "${_bootmode}")
+    done
+    for _bootmode in "${_bootmodes[@]}"; do
+        [[ "${_bootmode}" == "bios"*"eltorito" ]] & \
+          _sorted+=(
+            "${_bootmode}")
+    done
+    for _bootmode in "${_bootmodes[@]}"; do
+        [[ "${_bootmode}" == "uefi"*"esp" ]] & \
+          _sorted+=(
+            "${_bootmode}")
+    done
+    for _bootmode in "${_bootmodes[@]}"; do
+        [[ "${_bootmode}" == "uefi"*"eltorito" ]] & \
+          _sorted+=(
+            "${_bootmode}")
+    done
+    echo ${_sorted[@]}
+}
+
+_make_common_bootloader() {
+    local _bootmode_array=()
+    _bootmode_array+=(
+      $(_parse_bootmode "${bootmode}"))
+    _boot_loader="${_bootmode_array[0]}"
+    _arch="${_bootmode_array[1]}"
+    _code="${_bootmode_array[2]}"
+    _CODE="${_bootmode_array[3]}"
+    _platform="${_bootmode_array[4]}"
+    _PLATFORM="${_bootmode_array[5]}"
+    _boot_method="${_bootmode_array[6]}"
+    [[ "${_boot_loader}" == "syslinux" ]] && \
+      _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
+}
+
+### GRUB
 
 # Install GRUB configuration files on volume
 # $1: volume on which to install grub configuration files
@@ -2989,7 +3065,7 @@ _make_common_bootmode_grub_cfg_efi_boot() {
 _make_grub_hybrid() {
     local _bootable="${1}"
     _install_dir_cmd "${_bootable}" \
-                     "/EFI"
+                     "/EFI" \
                      "/EFI/BOOT"
     _install_cmd "${_bootable}" \
                  "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
@@ -3072,7 +3148,7 @@ _install_bootloader() {
 }
 
 # Common bootmode making routine
-_make_bootmode_common() {
+_make_common_bootmode() {
     [[ "${bootmode}" != *"syslinux"* ]] && \
       _install_bootloader "${_bootable}" \
                           "${_code}" \
@@ -3096,6 +3172,8 @@ _make_bootmode_common() {
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
+    bootmodes=(
+      $(_sort_bootmodes "${bootmodes[@]}"))
     for bootmode in "${bootmodes[@]}"; do
         _run_once "_make_bootmode_${bootmode}_iso"
     done
@@ -3118,17 +3196,15 @@ _make_bootmodes_dongle_iso() {
 # Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
     # local bootable_dir="${1}"
-    local _bootable="${1}"
-    local _code="ia32" \
-          _CODE="IA32" \
-          _platform="pc" \
-          _PLATFORM="MBR"
+    local _bootable="${1}" \
+          _bl
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _make_bootmode_common
+    _make_common_bootmode
     _make_kernel_on_isos
     _msg=("Done! GRUB set up for BIOS booting"
           "from a disk successfully.")
@@ -3156,12 +3232,13 @@ _make_bootmode_bios.syslinux.mbr() {
           _cfg_files=() \
           _cfg_path="syslinux"
           _msg=() \
+    _make_common_bootloader "${bootmode}"
     _cfg_files=("${profile}/syslinux/"*.cfg)
     _msg=("Setting up SYSLINUX for"
           "BIOS booting from a disk...")
     _msg_info "${_msg[*]}"
     _make_syslinux "${_bootable}"
-    _make_bootmode_common
+    _make_common_bootmode
     _make_kernel_on_isos
     _make_memtest "${_bootable}"
     _msg=("Done! SYSLINUX set up for BIOS"
@@ -3188,11 +3265,8 @@ _make_bootmode_bios.syslinux.mbr_dongle_iso() {
 _make_bootmode_bios.grub.eltorito() {
     local _bootable="${1}" \
           _bl \
-          _msg \
-          _code="ia32" \
-          _CODE="IA32" \
-          _platform="pc-eltorito" \
-          _PLATFORM="ELTORITO"
+          _msg
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
     _msg=("Setting up GRUB for BIOS booting"
           "from an optical disc...")
@@ -3201,7 +3275,7 @@ _make_bootmode_bios.grub.eltorito() {
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _make_bootmode_common
+    _make_common_bootmode
     _make_kernel_on_isos
 }
 
@@ -3225,6 +3299,7 @@ _make_bootmode_bios.grub.eltorito_dongle_iso() {
 # $1: volume on which to install syslinux
 _make_bootmode_bios.syslinux.eltorito() {
     local _bootable="${1}" \
+          _root="pacstrap" \
           _msg=()
     _msg=(
       "Setting up SYSLINUX for BIOS"
@@ -3233,10 +3308,12 @@ _make_bootmode_bios.syslinux.eltorito() {
     _install_dir_cmd "${_bootable}" \
                      "/syslinux"
     _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/isolinux.bin" \
+                 "$(_get "${_root}" \
+                         "dir")/usr/lib/syslinux/bios/isolinux.bin" \
                  "/syslinux"
     _install_cmd "${_bootable}"
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/isohdpfx.bin" \
+                 "$(_get "${_root}" \
+                         "dir")/usr/lib/syslinux/bios/isohdpfx.bin" \
                  "/syslinux"
     _msg=(
       "Done! SYSLINUX set up for BIOS booting"
@@ -3268,12 +3345,8 @@ _make_bootmode_bios.syslinux.eltorito_dongle_iso() {
 # $1: device type ('iso', 'dongle')
 _make_bootmode_uefi-ia32.grub.esp() {
     local _bl \
-          _bootable="efi_boot" \ # "${1}" \
-          _code="ia32" \
-          _CODE="IA32" \
-          _other_code="x64" \
-          _platform="efi" \
-          _PLATFORM="EFI"
+          _bootable="${1}" \
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _make_grub "${_code}" \
                "${_platform}" \
@@ -3283,16 +3356,14 @@ _make_bootmode_uefi-ia32.grub.esp() {
     efi_boot_files+=(
       "${_bl}"
       "$(_get_efi_sh "${_code}")")
-    if [[ " ${bootmodes[*]} " =~ uefi-${_other_code}.systemd-boot.esp ]]; then
-        # TODO: Remove this branch.
-        _run_once "_make_bootmode_uefi-${_other_code}.systemd-boot.esp_${_bootable}"
-    elif [[ " ${bootmodes[*]} " =~ uefi-${_other_code}.grub.esp ]]; then
-        _run_once "_make_bootmode_uefi-${_other_code}.grub.esp_${_bootable}"
-    else
-        _run_once "_mkefi_boot"
-    fi
-    _make_bootmode_common
-    _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
+    # if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+    #     _run_once "_make_bootmode_uefi-x64.systemd-boot.esp_${_bootable}"
+    # elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
+    #     _run_once "_make_bootmode_uefi-x64.grub.esp_${_bootable}"
+    # else
+    #     _run_once "_mkefi_boot"
+    # fi
+    # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
 
@@ -3314,20 +3385,20 @@ _make_bootmode_uefi-ia32.grub.esp_dongle_iso() {
 # $1: root file system for GRUB
 # $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-ia32.grub.eltorito() {
-    local _bootable="efi_boot" \ # ${1}" \
-          _code="ia32" \
-          _CODE="IA32" \
-          _PLATFORM="EFI"
+    local _bootable="${1}" \
+          _bl
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
-    _run_once "_make_common_bootmode_grub_cfg"
-    _msg=(
-      "Preparing an /EFI directory for"
-      "the ISO 9660 file system...")
-    _msg_info "${_msg[*]}"
-    _make_bootmode_common
-    _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
-    _msg_info "Done!"
+    # _bootmode="u${_platform}-${_code}.${_boot_loader}.esp_${_bootable}"
+    # _run_once "_make_bootmode_${_bootmode}"
+    # _run_once "_make_common_bootmode_${_boot_loader}_cfg"
+    # _msg=(
+    #   "Preparing an /EFI directory for"
+    #   "the ISO 9660 file system...")
+    # _msg_info "${_msg[*]}"
+    # _make_common_bootmode
+    # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
+    # _msg_info "Done!"
 }
 
 # Prepares GRUB (32 bit) El Torito for UEFI on the ISO image
@@ -3349,18 +3420,15 @@ _make_bootmode_uefi-ia32.grub.eltorito_dongle_iso() {
 # Prepares GRUB for EFI boot
 _make_bootmode_uefi-x64.grub.esp() {
     local _bl \
-          _bootable="efi_boot" \ # "${1}" \
-          _code="x64" \
-          _CODE="x64" \
-          _platform="efi" \
-          _PLATFORM="EFI"
+          _bootable="efi_boot"
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _make_grub "${_code}" \
                "${_platform}" \
                "${work_dir}"
-    _run_once "_mkefi_boot"
-    _make_bootmode_common
-    _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
+    # _run_once "_mkefi_boot"
+    # _make_common_bootmode
+    # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     _msg_info "Done! GRUB set up for UEFI booting successfully."
 }
  
@@ -3381,16 +3449,13 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _available_ucodes=() \
           _bootable="efi_boot" \
           _bl \
-          _code="x64" \
           _cfg_path="loader/entries" \
           _cfg_files=() \
           _file \
           _lib="/usr/lib/systemd/boot" \
-          _platform="efi" \
-          _PLATFORM="EFI" \
           _results \
           _systemd_boot \
-          efi_boot_size
+    _make_common_bootloader "${buildmode}"
     _systemd_boot="systemd-boot${_code}.${_platform}"
     _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
     _cfg_files=(
@@ -3412,19 +3477,20 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
       "vmlinuz-*")
     for _query in "${_images[@]}"; do
         mapfile -t efi_boot_files < \
-          <(find "${work_dir}" \
+          <(find "$(_get "work" \
+                         "dir")" \
                  -iname "${_query}" \
                  -exec echo {} \; \
                  -quit)
     done
     # Create a FAT image for the EFI system partition
-    _run_once "_mkefi_boot"
-    _make_systemd_boot_common "${_bootable}"
-    _install_dir_cmd "${_bootable}" \
-                     "/${_cfg_path}"
-    _make_bootmode_common
-    _make_kernel "${_bootable}"
-    _msg_info "Done! systemd-boot set up for UEFI booting successfully."
+    # _run_once "_mkefi_boot"
+    # _make_systemd_boot_common "${_bootable}"
+    # _install_dir_cmd "${_bootable}" \
+    #                  "/${_cfg_path}"
+    # _make_common_bootmode
+    # _make_kernel "${_bootable}"
+    # _msg_info "Done! systemd-boot set up for UEFI booting successfully."
 }
 
 # Prepares systemd-boot for the ISO image
@@ -3447,19 +3513,17 @@ _make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
 _make_bootmode_uefi-x64.grub.eltorito() {
     local _bootable="${1}"\
           _bl \
-          _code="x64" \
-          _CODE="x64" \
-          _PLATFORM="EFI"
+    _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
-    _run_once "_make_common_bootmode_grub_cfg"
-    _msg=(
-      "Preparing an /EFI directory for"
-      "the ISO 9660 file system...")
-    _msg_info "${_msg[*]}"
-    _make_bootmode_common
-    _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
-    _msg_info "Done!"
+    # _run_once "_make_bootmode_uefi-${_code}.grub.esp_${_bootable}"
+    # _run_once "_make_common_bootmode_grub_cfg"
+    # _msg=(
+    #   "Preparing an /EFI directory for"
+    #   "the ISO 9660 file system...")
+    # _msg_info "${_msg[*]}"
+    # _make_common_bootmode
+    # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
+    # _msg_info "Done!"
 }
 
 # Prepares GRUB El Torito for UEFI on the ISO image
@@ -3487,14 +3551,14 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     _bl="${pacstrap_dir}${_systemd_boot}"
     _cfg_files=(
       "${profile}/efiboot/${_cfg_path}/"*".conf"
-    _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
-    _msg=("Preparing an /EFI directory"
-          "for the ISO 9660 file system...")
-    _msg_info "${_msg[*]}"
-    _make_systemd_boot_common "${_bootable}"
-    _install_dir_cmd "${_bootable}" \
-                     "/${_cfg_path}"
-    _make_bootmode_common
+    # _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
+    # _msg=("Preparing an /EFI directory"
+    #       "for the ISO 9660 file system...")
+    # _msg_info "${_msg[*]}"
+    # _make_systemd_boot_common "${_bootable}"
+    # _install_dir_cmd "${_bootable}" \
+    #                  "/${_cfg_path}"
+    # _make_common_bootmode
     _msg_info "Done!"
 }
 
@@ -3681,8 +3745,15 @@ _validate_requirements_persistent_image_type_ext4+luks() {
 
 ## Common
 
+# MBR
+_validate_common_requirements_mbr() {
+    [[ ]] \
+    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
+    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
+}
+
 # GRUB common
-_validate_common_requirements_grub(){
+_validate_common_requirements_grub() {
     local _no_cfg_msg=() \
           _no_dir_msg=() \
           _no_cfgs_msg=() \
@@ -4014,6 +4085,29 @@ _prepare_airootfs_image() {
         _install_cmd "dongle_iso" \
                      "$("_get_${_volume}_img").sig" \
                      "/${install_dir}/${arch}"
+}
+
+_prepare_efi_boot_image() {
+    local _bootmode \
+          _volume="efi_boot" \
+          _root="pacstrap"
+    # Add all GRUB files to the list of files
+    # used to calculate the required FAT image size.
+    [[ " ${bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
+      run_once "_make_common_bootmode_grub_cfg" && \
+        efi_boot_files+=(
+          "${work_dir}/${_cfg_path}"
+          "${profile}/grub/"!(*.cfg))
+    for _bootmode in "${bootmodes[@]}"; do
+      [[ "${_bootmode}" == *"esp" ]] && \
+        _make_common_bootloader 
+        _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
+    _make_grub "${_code}" \
+               "${_platform}" \
+               "${work_dir}"
+
+        echo "ciao"
+    done
 }
 
 ## Keys
