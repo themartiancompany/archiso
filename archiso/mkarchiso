@@ -156,6 +156,27 @@ _msg_error() {
     fi
 }
 
+# Returns an attribute variable value for a 
+# given object
+# $1: an object
+# $2: a variable value attached to object
+_get() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _ref
+    _ref="${_image}_${_var}"
+    printf %s "${!_ref[*]}"
+}
+
+# Sets object attribute variables
+_set() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _value="${3}"
+    printf -v "${_obj}_${_var}" \
+              "${_value}"
+}
+
 # Show help usage, with an exit status.
 # $1: exit status number.
 _usage() {
@@ -206,8 +227,8 @@ _show_config() {
     TZ=UTC printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
     _msg_info "${app_name} configuration settings"
     _msg_info "             Architecture:   ${arch}"
-    _msg_info "        Working directory:   ${work_dir}"
-    _msg_info "   Installation directory:   ${install_dir}"
+    _msg_info "        Working directory:   $(_get "work" "dir")"
+    _msg_info "   Installation directory:   $(_get "install" "dir")"
     _msg_info "               Build date:   ${build_date}"
     _msg_info "         Output directory:   ${out_dir}"
     _msg_info "       Current build mode:   ${buildmode}"
@@ -215,9 +236,10 @@ _show_config() {
     _msg_info "                  GPG key:   ${gpg_key:-None}"
     _msg_info "               GPG signer:   ${gpg_sender:-None}"
     _msg_info "                 GPG Home:   ${gpg_home:-None}"
-    _msg_info "           Encryption Key:   ${airootfs_encryption_key:-None}"
+    _msg_info "           Encryption Key:   $(_get "airootfs" \
+                                                   "encryption_key"):-None}"
     _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
-    _msg_info "                  Profile:   ${profile}"
+    _msg_info "                  Profile:   $(_get "profile" "dir")"
     _msg_info "Pacman configuration file:   ${pacman_conf}"
     _msg_info "          Image file name:   ${image_name:-None}"
     _msg_info "         ISO volume label:   ${iso_label}"
@@ -226,27 +248,6 @@ _show_config() {
     _msg_info "               Boot modes:   ${bootmodes[*]:-None}"
     _msg_info "            Packages File:   ${buildmode_packages}"
     _msg_info "                 Packages:   ${buildmode_pkg_list[*]}"
-}
-
-# Returns an attribute variable value for a 
-# given object
-# $1: an object
-# $2: a variable value attached to object
-_get() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _ref
-    _ref="${_image}_${_var}"
-    printf %s "${!_ref[*]}"
-}
-
-# Sets object attribute variables
-_set() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _value="${3}"
-    printf -v "${_obj}_${_var}" \
-              "${_value}"
 }
 
 # Helper function to run functions only one time.
@@ -1273,6 +1274,50 @@ _mkimg() {
 # Volumes functions
 ###################################
 
+# Install directories to a given volume
+# at a given path
+# $1: volume
+# $@: files
+# $#: destination as path in volume
+_install_dir_cmd(){
+    local _volume="${1}" \
+          _cmd \
+          _dir \
+          _dir_array=() \
+          _path=() \
+          _dirs=() \
+          _total_dirs=()
+    shift
+    _dirs=("${@}")
+    for _dir in "${_dirs[@]}"; do
+        _path=()
+        IFS="/" \
+          read -ra \
+               _dir_array <<< \
+            "${_dir}" 
+        for _dir in "${_dir_array[@]}"; do
+            _path+=(
+              "${_dir}")
+            _total_dirs+=(
+              "$(IFS="/" ; \
+                 echo "${_path[*]}")")
+        done
+    done
+    _dirs=(
+      "${_total_dirs[@]}")
+    _cmd=(
+      install -d
+              -m 0755 --)
+    [[ "${_volume}" == "efi_boot" ]] && \
+      _cmd=(
+        mmd -D o
+            -i "$(_get "efi_boot" \
+                       "img")" --) \
+      _dirs=(
+        "${_dirs[@]/#/::}")
+    "${_cmd[@]}" "${_dirs[@]}"
+}
+
 # Install public files to a given volume
 # $1: volume
 # $@: files
@@ -1285,50 +1330,34 @@ _install_cmd(){
           _root
     shift
     while [ "${#}" -gt 1 ]; do
-        _files+=("${1}")
+        _files+=(
+          "${1}")
         shift
     done
-    printf -v _dest '%s\n' "${1}"
+    printf -v _dest \
+           '%s\n' \
+           "${1}"
+    [[ ! -d "${_dest}" ]] && \
+    [[ ! -d "$(dirname "${_dest}")" ]] && \
+      _install_dir_cmd "${_volume}" \
+                       "${_dest}"
     if [[ "${_volume}" == "efi_boot" ]]; then
         _root="$(_get "${_volume}" \
-                    "img")"
-        _cmd=(
-          mcopy -D o \
-                -i "${_root}" --)
-        _dest="::${_dest}"
+                      "img")"
+          _cmd=(
+            mcopy -D o \
+                  -i "${_root}" --)
+          _dest="::${_dest}"
     else
-      _root="$(_get "${_volume}" \
-                    "dir")"
-         _cmd=(
-           install -D
-                   -m 0644 --)
+        _root="$(_get "${_volume}" \
+                      "dir")"
+        _cmd=(
+          install -D
+                  -m 0644 --)
         _dest="${_root}${_dest}"
     fi
     "${_cmd[@]}" "${_files[@]}" \
                  "${_dest}"
-}
-
-# Install files to a given volume
-# $1: volume
-# $@: files
-# $#: destination as path in volume
-_install_dir_cmd(){
-    local _volume="${1}" \
-          _cmd \
-          _dir \
-          _dirs=()
-    shift
-    _dirs=("${@}")
-    _cmd=(
-      install -d
-              -m 0755 --)
-    [[ "${_volume}" == "efi_boot" ]] && \
-      _cmd=(
-        mmd -D o
-            -i "$(_get "efi_boot" \
-                       "img")" --) \
-      _dirs=("${_dirs[@]/#/::}")
-    "${_cmd[@]}" "${_dirs[@]}"
 }
 
 # Install an encryption key in its
@@ -1515,12 +1544,14 @@ _mkefi_boot() {
                 "${efi_boot_files[@]}" 2>/dev/null | \
                awk 'END { print $1 }')"
     _mkimg "efi_boot"
-
     # Create the default/fallback boot path in
     # which boot loaders will be placed later.
-    _install_dir_cmd "efi_boot" \
-                     "/EFI" \
-                     "/EFI/BOOT"
+    # _install_dir_cmd "efi_boot" \
+    #                  "/EFI" \
+    #                  "/EFI/BOOT"
+    # ^ These should not be needed anymore due
+    #   to directory recursively created
+    #   in _install_dir_cmd
 }
 
 ## Persistent (the user data partition)
@@ -1716,12 +1747,15 @@ _build_crypttab() {
 }
 
 _get_crypttab() {
-    echo "${profile}/airootfs/etc/crypttab" 
+    local _volume="${1}"
+    echo "($(_get "${_volume}"
+                  "dir")/airootfs/etc/crypttab"
 }
 
 _make_crypttab() {
-    local _root="${1}" \
-    _build_crypttab "$(_get_crypttab)" \
+    local _src="${1}"
+    local _root="${2}" \
+    _build_crypttab "$(_get_crypttab "${1}")" \
                     "$(_get "${_root}" \
                             "dir")/etc/crypttab"
 }
@@ -1885,7 +1919,7 @@ _make_pacman_conf() {
           _default_cache="/var/cache/pacman/pkg" \
           _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
           _profile_cache_dirs \
-          _system_cache_dirs
+          _system_cache_dirs \
     _system_cache_dirs="$(pacman-conf CacheDir | \
                             tr '\n' ' ')"
     _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" \
@@ -1911,7 +1945,8 @@ _make_pacman_conf() {
     pacman-conf --config "${pacman_conf}" | \
         sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
              /\[options\]/a HookDir = ${_hooks}/" > \
-          "${work_dir}/${buildmode}.pacman.conf"
+          "$(_get "work" \
+                  "dir")/${buildmode}.pacman.conf"
 }
 
 #### Install
@@ -1922,8 +1957,10 @@ _make_pacman_conf() {
 _is_file_in_work_paths() {
     local _filename="${1}"
     local _dir
-    local _dirs=("${profile}/airootfs"
-                 "${profile}/persistent")
+    local _dirs=("$(_get "profile" \
+                         "dir")/airootfs"
+                 "$(_get "profile" \
+                         "dir")/persistent")
     _pass="false"
     for _dir in "${_dirs[@]}"; do
         if [ -e "${_dir}${_filename}" ]; then
@@ -1932,7 +1969,8 @@ _is_file_in_work_paths() {
     done
 }
 
-# Checks if an image's file system path can be applied permissions on
+# Checks if an image's file system path can be
+# applied permissions on
 # $1: filename path
 # $2: image name (airootfs, persistent)
 _validate_file_path() {
@@ -1940,8 +1978,10 @@ _validate_file_path() {
           _storage="${2}"
     local _msg \
           _on_storage="${_storage}${_filename}" \
-          pacstrap_dir="${work_dir}/${arch}/airootfs" \
-          persistent_dir="${work_dir}/persistent"
+          pacstrap_dir="$(_get "work" \
+                               "dir")/${arch}/airootfs" \
+          persistent_dir="$(_get "work" \
+                                 "dir")/persistent"
     _validate_file_result="false"
     _validate_file_err=""
     _validate_file_warn=""
@@ -2044,7 +2084,7 @@ _copy_custom_files() {
       --no-preserve=ownership,mode)
     _msg_info "Copying custom ${_fs_image} files..."
     cp "${_cp_opts[@]}" -- \
-       "${profile}/${_fs_image}/." \
+       "${profile_dir}/${_fs_image}/." \
        "${_fs_dir}"
     for filename in "${!file_permissions[@]}"; do
         _apply_permissions "${filename}" \
@@ -2074,11 +2114,11 @@ _make_custom_airootfs() {
           _etc \
           _root "pacstrap" \
           _volume="airootfs"
-    _etc="${profile}/${_volume}/etc" \
+    _etc="${profile_dir}/${_volume}/etc" \
 
     install_root_dir "$(_get "${_root}" \
                              "dir")"
-    [[ -d "${profile}/${_volume}" ]] && \
+    [[ -d "${profile_dir}/${_volume}" ]] && \
       if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
           _resolve_secondary_key "keys"
           if [[ "$(_get "${_volume}" \
@@ -2214,8 +2254,9 @@ _make_version() {
           _root="pacstrap" \
           _os_release
     _msg_info "Creating version files..."
-    rm -f -- "$(_get "${_root}" \
-                     "dir")/version"
+    rm -f -- \
+       "$(_get "${_root}" \
+               "dir")/version"
     printf '%s\n' \
            "${iso_version}" > \
       "$(_get "${_root}" \
@@ -2313,9 +2354,11 @@ _run_chroot_script() {
 
 # Customize installation.
 _make_customize_airootfs() {
-    local _chroot="${pacstrap_dir}" \
+    local _chroot="$(_get "pacstrap" \
+                          "dir")" \
           _custom_script="/root/customize_airootfs.sh" \
-          _passwd="${profile}/airootfs/etc/passwd"
+          _passwd="$(_get "profile" \
+                          "dir")/airootfs/etc/passwd"
     [[ -e "${_passwd}" ]] &&
       _user_setup_passwd "${_chroot}" \
                          "${_passwd}"
@@ -2324,40 +2367,55 @@ _make_customize_airootfs() {
                          "${_custom_script}"
 }
 
+_gen_pkglist() {
+    local _root="${1}" \
+          _volume="${2}"
+          _dest="${3}"
+    _dir=$(dirname "${_pkglist}")
+    _install_dir_cmd "${_volume}" \
+                     "${_dest}"
+    pacman -Q \
+           --sysroot "$(_get "${_root}" \
+                             "dir")" > \
+      "$(_get "${_volume}" \
+              "dir")${_dest}/pkglist.${arch}.txt"
+}
+
 # Produces a list of the installed packages
 _make_pkglist() {
-    local _msg=() \
-          _pkglist="pkglist.${arch}.txt"
-    local _bootstrap="${pacstrap_dir}/${_pkglist}" \
-          _iso="${iso_dir}/${install_dir}/${_pkglist}"
+    local _dest \
+          _msg=() \
+          _flag \
+          _path \
+          _root="pacstrap" \
     _msg=("Creating a list of installed"
           "packages on live-enviroment..."
     _msg_info "${_msg[*]}"
     case "${buildmode}" in
         "bootstrap")
-            pacman -Q \
-                   --sysroot \
-                   "${pacstrap_dir}" > "${_bootstrap}"
+            _flag=true
+            _dest="${_root}"
+            _path="/"
             ;;
         "iso")
-            install -d \
-                    -m 0755 -- \
-                    "${iso_dir}/${install_dir}"
-            if [[ ! "${airootfs_image_type}" == *"luks"* ]]; then
-                pacman -Q \
-                       --sysroot \
-                       "${pacstrap_dir}" > "${_iso}"
-            fi
+            [[ ! "$(_get "airootfs" \
+                         "image_type")" == *"luks"* ]] && \
+              _flag=true \
+              _dest="iso" \
+              _path="/$(_get "install" \
+                             "dir")"
             ;;
         "netboot")
-            install -d \
-                    -m 0755 -- \
-                    "${iso_dir}/${install_dir}"
-            pacman -Q \
-                   --sysroot \
-                   "${pacstrap_dir}" > "${_iso}"
+            _flag=true
+            _dest="iso"
+            _path="$(_get "install" \
+                          "dir")"
             ;;
     esac
+    [[ "${_flag}" == "true" ]] && \
+      _gen_pkglist "${_root}" \
+                   "${_dest}" \
+                   "${_path}"
     _msg_info "Done!"
 }
 
@@ -2618,27 +2676,46 @@ configfile "${cmdpath}/grub.cfg"
 EOF
     printf '%s\n' \
            "${_embed_cfg}" > \
-      "${profile}/grub/grub-embed.cfg"
+      "${profile_dir}/grub/grub-embed.cfg"
 }
 
 ## Copy configuration files
 # Prepare bootloader configuration files
 _make_common_bootloader_cfg(){
-    local _bootable="${1}" \
+    local _volume="${1}" \
           _cfg_path="${2}" \
+          _cfg_path_array=() \
           _cfg_files=() \
-    _cfg_files=("${profile}/${_cfg_path}/"*'.cfg')
-    _install_dir_cmd "${_bootable}" \
-                     "/${_cfg_path}"
-    _make_bootloader_config "${_bootable}" \
+    _cfg_files=("${profile_dir}/${_cfg_path}/"*'.cfg')
+    IFS='/' \
+      read -ra \
+           _cfg_path_array <<< \
+        "${_cfg_path}" 
+    _make_bootloader_config "${_volume}" \
                             "/${_cfg_path}" \
                             "${_cfg_files[@]}"
 }
 
+_make_common_bootloader_cfg
+_make_common_bootmode_grub_cfg_install iso
+
+_make_common_bootmode_grub_cfg_install() {
+    local _bootable="${1}" \
+          _files=()
+    _files+=(
+      "${work_dir}/grub/"*'.cfg'
+      "${profile_dir}/grub/"*'.cfg')
+    _install_cmd "${_bootable}" \
+                 "${_files[@]}" \
+                 "/EFI/BOOT"
+}
+
+
 ## GRUB configuration files
 # Prepare GRUB configuration files
 _make_common_bootmode_grub_cfg(){
-    _make_common_bootloader_cfg "work" "grub"
+    _make_common_bootloader_cfg "work" \
+                                "$(_get_bl_cfg_path "grub")"
     _gen_grub_embed_cfg
 }
 
@@ -2697,6 +2774,7 @@ _make_bootloader_config() {
         _install_cmd "${_bootable}" \
                      "${_tmp_cfg}" \
                      "${_dest}/${_cfg##*/}"
+        rm "${_tmp_cfg}"
     done
 }
 
@@ -2706,16 +2784,11 @@ _make_bootloader_config() {
 # $3: output file or directory
 #     default name: BOOT<IA32/X64>.EFI
 _make_grub() {
-    local _code="${1}" \
-          _platform="${2}" \
-          _out="${3}"
-    local _arch \
-          _cfg="${work_dir}/grub.cfg"
+    local _out="${1}"
+    local _cfg="${work_dir}/grub.cfg"
           _embed_cfg="${work_dir}/grub-embed.cfg" \
           _modules="$(_get_grubmodules "${_platform}")" \
           _grub_options=() \
-          _CODE="${_code}" \
-          _PLATFORM
     _grub_options=(
       -O "${_arch}-${_platform}"
       --modules="${_modules}"
@@ -2724,19 +2797,9 @@ _make_grub() {
       --sbat=/usr/share/grub/sbat.csv
       --disable-shim-lock
       --compress=xz)
-    [[ "${_code}" == "ia32" ]] && \
-      _arch="i386" \
-      _CODE="IA32"
-    [[ "${_code}" == "x64" ]] && \
-      _arch="x86_64"
-    _PLATFORM="$(echo "${_platform}" | \
-                   tr '[:lower:]' '[:upper:]')"
     [[ "${_platform}" == "pc" ]] && \
       _grub_options+=(
         --install-modules="${_modules}") \
-      _PLATFORM="MBR"
-    [[ "${_platform}" == "pc-eltorito" ]] && \
-      _PLATFORM="ELTORITO"
     [[ "${_platform}" == "pc"* ]] && \
       _grub_options+=(
         --fonts="") \
@@ -2760,9 +2823,9 @@ _make_syslinux() {
     _local _bootable="${1}"
     _install_dir_cmd "${_bootable}" \
                      "/syslinux"
-    [[ -e "${profile}/syslinux/splash.png" ]] && \
+    [[ -e "${profile_dir}/syslinux/splash.png" ]] && \
       _install_cmd "${_bootable}" \
-                   "${profile}/syslinux/splash.png" \
+                   "${profile_dir}/syslinux/splash.png" \
                    "/syslinux"
     _install_cmd "${_bootable}" \
                  "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 \
@@ -2791,12 +2854,12 @@ _make_syslinux() {
     fi
 }
 
-_make_systemd_boot_common() {
+_make_systemd-boot_common() {
     local _bootable="${1}"
     _install_dir_cmd "${_bootable}" \
                      "/loader" \
     _install_cmd "${_bootable}" \
-                 "${profile}/efiboot/loader/loader.conf" \
+                 "${profile_dir}/efiboot/loader/loader.conf" \
                  "/loader"
 }
 
@@ -2954,6 +3017,8 @@ _parse_bootmode() {
     [[ "${_code}" == "ia32" ]] && \
       _arch="i386" \
       _CODE="IA32"
+    [[ "${_platform}" == "uefi" ]] && \
+      _platform="efi"
     [[ "${_platform}" == "bios" ]] && \
       _arch="i386" \
       _code="ia32" \
@@ -2972,57 +3037,18 @@ _parse_bootmode() {
          "${_boot_method}"
 }
 
-_get_parent_bootmode() {
-    local _bootmode="${1}" \
-          _candidate_array=()
-    for _candidate in "${bootmodes[@]}"; do
-        _candidate_array=(
-          $(_parse_bootmode "${_candidate}"))
-        [[ "${_platform}" == "efi" ]] && \
-        [[ "${_boot_method}" == "eltorito" ]] && \
-          echo "u${_platform}-${_code}.${_candidate_array[0]}.${_boot_method}"
-    done
-}
-
-_sort_bootmodes() {
-    local _bootmodes=(${@}) \
-          _bootmode \
-          _sorted=()
-    for _bootmode in "${_bootmodes[@]}"; do
-        [[ "${_bootmode}" == "bios"*"mbr" ]] & \
-          _sorted+=(
-            "${_bootmode}")
-    done
-    for _bootmode in "${_bootmodes[@]}"; do
-        [[ "${_bootmode}" == "bios"*"eltorito" ]] & \
-          _sorted+=(
-            "${_bootmode}")
-    done
-    for _bootmode in "${_bootmodes[@]}"; do
-        [[ "${_bootmode}" == "uefi"*"esp" ]] & \
-          _sorted+=(
-            "${_bootmode}")
-    done
-    for _bootmode in "${_bootmodes[@]}"; do
-        [[ "${_bootmode}" == "uefi"*"eltorito" ]] & \
-          _sorted+=(
-            "${_bootmode}")
-    done
-    echo ${_sorted[@]}
-}
-
 _make_common_bootloader() {
     local _bootmode_array=()
     _bootmode_array+=(
       $(_parse_bootmode "${bootmode}"))
     _boot_loader="${_bootmode_array[0]}"
-    _arch="${_bootmode_array[1]}"
-    _code="${_bootmode_array[2]}"
-    _CODE="${_bootmode_array[3]}"
-    _platform="${_bootmode_array[4]}"
-    _PLATFORM="${_bootmode_array[5]}"
-    _boot_method="${_bootmode_array[6]}"
-    [[ "${_boot_loader}" == "syslinux" ]] && \
+    _arch="${_bootmode_array[1]}" # GRUB specific (i386, x86_64)
+    _code="${_bootmode_array[2]}" # (ia32, x64)
+    _CODE="${_bootmode_array[3]}" # (IA32, x64)
+    _platform="${_bootmode_array[4]}" # (efi, pc, pc-eltorito)
+    _PLATFORM="${_bootmode_array[5]}" # (EFI, MBR, ELTORITO)
+    _boot_method="${_bootmode_array[6]}" # (mbr, esp, eltorito)
+    [[ "${_boot_loader}" != "syslinux" ]] && \
       _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
 }
 
@@ -3034,10 +3060,8 @@ _make_common_bootmode_grub_cfg_install() {
     local _bootable="${1}" \
           _files=()
     _files+=(
-      "${work_dir}/grub/"*'.cfg')
-    (compgen -G "${profile}/grub/!(*.cfg)" &> /dev/null) && \
-      _files+=(
-        "${profile}/grub/"!(*.cfg))
+      "${work_dir}/grub/"*'.cfg'
+      "${profile_dir}/grub/"*'.cfg')
     _install_cmd "${_bootable}" \
                  "${_files[@]}" \
                  "/EFI/BOOT"
@@ -3201,9 +3225,8 @@ _make_bootmode_bios.grub.mbr() {
     _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
+    _make_grub "$(_get "work" \
+                       "dir")"
     _make_common_bootmode
     _make_kernel_on_isos
     _msg=("Done! GRUB set up for BIOS booting"
@@ -3233,7 +3256,7 @@ _make_bootmode_bios.syslinux.mbr() {
           _cfg_path="syslinux"
           _msg=() \
     _make_common_bootloader "${bootmode}"
-    _cfg_files=("${profile}/syslinux/"*.cfg)
+    _cfg_files=("${profile_dir}/syslinux/"*.cfg)
     _msg=("Setting up SYSLINUX for"
           "BIOS booting from a disk...")
     _msg_info "${_msg[*]}"
@@ -3347,15 +3370,12 @@ _make_bootmode_uefi-ia32.grub.esp() {
     local _bl \
           _bootable="${1}" \
     _make_common_bootloader "${bootmode}"
-    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
+    # _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
+    # _make_grub "${_code}" \
+    #            "${_platform}" \
+    #            "${work_dir}"
     # Add GRUB to the list of files used to
     # calculate the required FAT image size.
-    efi_boot_files+=(
-      "${_bl}"
-      "$(_get_efi_sh "${_code}")")
     # if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
     #     _run_once "_make_bootmode_uefi-x64.systemd-boot.esp_${_bootable}"
     # elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
@@ -3422,10 +3442,10 @@ _make_bootmode_uefi-x64.grub.esp() {
     local _bl \
           _bootable="efi_boot"
     _make_common_bootloader "${bootmode}"
-    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
+    # _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
+    # _make_grub "${_code}" \
+    #            "${_platform}" \
+    #            "${work_dir}"
     # _run_once "_mkefi_boot"
     # _make_common_bootmode
     # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
@@ -3444,33 +3464,57 @@ _make_bootmode_uefi-x64.grub.esp_dongle_iso() {
 
 ## SYSTEMD-BOOT UEFI x64 ESP
 
+_make_systemd-boot() {
+    local _out="${1}" \
+          _bl \
+          _lib \
+          _root \
+          _systemd_boot \
+    _lib="/usr/lib/systemd/boot"
+    _root="pacstrap" \
+    _systemd_boot="systemd-boot${_code}.${_platform}"
+    _bl="$(_get "${_root}" \
+                "dir")${_lib}/${_platform}/${_systemd_boot}"
+    [ -d "${_out}" ] && \
+      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
+    cp "${_bl}" \
+       "${_out}"
+}
+
+_get_bl_cfg_path() {
+    local _boot_loader="${1}" \
+          _cfg_path
+    _cfg_path="${_boot_loader}"
+    [[ "${_boot_loader}" == "systemd-boot" ]] && \
+      _cfg_path="loader/entries"
+    echo "${_cfg_path}"
+}
+
 # Prepares systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _available_ucodes=() \
           _bootable="efi_boot" \
-          _bl \
           _cfg_path="loader/entries" \
           _cfg_files=() \
           _file \
-          _lib="/usr/lib/systemd/boot" \
+          # _lib="/usr/lib/systemd/boot" \
           _results \
+          _root="pacstrap"
           _systemd_boot \
-    _make_common_bootloader "${buildmode}"
-    _systemd_boot="systemd-boot${_code}.${_platform}"
-    _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
+    # _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
     _cfg_files=(
-      "${profile}/efiboot/${_cfg_path}/"*".conf")
+      "${profile_dir}/efiboot/$(_get_bl_cfg_path "systemd-boot")/"*".conf")
     _msg_info "Setting up systemd-boot for UEFI booting..."
     for _file in "${ucodes[@]}"; do
-        [[ -e "${pacstrap_dir}/boot/${_file}" ]] && \
+        [[ -e "$(_get "${_root}" \
+                      "dir")/boot/${_file}" ]] && \
           _available_ucodes+=(
-            "${pacstrap_dir}/boot/${_file}")
+            "$(_get "${_root}" \
+                    "dir")/boot/${_file}")
     done
     # Calculate the required FAT image size in bytes
     efi_boot_files+=(
-      "${_bl}"
-      "$(_get_efi_sh "${_code}")"
-      "${profile}/efiboot/"
+      "${profile_dir}/efiboot/"
       "${_available_ucodes[@]}")
     _images=(
       "initramfs-*"
@@ -3485,11 +3529,11 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
     # Create a FAT image for the EFI system partition
     # _run_once "_mkefi_boot"
-    # _make_systemd_boot_common "${_bootable}"
+    # _make_systemd-boot_common "${_bootable}"
     # _install_dir_cmd "${_bootable}" \
     #                  "/${_cfg_path}"
     # _make_common_bootmode
-    # _make_kernel "${_bootable}"
+    _make_kernel "${_bootable}"
     # _msg_info "Done! systemd-boot set up for UEFI booting successfully."
 }
 
@@ -3550,12 +3594,12 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
     _systemd_boot="/usr/lib/systemd/boot/efi/systemd-boot${_code}.efi"
     _bl="${pacstrap_dir}${_systemd_boot}"
     _cfg_files=(
-      "${profile}/efiboot/${_cfg_path}/"*".conf"
+      "${profile_dir}/efiboot/${_cfg_path}/"*".conf"
     # _run_once "_make_bootmode_uefi-${_code}.systemd-boot.esp_${_bootable}"
     # _msg=("Preparing an /EFI directory"
     #       "for the ISO 9660 file system...")
     # _msg_info "${_msg[*]}"
-    # _make_systemd_boot_common "${_bootable}"
+    # _make_systemd-boot_common "${_bootable}"
     # _install_dir_cmd "${_bootable}" \
     #                  "/${_cfg_path}"
     # _make_common_bootmode
@@ -3695,7 +3739,7 @@ _validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
 # EXT4 persistent
 _validate_requirements_persistent_image_type_ext4() {
     local _msg=() \
-          _etc="${profile}/airootfs/etc"
+          _etc="${profile_dir}/airootfs/etc"
     local _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
     local _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
     _validate_requirements_image_type_ext4
@@ -3729,7 +3773,7 @@ _validate_requirements_persistent_image_type_ext4+luks() {
           _msg=()
     "_validate_requirements_image_type_luks"
     "_validate_requirements_${_volume}_image_type_ext4"
-    [ ! -e "$(_get_crypttab)" ] && \
+    [ ! -e "$(_get_crypttab "profile")" ] && \
       (( validation_error=validation_error+1 )) \
       _msg=(
         "Validating '$(_get "${_volume}" \
@@ -3760,23 +3804,23 @@ _validate_common_requirements_grub() {
           _conf_file
     _no_cfg_mgs=(
       "Validating '${bootmode}':"
-      "File '${profile}/grub/grub.cfg' not found!")
+      "File '${profile_dir}/grub/grub.cfg' not found!")
     _no_dir_msg=(
       "Validating '${bootmode}':"
-      "The '${profile}/grub' directory is missing!")
+      "The '${profile_dir}/grub' directory is missing!")
     _no_cfgs_msg=(
       "Validating '${bootmode}':"
-      "No configuration file found in '${profile}/grub/'!"
+      "No configuration file found in '${profile_dir}/grub/'!"
     _check_missing_cmd "grub-mkstandalone" "grub"
     # Check if GRUB configuration files exist
-    if [[ ! -d "${profile}/grub" ]]; then
+    if [[ ! -d "${profile_dir}/grub" ]]; then
         (( validation_error=validation_error+1 ))
         _msg_error "${_no_dir_msg[*]}" 0
     else
-        [[ ! -e "${profile}/grub/grub.cfg" ]] && \
+        [[ ! -e "${profile_dir}/grub/grub.cfg" ]] && \
           (( validation_error=validation_error+1 ))
           _msg_error "${_no_cfg_msg[*]}" 0
-        for _conf_file in "${profile}/grub/"*'.cfg'; do
+        for _conf_file in "${profile_dir}/grub/"*'.cfg'; do
             if [[ -e "${_conf_file}" ]]; then
                 break
             else
@@ -3850,15 +3894,15 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
     fi
 
     # Check if syslinux configuration files exist
-    if [[ ! -d "${profile}/syslinux" ]]; then
+    if [[ ! -d "${profile_dir}/syslinux" ]]; then
         (( validation_error=validation_error+1 ))
         _msg=(
           "Validating '${bootmode}':"
-          "The '${profile}/syslinux' directory is missing!")
+          "The '${profile_dir}/syslinux' directory is missing!")
         _msg_error "${_msg[*]}" 0
     else
         local cfgfile
-        for cfgfile in "${profile}/syslinux/"*'.cfg'; do
+        for cfgfile in "${profile_dir}/syslinux/"*'.cfg'; do
             if [[ -e "${cfgfile}" ]]; then
                 break
             else
@@ -3866,7 +3910,7 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
                 _msg=(
                   "Validating '${bootmode}':"
                   "No configuration file found"
-                  "in '${profile}/syslinux/'!")
+                  "in '${profile_dir}/syslinux/'!")
                 _msg_error "${_msg[*]}" 0
             fi
         done
@@ -3952,23 +3996,23 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
     _validate_common_requirements_bootmode_uefi
 
     # Check if systemd-boot configuration files exist
-    if [[ ! -d "${profile}/efiboot/loader/entries" ]]; then
+    if [[ ! -d "${profile_dir}/efiboot/loader/entries" ]]; then
         (( validation_error=validation_error+1 ))
         _msg=(
           "Validating '${bootmode}':"
-          "The '${profile}/efiboot/loader/entries'"
+          "The '${profile_dir}/efiboot/loader/entries'"
           "directory is missing!"
         _msg_error "${_msg[*]}" 0
     else
-        [[ ! -e "${profile}/efiboot/loader/loader.conf" ]] && \
+        [[ ! -e "${profile_dir}/efiboot/loader/loader.conf" ]] && \
           (( validation_error=validation_error+1 )) \
           _msg=(
             "Validating '${bootmode}':"
-            "File '${profile}/efiboot/loader/loader.conf'"
+            "File '${profile_dir}/efiboot/loader/loader.conf'"
             "not found!") && \
           _msg_error "${_msg[*]}" 0
         local conffile
-        for conffile in "${profile}/efiboot/loader/entries/"*'.conf'; do
+        for conffile in "${profile_dir}/efiboot/loader/entries/"*'.conf'; do
             if [[ -e "${conffile}" ]]; then
                 break
             else
@@ -3976,7 +4020,7 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
                 _msg=(
                   "Validating '${bootmode}':"
                   "No configuration file found in"
-                  "'${profile}/efiboot/loader/entries/'!")
+                  "'${profile_dir}/efiboot/loader/entries/'!")
             _msg_error "${_msg[*]}" 0
             fi
         done
@@ -4089,24 +4133,38 @@ _prepare_airootfs_image() {
 
 _prepare_efi_boot_image() {
     local _bootmode \
+          _code \
+          _boot_loader \
           _volume="efi_boot" \
-          _root="pacstrap"
-    # Add all GRUB files to the list of files
-    # used to calculate the required FAT image size.
-    [[ " ${bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
-      run_once "_make_common_bootmode_grub_cfg" && \
-        efi_boot_files+=(
-          "${work_dir}/${_cfg_path}"
-          "${profile}/grub/"!(*.cfg))
+          _root="pacstrap" \
+          _bootmodes=()
     for _bootmode in "${bootmodes[@]}"; do
-      [[ "${_bootmode}" == *"esp" ]] && \
+        [[ "${_bootmode}" == *'esp' ]] && \
+          _bootmodes+=(
+            "${_bootmode}")
+    done
+    for _code in ('ia32'
+                  'x64'); do
+      [[ " ${_bootmodes[*]} " =~ ' '*"${_code}"*' ' ]] && \
+        efi_boot_files+=(
+          "$(_get_efi_sh "${_code}")"
+    done
+    [[ " ${_bootmodes[*]} " =~ ' '*'systemd-boot'*' ' ]] && \
+      efi_boot_files+=(
+        "${profile_dir}/efiboot/loader/loader.conf")
+    [[ " ${_bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
+      run_once "_make_common_bootmode_grub_cfg" && \
+      efi_boot_files+=(
+        "${work_dir}/grub/"*'.cfg'
+        "${profile_dir}/grub/"*'.cfg')
+    for _bootmode in "${_bootmodes[@]}"; do
         _make_common_bootloader 
-        _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
-    _make_grub "${_code}" \
-               "${_platform}" \
-               "${work_dir}"
-
-        echo "ciao"
+        "_make_${_boot_loader}" "$(_get "work" \
+                                        "dir")"
+        _bl="$(_get "work" \
+                    "dir")/BOOT${_CODE}.${_PLATFORM}"
+        efi_boot_files+=(
+          "${_bl}")
     done
 }
 
@@ -4150,7 +4208,7 @@ _prepare_persistent_image() {
     _set "dongle_${_volume}" \
          "uuid" \
          $("_get_dongle_${_volume}_uuid")
-    if [ -d "${profile}/${_volume}" ]; then
+    if [ -d "${profile_dir}/${_volume}" ]; then
         _copy_custom_files "${_volume}" \
                            "$(_get "${_volume}" \
                                    "dir")"
@@ -4170,7 +4228,8 @@ _prepare_persistent_image() {
                    "dir")/etc/udev/rules.d"
     _volume_rule="${_rules}/98_${_volume}.rules"
     _dongle_volume_rule="${_rules}/99_dongle${_volume}.rules"
-    _make_crypttab "${_root}"
+    _make_crypttab "profile" \
+                   "${_root}"
     "_make_rule_${_volume}" "${_volume_rule}"
     "_make_rule_${_volume}" "${_dongle_volume_rule}"
     if [[ " ${buildmodes[*]} " =~ ' dongle ' ]] || \
@@ -4311,7 +4370,7 @@ _sign_netboot_artifacts() {
 
 _validate_requirements_persistent_image_type_ext4() {
     local _msg=() \
-          _etc="${profile}/airootfs/etc"
+          _etc="${profile_dir}/airootfs/etc"
     local _rules="${_etc}/udev/rules.d"
     local _ro_rule="${_rules}/98_persistent.rules"
     local _dongle_ro_rule="${_rules}/99_donglepersistent.rules"
@@ -4339,7 +4398,7 @@ _validate_requirements_persistent_image_type_ext4() {
 }
 
 _validate_requirements_persistent_image_type_ext4+luks() {
-    local _crypttab="${profile}/airootfs/etc/crypttab" \
+    local _crypttab="${profile_dir}/airootfs/etc/crypttab" \
           _msg=()
     _validate_requirements_image_type_luks
     _validate_requirements_persistent_image_type_ext4
@@ -4484,7 +4543,7 @@ _validate_requirements_buildmode_iso() {
     if (( ${#bootmodes[@]} < 1 )); then
         (( validation_error=validation_error+1 ))
         _msg=("No boot modes specified in"
-              "'${profile}/profiledef.sh'.")
+              "'${profile_dir}/profiledef.sh'.")
         _msg_error "${_msg[*]}" 0
     fi
     for bootmode in "${bootmodes[@]}"; do
@@ -5211,34 +5270,34 @@ _build_iso_image() {
 
 # Read profile's values from profiledef.sh
 _read_profile() {
-    if [[ -z "${profile}" ]]; then
+    if [[ -z "${profile_dir}" ]]; then
         _msg_error "No profile specified!" 1
     fi
-    if [[ ! -d "${profile}" ]]; then
-        _msg_error "Profile '${profile}' does not exist!" 1
-    elif [[ ! -e "${profile}/profiledef.sh" ]]; then
-        _msg_error "Profile '${profile}' is missing 'profiledef.sh'!" 1
+    if [[ ! -d "${profile_dir}" ]]; then
+        _msg_error "Profile '${profile_dir}' does not exist!" 1
+    elif [[ ! -e "${profile_dir}/profiledef.sh" ]]; then
+        _msg_error "Profile '${profile_dir}' is missing 'profiledef.sh'!" 1
     else
-        cd -- "${profile}"
+        cd -- "${profile_dir}"
 
         # Source profile's variables
         # shellcheck source=configs/releng/profiledef.sh
-        . "${profile}/profiledef.sh"
+        . "${profile_dir}/profiledef.sh"
 
         # Resolve paths of files that are expected to reside 
         # in the profile's directory
         [[ -n "$arch" ]] || \
           arch="$(uname -m)"
         [[ -n "$packages" ]] || \
-          packages="${profile}/packages.${arch}"
+          packages="${profile_dir}/packages.${arch}"
         packages="$(realpath -- "${packages}")"
         pacman_conf="$(realpath -- "${pacman_conf}")"
 
         # Resolve paths of files that may reside
         # in the profile's directory
         if [[ -z "$bootstrap_packages" ]] && \
-           [[ -e "${profile}/bootstrap_packages.${arch}" ]]; then
-            bootstrap_packages="${profile}/bootstrap_packages.${arch}"
+           [[ -e "${profile_dir}/bootstrap_packages.${arch}" ]]; then
+            bootstrap_packages="${profile_dir}/bootstrap_packages.${arch}"
             bootstrap_packages="$(realpath -- "${bootstrap_packages}")"
             pacman_conf="$(realpath -- "${pacman_conf}")"
         fi
@@ -5671,7 +5730,9 @@ if (( EUID != 0 )); then
 fi
 
 # get the absolute path representation of the first non-option argument
-profile="$(realpath -- "${1}")"
+_set "profile" \
+     "dir" \
+     "$(realpath -- "${1}")"
 
 _read_profile
 _set_overrides
