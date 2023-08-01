@@ -8,126 +8,17 @@ shopt -s extglob
 # Control the environment
 umask 0022
 export LC_ALL="C.UTF-8"
-if [[ -v LANGUAGE ]]; then
-    # LC_ALL=C.UTF-8, unlike LC_ALL=C, does not override LANGUAGE.
-    # See https://sourceware.org/bugzilla/show_bug.cgi?id=16621 \
-    # and https://savannah.gnu.org/bugs/?62815
-    unset LANGUAGE
-fi
+# LC_ALL=C.UTF-8, unlike LC_ALL=C, does not override LANGUAGE.
+# See https://sourceware.org/bugzilla/show_bug.cgi?id=16621 \
+# and https://savannah.gnu.org/bugs/?62815
+[[ -v LANGUAGE ]] && \
+  unset LANGUAGE
 [[ -v SOURCE_DATE_EPOCH ]] || \
   printf -v SOURCE_DATE_EPOCH '%(%s)T' -1
 export SOURCE_DATE_EPOCH
 
 # Set application name from the script's file name
 app_name="${0##*/}"
-
-# Define global variables.
-# All of them will be overwritten later
-pkg_list=()
-bootstrap_pkg_list=()
-quiet=""
-work_dir=""
-out_dir=""
-gpg_key=""
-gpg_sender=""
-gpg_home=""
-iso_name=""
-iso_label=""
-iso_publisher=""
-iso_application=""
-iso_version=""
-install_dir=""
-arch=""
-pacman_conf=""
-packages=""
-bootstrap_packages=""
-pacstrap_dir=""
-keys_dir=""
-buildmodes=()
-bootmodes=()
-xorriso_options=()
-xorrisofs_options=()
-dongle_xorriso_options=()
-dongle_xorrisofs_options=()
-cert_list=()
-sign_netboot_artifacts=""
-declare -A file_permissions=()
-declare -A images=()
-fs_images=(
-  'iso'
-  'airootfs'
-  'persistent'
-  'keys'
-  'swap'
-  'dongle_iso'
-  'dongle_boot'
-  'dongle_persistent'
-  'dongle_swap'
-  'recovery'
-  'efi_boot')
-fs_images_str_vars=(
-  'dir'
-  'encryption_key'
-  'epoch'
-  'image_type'
-  'image_tool_options'
-  'img'
-  'size' # All sizes are in kib
-         # except when specified
-  'uuid')
-fs_images_arr_vars=(
-  'files'
-  'image_tool_options')
-_img=""
-for _img in "${fs_images[@]}"; do
-    for _var in "${fs_images_str_vars[@]}"; do
-        printf -v "${_img}_${_var}" ""
-    done
-    for _var in "${fs_images_arr_vars[@]}"; do
-        declare -a "${_img}_${_var}"
-    done
-done
-
-# Declare constants
-# adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
-# https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
-readonly ucodes=(
-  'intel-uc.img'
-  'intel-ucode.img'
-  'amd-uc.img'
-  'amd-ucode.img'
-  'early_ucode.cpio'
-  'microcode.cpio')
-epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96"
-luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC"
-linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4"
-swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
-_PI=$((3 * 1415))
-_E=$((2 * 71828))
-_EL=$((42 * 69))
-_RO=$((16 * 1803))
-airootfs_const=0
-dongle_const="${_EL}"
-boot_const="${_RO}"
-persistent_const="${_PI}"
-swap_const="${_E}"
-dongle_boot_const=$((
-  dongle_const + \
-  boot_const))
-dongle_persistent_const=$((
-  dongle_const + \
-  persistent_const))
-dongle_swap_const=$((
-  dongle_const + \
-  swap_const))
-keys_const=$((
-  dongle_const + \
-  boot_const + \
-  persistent_const))
-recovery_const=$((
-  dongle_const + \
-  boot_const + \
-  keys_const))
 
 # Show an INFO message
 # $1: message string
@@ -156,25 +47,168 @@ _msg_error() {
     fi
 }
 
-# Returns an attribute variable value for a 
+# Returns an attribute value for a 
 # given object
 # $1: an object
-# $2: a variable value attached to object
+# $2: an object attribute
 _get() {
     local _obj="${1}" \
           _var="${2}" \
-          _ref
-    _ref="${_image}_${_var}"
-    printf %s "${!_ref[*]}"
+          _msg \
+          _ref \
+          _type
+    _ref="${_image}_${_var}[@]"
+    _type="$(declare -p "${_ref}")"
+    [[ "${_type}" == *"declare: "*": not found" ]] && \
+      _msg=(
+        "Attribute '${_var}' is not defined"
+        "for object '${_obj}'") && \
+      _msg_error "${_msg[*]}" 1
+    [[ "${_type}" == "declare -A "* ]] && \
+      echo "${_image[${_var}]}" && \
+      return
+    printf "%s\n" "${!_ref}"
 }
 
-# Sets object attribute variables
+# Sets object string attributes
+# $1: object
+# $2: an object string attribute
+# $3: a value
 _set() {
     local _obj="${1}" \
           _var="${2}" \
-          _value="${3}"
+          _value="${3}" \
+          _type
+    [[ "${_type}" == "declare -A "* ]] && \
+      
     printf -v "${_obj}_${_var}" \
               "${_value}"
+}
+
+# Sets global variables
+_global_variables() {
+    local _var \
+          _volume
+    pkg_list=()
+    bootstrap_pkg_list=()
+    quiet=""
+    work_dir=""
+    out_dir=""
+    gpg_key=""
+    gpg_sender=""
+    gpg_home=""
+    iso_name=""
+    iso_label=""
+    iso_publisher=""
+    iso_application=""
+    iso_version=""
+    install_dir=""
+    arch=""
+    pacman_conf=""
+    packages=""
+    bootstrap_packages=""
+    pacstrap_dir=""
+    buildmodes=()
+    bootmodes=()
+    xorriso_options=()
+    xorrisofs_options=()
+    dongle_xorriso_options=()
+    dongle_xorrisofs_options=()
+    cert_list=()
+    sign_netboot_artifacts=""
+    declare -g \
+            -A \
+            file_permissions=()
+    declare -g \
+            -A \
+            images=()
+    volumes=(
+      'iso'
+      'airootfs'
+      'persistent'
+      'keys'
+      'swap'
+      'dongle_iso'
+      'dongle_boot'
+      'dongle_persistent'
+      'dongle_swap'
+      'recovery'
+      'efi_boot')
+    volumes_str_vars=(
+      'dir'
+      'encryption_key'
+      'epoch'
+      'image_type'
+      'image_tool_options'
+      'img'
+      'size' # All sizes are in kib
+             # except when specified
+      'uuid')
+    volumes_arr_vars=(
+      'files'
+      'image_tool_options')
+    for _volume in "${volumes[@]}"; do
+        for _var in "${volumes_str_vars[@]}"; do
+            _set "${_volume}" \
+                 "${_var}" \
+                 ""
+        done
+        for _var in "${volumes_arr_vars[@]}"; do
+            declare -g \
+                    -a \
+                    "${_volume}_${_var}"
+        done
+    done
+}
+
+# Sets constants
+_constants() {
+    # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
+    # https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
+    readonly \
+      codes=(
+         'intel-uc.img'
+         'intel-ucode.img'
+         'amd-uc.img'
+         'amd-ucode.img'
+         'early_ucode.cpio'
+         'microcode.cpio') \
+      epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96" \
+      luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC" \
+      linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4" \
+      swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f" \
+      _PI=$((3 * 1415)) \
+      _E=$((2 * 71828)) \
+      _EL=$((42 * 69)) \
+      _RO=$((16 * 1803)) \
+      airootfs_const=0 \
+      dongle_const="${_EL}" \
+      boot_const="${_RO}" \
+      persistent_const="${_PI}" \
+      swap_const="${_E}" \
+      dongle_boot_const=$((
+        dongle_const + \
+        boot_const)) \
+      dongle_persistent_const=$((
+        dongle_const + \
+        persistent_const)) \
+      dongle_swap_const=$((
+        dongle_const + \
+        swap_const)) \
+      keys_const=$((
+        dongle_const + \
+        boot_const + \
+        persistent_const)) \
+      recovery_const=$((
+        dongle_const + \
+        boot_const + \
+        keys_const))
+}
+
+# Sets global symbols
+_read_symbols() {
+  _global_variables
+  _constants
 }
 
 # Show help usage, with an exit status.
@@ -1388,8 +1422,9 @@ _install_key() {
 # a given file system image, ignoring LUKS
 # $1: a value in the 'fs_images' array
 _get_fs_type() {
-    local _fs_image="${1}" _tmp
-    _tmp="$(_get "${_fs_image}" \
+    local _volume="${1}" \
+          _tmp
+    _tmp="$(_get "${_volume}" \
                  "image_type")"
     _tmp="${_tmp%%+luks}"
     echo "${_tmp##*"+"}"
@@ -1398,9 +1433,9 @@ _get_fs_type() {
 # Returns the extension for a given file system image
 # $1: a value in 'fs_images' (airootfs, persistent, ...)
 _get_fs_ext() {
-    local _image="${1}"
+    local _volume="${1}"
     local _fs_type
-    _fs_type=$(_get_fs_type "${_image}")
+    _fs_type=$(_get_fs_type "${_volume}")
     if [ "${_fs_type}" = "squashfs" ]; then
         echo "sfs"
     else
@@ -1411,22 +1446,23 @@ _get_fs_ext() {
 # Returns <image filename/device mapper name>
 # for a given file system image.
 # $1: a value in 'fs_images' array
-_get_fs_name() {
-    local _image="${1}"
-    echo "${_image}" | tr -d '_'
+_get_volume_name() {
+    local _volume="${1}"
+    echo "${_volume}" | tr -d '_'
 }
 
 # Produces canonical path for an image file
 # given volume name
 # (i.e. efi_boot -> <work_dir>/efiboot.img)
 # $1: value in fs_images
-_get_fs_img() {
-    local _fs_image="${1}" \
+_get_volume_img() {
+    local _volume="${1}" \
           _ext \
-          _img_name
-    _img_name="$(_get_fs_name "${_fs_image}")"
-    _ext="$(_get_fs_ext "${_fs_image}")"
-    echo "${work_dir}/${_img_name}.${_ext}"
+          _volume_name
+    _volume_name="$(_get_volume_name "${_volume}")"
+    _ext="$(_get_fs_ext "${_volume}")"
+    echo "$(_get "work" \
+                 "dir")/${_volume_name}.${_ext}"
 }
 
 # Returns partition label for a physical partition
@@ -1444,28 +1480,29 @@ _get_iso_partition_label() {
             echo "${_label[*]}")" 
 }
 
-_set_fs_dir() {
-    local _fs_image="${1}"
-    _set "${_fs_image}" \
+_set_volume_dir() {
+    local _volume="${1}"
+    _set "${_volume}" \
          "dir" \
-         "${work_dir}/${_fs_image}"
+         "$(_get "work" \
+                 "dir")/${_volume}"
 }
 
 # Sets correct file system guid given type
-_set_fs_guid() {
-    local _fs_image="${1}" \
+_set_volume_guid() {
+    local _volume="${1}" \
           _guid \
           _image_type
-    _image_type="$(_get "${_fs_image}" \
+    _image_type="$(_get "${_volume}" \
                         "image_type")"
-    if [[ "${_image_type}" == *luks ]]; then
+    if [[ "${_image_type}" == *"luks" ]]; then
         _guid="${luks_guid}"
     elif [[ "${_image_type}" == *swap ]]; then
         _guid="${swap_guid}"
     elif [[ "${_image_type}" == *ext4 ]]; then
         _guid="${linux_guid};"
     fi
-    _set "${_fs_image}" \
+    _set "${_volume}" \
          "guid" \
          "${_guid}"
 }
@@ -1473,43 +1510,54 @@ _set_fs_guid() {
 # Sets parameters for _mk<fs_image> functions
 # $1: value in fs_images
 _mkfs_common() {
-    local _fs_image="${1}"
-    _name="$(_get_fs_name "${_fs_image}")"
-    _dir="$(_get "${_fs_image}" \
+    local _volume="${1}"
+    _name="$(_get_volume_name "${_volume}")"
+    _dir="$(_get "${_volume}" \
                  "dir")"
     _epoch="$(_get_epoch "${_fs_image}")"
-    _encryption_key="$(_get "${_fs_image}" \
+    _encryption_key="$(_get "${_volume}" \
                             "encryption_key")"
-    _label="$(_get_iso_partition_label "${_fs_image}")"
-    _size="$(_get "${_fs_image}" \
-                          "size")"
-    _image_path="$(_get_fs_img "${_fs_image}")"
+    _label="$(_get_iso_partition_label "${_volume}")"
+    _size="$(_get "${_volume}" \
+                  "size")"
+    _image_path="$(_get_volume_img "${_volume}")"
     _grub="false"
     _writable="false"
-    _set_fs_guid "${_fs_image}"
+    _set_volume_guid "${_volume}"
 }
 
 ### Main ISO volumes
 
 ## Airootfs (the root file system image)
 
-# Returns workdir airootfs image path
+# Returns destination airootfs image path
+_get_airootfs_dir() {
+    echo "$(_get "iso" \
+                 "dir")/$(_get "install" \
+                               "dir")/${arch}"
+}
+
+# Returns path of airootfs image in work directory
 _get_airootfs_img(){
-    echo "$(_get "airootfs" \
-                 "dir")/airootfs.$(_get_fs_ext "airootfs")"
+    echo "$(_get_airootfs_dir)/airootfs.$(_get_fs_ext "airootfs")"
 }
 
-# Returns install path of airootfs image
+# Returns ISO airootfs image path
 _get_airootfs_path(){
-    echo "${install_dir}/${arch}/airootfs.$(_get_fs_ext "airootfs")"
+    echo "$(_get "install" \
+                 "dir")/${arch}/airootfs.$(_get_fs_ext "airootfs")"
 }
 
+# Evaluate expected airootfs size given an input volume
+# $1: volume from which to guess the airootfs size
 _get_airootfs_size() {
-    local _root="${1}"
-    echo $(( $(_get_size "$(_get "${_root}" \
+    local _volume="${1}"
+    echo $(( $(_get_size "$(_get "${_volume}" \
                                  "dir")") + 200000 ))
 }
 
+# Sets correct airootfs given an input volume
+# $1: volume to use to set the airootfs size
 _set_airootfs_size() {
     local _root="${1}" \
           _volume="airootfs"
@@ -1522,7 +1570,8 @@ _set_airootfs_size() {
 _mkairootfs() {
     _mkfs_common "airootfs"
     _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _dir="${pacstrap_dir}"
+    _dir="$(_get "pacstrap" \
+                 "dir")"
     _image_path="$(_get_airootfs_img)"
     _auto_size=""
     [[ -e "${_dir}" ]] || \
@@ -1792,17 +1841,17 @@ _gen_key() {
 # $1: a value in fs_images
 # $2: auto-generated output key path
 _resolve_fs_encryption_key(){
-    local _fs_image="${1}" \
+    local _volume="${1}" \
           _auto_key="${2}"
     local _encryption_key \
           _msg=() \
           _out_dir
-    _encryption_key="$(_get "${fs_image}" \
+    _encryption_key="$(_get "${_volume}" \
                             "encryption_key")"
     _out_dir="$(dirname "${_auto_key}")"
     [ ! -f "${_encryption_key}" ] && \
       if [ "${_encryption_key}" = 'auto' ]; then
-          _set "${_fs_image}" \
+          _set "${_volume}" \
                "encryption_key" \
                "${_auto_key}"
           [ ! -d "${_out_dir}" ] && \
@@ -1856,7 +1905,7 @@ _get_secondary_key_opts() {
 
 # Resolves the value of an image encryption key from an
 # <image>_encryption_key profiledef.sh variable
-# $1: a value in fs_images
+# $1: a value in volumes
 _resolve_secondary_key() {
     local _volume="${1}"
     local _auto_key="${work_dir}/${_volume}.key" \
@@ -1864,23 +1913,23 @@ _resolve_secondary_key() {
           _msg \
           _key_opts=() \
           _mode
-    _key_opts=(_get_secondary_key_opts "${_volume}")
+    _key_opts=(
+      $(_get_secondary_key_opts "${_volume}"))
     _dest="${_key_opts[0]}"
     _mode="${_key_opts[1]}"
     [[ "${_dest}" == "seedphrase" ]] && \
       _msg=("Rootfs encryption and dongle buildmode disabled."
             "You will be prompted to insert a password for"
-            "the ${_name} partition.") && \
+            "the ${_volume} partition.") && \
       _msg_warning "${_msg[*]}" && \
-      _set "${_name}" \
+      _set "${_volume}" \
            "encryption_key" \
            "" && \
       return
-
-    _set "${_name}" \
+    _set "${_volume}" \
          "encryption_key" \
          "${_auto_key}"
-    _gen_key "$(_get "${_name}" \
+    _gen_key "$(_get "${_volume}" \
                      "encryption_key")" \
              "${_mode}"
     _install_key "${_dest}" \
@@ -1895,22 +1944,34 @@ _build_archiso_mkinitcpio_conf() {
     local _encryption_key="${2}"
     local _files=() _hooks=() _modules=()
     local _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
-    
-    [[ "${airootfs_image_type}" == *luks ]] || \
+    [[ "$(_get "airootfs" \
+               "image_type")" == *luks ]] || \
     [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
       _hooks+=("encrypt") && \
       [[ "${_encryption_key}" != "" ]] && \
         _files+=("${_encryption_key}")
     _hooks+=("archiso")
-
     [[ "${airootfs_image_type}" == *"ext4"* ]] && \
       _modules+=("ext4")
-
     cp "${_mkinitcpio_conf}" "${_mkinitcpio_conf_tmp}"
     sed "s|%ARCHISO_FILES%|${_files[*]}|g;
          s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
          s|%ARCHISO_MODULES%|${_modules[*]}|g" \
         "${_mkinitcpio_conf_tmp}" > "${_mkinitcpio_conf}"
+}
+
+_make_archiso_mkinitcpio_conf() {
+    local _root="${1}" \
+          _volume="${2}"
+    cp "$(_get "profile" \
+               "dir")/etc/mkinitcpio.conf" \
+       "$(_get "${_root}" \
+               "dir")/etc/mkinitcpio.${_volume}.conf"
+    _build_archiso_mkinitcpio_conf \
+       "$(_get "${_root}" \
+               "dir")/etc/mkinitcpio.${_volume}.conf" \
+       "$(_get "${_volume}" \
+               "encryption_key")"
 }
 
 # Sets up custom pacman.conf with custom cache and pacman hook directories.
@@ -2015,32 +2076,39 @@ _validate_file_path() {
 _apply_permissions() {
     local _filename="${1}" \
           _permissions="${2}" \
-          _dir="${3}" \
+          _volume="${3}"
           _chmod_opts=() \
           _chown_opts=() \
+          _dir \
           _group \
           _msg_type="warning" \
           _opts=('-f')
-          _perm \
+          _mode \
+          _permissions_array=()
           _recur=() \
-          _user \
-          permissions=()
+          _user
+    _dir="$(_get "${_volume}" \
+                 "dir")"
     _validate_file_err=""
     _validate_file_warn=""
     _validate_file_result=""
     IFS=':' \
-      read -ra permissions <<< \
+      read -ra _permissions_array <<< \
         "${_permissions}"
-    _user="${permissions[0]}" \
-    _group="${permissions[1]}" \
-    _perm="${permissions[2]}"
-    _validate_file_path "${_filename}" "${_dir}"
+    _user="${_permissions_array[0]}" \
+    _group="${_permissions_array[1]}" \
+    _mode="${_permissions_array[2]}"
+    _validate_file_path "${_filename}" \
+                        "${_dir}"
     if [[ "${_validate_file_result}" == "" ]]; then
-        _msg=("Setting ${_perm} permissions for"
-              "${_user}:${_group} on ${_filename}")
+        _msg=(
+          "Setting ${_mode} permissions for"
+          "${_user}:${_group} on ${_filename}")
         [[ "${_filename: -1}" == "/" ]] && \
-          _recur+=('-R') \
-          _msg+=("recursively")
+          _recur+=(
+            '-R') \
+          _msg+=(
+            "recursively")
         [[ "${quiet}" != "y" ]] && \
           _msg_info "${_msg[*]}"
         _chown_opts=(
@@ -2054,7 +2122,7 @@ _apply_permissions() {
               "${_user}:${_group}" \
               "${_dir}${_filename}"
         chmod "${_chmod_opts[@]}" -- \
-              "${_perm}" \
+              "${_mode}" \
               "${_dir}${_filename}"
     else
 	    [ "${_validate_file_err}" != "" ] && \
@@ -2075,21 +2143,26 @@ _apply_permissions() {
 # $1: archiso profile-tracked file system
 #     image name (airootfs, persistent)
 # $2: work directory for that file system
-_copy_custom_files() {
-    local _fs_image="${1}"
-    local _fs_dir="${2}"
-    local _error_code _msg=()
-    local _cp_opts=(
+_copy_profile_files() {
+    local _volume="${1}" \
+          _dest="${2}" \
+          _cp_opts=() \
+          _error_code \
+          _file_name \
+          _msg=()
+    _cp_opts=(
       -af
       --no-preserve=ownership,mode)
-    _msg_info "Copying custom ${_fs_image} files..."
+    _msg_info "Copying custom ${_volume} files..."
     cp "${_cp_opts[@]}" -- \
-       "${profile_dir}/${_fs_image}/." \
-       "${_fs_dir}"
-    for filename in "${!file_permissions[@]}"; do
-        _apply_permissions "${filename}" \
-                           "${file_permissions[${filename}]}" \
-                           "${_fs_dir}"
+       "$(_get "profile" \
+               "dir")/${_volume}/." \
+       "$(_get "${_dest}" \
+               "dir")"
+    for _file_name in "${!file_permissions[@]}"; do
+        _apply_permissions "${_file_name}" \
+                           "${file_permissions[${_file_name}]}" \
+                           "${_dest}"
     done
 }
 
@@ -2108,19 +2181,21 @@ _install_root_dir() {
 # Prepares working directory and copies custom root file system files.
 _make_custom_airootfs() {
     _validate_file_err="" _validate_file_warn=""
-    local filename \
-          passwd=() \
-          permissions \
-          _etc \
-          _root "pacstrap" \
+    local _etc \
+          _root="pacstrap" \
           _volume="airootfs"
-    _etc="${profile_dir}/${_volume}/etc" \
 
     install_root_dir "$(_get "${_root}" \
                              "dir")"
-    [[ -d "${profile_dir}/${_volume}" ]] && \
-      if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-          _resolve_secondary_key "keys"
+    [[ -d "$(_get "profile" \
+                  "dir")/${_volume}" ]] && \
+      _copy_profile_files "${_volume}" \
+                          "${_root}" && \
+      _build_archiso_mkinitcpio_conf \
+          "$(_get "${_root}" \
+                  "dir")/etc/mkinitcpio.conf" && \
+      [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
+          _resolve_secondary_key "keys" && \
           if [[ "$(_get "${_volume}" \
                         "image_type")" == *luks ]]; then
               # shellcheck disable=SC2034
@@ -2128,58 +2203,59 @@ _make_custom_airootfs() {
                    "encryption_key" \
                    "$(_get "keys" \
                            "encryption_key")"
-              cp "${_etc}/mkinitcpio.conf" \
-                 "${_etc}/mkinitcpio.dongle_boot.conf"
-              _build_archiso_mkinitcpio_conf \
-                  "${_etc}/mkinitcpio.dongle_boot.conf" \
-                  "$(_get "${_volume}" \
-                          "encryption_key")"
+              _make_archiso_mkinitcpio_conf "${_root}" \
+                                            "dongle_boot"
               _resolve_secondary_key "recovery"
-              cp "${_etc}/mkinitcpio.conf" \
-                 "${_etc}/mkinitcpio.recovery.conf"
-              _build_archiso_mkinitcpio_conf \
-                  "${_etc}/mkinitcpio.recovery.conf" \
-                  "$(_get "recovery" \
-                          "encryption_key")"
+              _make_archiso_mkinitcpio_conf "${_root}" \
+                                            "recovery"
           fi
-      fi && \
-      _build_archiso_mkinitcpio_conf "${_etc}/mkinitcpio.conf" && \
-      _copy_custom_files "${_volume}" \
-                         "$(_get "${_root}" \
-                                 "dir")"
 }
 
 # Install desired packages to the root file system
 _make_packages() {
-    local _root="pacstrap" \
-          _opts=(
-      -C "${work_dir}/${buildmode}.pacman.conf"
+    local _root="${1}" \
+          _msg=()  \
+          _opts=()
+    _opts=(
+      -C "$(_get "work" \
+                 "dir")/${buildmode}.pacman.conf"
       -c
       -G
       -M)
     _msg=(
-      "Installing packages to"
-      "'$(_get "${_root}" \
-               "dir")/'...")
+      "Installing packages to '$(_get "${_root}" \
+                                      "dir")/'...")
     _msg_info "${_msg[*]}"
+    # Unset TMPDIR to work around
+    # https://bugs.archlinux.org/task/70580
+    [[ "${quiet}" = "y" ]] && \
+      env -u TMPDIR \
+        pacstrap "${_opts[@]}" -- \
+                 "$(_get "${_root}" \
+                         "dir")" \
+                 "${buildmode_pkg_list[@]}" > \
+          /dev/null 2>&1 && \
+      return
+    env -u TMPDIR \
+      pacstrap "${_opts[@]}" -- \
+               "$(_get "${_root}" \
+                       "dir")" \
+               "${buildmode_pkg_list[@]}"
+    _msg=(
+      "Done! Packages installed successfully.")
+    _msg_info "${_msg[*]}"
+}
+
+
+# Install desired packages to the root file system
+# for airootfs
+_make_packages_airootfs() {
+    local _root="pacstrap"
     [[ -n "${gpg_key}" ]] && \
       exec {ARCHISO_GNUPG_FD}<>"$(_get "work" \
                                        "dir")/pubkey.gpg" && \
       export ARCHISO_GNUPG_FD
-    # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
-    if [[ "${quiet}" = "y" ]]; then
-        env -u TMPDIR \
-          pacstrap "${_opts[@]}" -- \
-                   "$(_get "${_root}" \
-                           "dir")" \
-                   "${buildmode_pkg_list[@]}" > /dev/null 2>&1
-    else
-        env -u TMPDIR \
-          pacstrap "${_opts[@]}" -- \
-                    "$(_get "${_root}" \
-                            "dir")" \
-                    "${buildmode_pkg_list[@]}"
-    fi
+    _make_packages "${_root}"
     [[ -n "${gpg_key}" ]] && \
       exec {ARCHISO_GNUPG_FD}<&- && \
       unset ARCHISO_GNUPG_FD
@@ -2191,11 +2267,13 @@ _make_version_iso() {
     local _buildmode="${1}"
     [[ "${_buildmode}" == @("iso"|"netboot") ]] && \
       install_dir_cmd "iso" \
-                      "/${install_dir}" && \
+                      "/$(_get "install" \
+                               "dir")" && \
       printf '%s\n' \
              "${iso_version}" > \
         "$(_get "iso" \
-                "dir")/${install_dir}/version" && \
+                "dir")/$(_get "install" \
+                              "dir")/version" && \
       # Write grubenv with version information to ISO 9660
       printf '%.1024s' \
              "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
@@ -2204,7 +2282,8 @@ _make_version_iso() {
                        "$(printf '%0.1s' \
                                  "#"{1..1024})")" > \
         "$(_get "iso" \
-                "dir")/${install_dir}/grubenv"
+                "dir")/$(_get "install" \
+                              "dir")/grubenv"
 }
 
 # Append IMAGE_ID & IMAGE_VERSION to os-release
@@ -2250,8 +2329,8 @@ _make_clock_epoch() {
 
 # Produces version files
 _make_version() {
-    local _dest="iso" \
-          _root="pacstrap" \
+    local _root="pacstrap" \
+          _dest="iso" \
           _os_release
     _msg_info "Creating version files..."
     rm -f -- \
@@ -2271,22 +2350,27 @@ _make_version() {
 
 # Sets up home directories for users from a 
 # passwd file in a root directory
-# $1: root file system path
+# $1: volume name for the root file system
 # $2: passwd file path
 _user_setup_passwd() {
-   local _chroot="${1}" \
-         _passwd_path="${2}" \
+   local _volume="${1}" \
+         _passwd="${2}" \
+         _chroot \
          _gid \
          _home \
          _msg=() \
-         _passwd \
+         _passwd_array \
          _path \
          _uid \
+   _chroot="$(_get "${_volume}" \
+                   "dir")"
+   [[ "${_passwd}" == "" ]] && \
+     _passwd="${_chroot}/etc/passwd"
    _msg_info "Copying /etc/skel/* to user homes..."
-   while IFS=':' read -a _passwd -r; do
-       _uid="${_passwd[2]}"
-       _gid="${_passwd[3]}"
-       _home="${_passwd[5]}"
+   while IFS=':' read -a _passwd_array -r; do
+       _uid="${_passwd_array[2]}"
+       _gid="${_passwd_array[3]}"
+       _home="${_passwd_array[5]}"
        # Only operate on UIDs in range 1000–59999
        (( _uid >= 1000 && _uid < 60000 )) || \
          continue
@@ -2320,58 +2404,59 @@ _user_setup_passwd() {
                  "Outside of valid path.")
            _msg_error "${_msg[*]}" 1
        fi
-   done < "${_passwd_path}"
+   done < "${_passwd}"
 }
 
 # Runs a script in a chroot
 # $1: chroot path
 # $2: custom script path (relative to chroot)
 _run_chroot_script() {
-    local _chroot="${1}" \
+    local _volume="${1}" \
           _custom_script="${2}" \
-          _custom_script_path \
           _deprecation_msg=(
             "customize_airootfs.sh is deprecated!"
             "Support for it will be removed in a"
             "future archiso version.")
     local _start_msg=(
             "Running customize_airootfs.sh in"
-            "'${_chroot}' chroot...")
-    _custom_script_path="${_chroot}${_custom_script}"
+            "'$(_get "${_volume}" \
+                     "dir")' chroot...")
     _msg_info "${_start_msg[@]}"
     _msg_warning "${_deprecation_msg[*]}"
     chmod -f -- \
           +x \
-          "${_custom_script_path}"
+          "$(_get "${_volume}" \
+                  "dir")${_custom_script}"
     # Unset TMPDIR to work around 
     # https://bugs.archlinux.org/task/70580
     eval -- env -u TMPDIR \
-              arch-chroot "${_chroot}" \
+              arch-chroot "$(_get "${_volume}" \
+                                  "dir")" \
                           "${_custom_script}"
-    rm -- "${_custom_script_path}"
+    rm -- "$(_get "${_volume}" \
+                  "dir")${_custom_script}"
     _msg_info "Done! ${_custom_script} run successfully."
 }
 
 # Customize installation.
 _make_customize_airootfs() {
-    local _chroot="$(_get "pacstrap" \
-                          "dir")" \
-          _custom_script="/root/customize_airootfs.sh" \
-          _passwd="$(_get "profile" \
-                          "dir")/airootfs/etc/passwd"
+    local _root="pacstrap"
+          _custom_script="/root/customize_airootfs.sh"
     [[ -e "${_passwd}" ]] &&
-      _user_setup_passwd "${_chroot}" \
-                         "${_passwd}"
+      _user_setup_passwd "${_root}"
     [[ -e "${_custom_script_path}" ]] && \
-      _run_chroot_script "${_chroot}" \
+      _run_chroot_script "${_root}" \
                          "${_custom_script}"
 }
 
+# $1: Root file system from which to generate the
+#     list
+# $2: Destination volume
+# $3: Directory path in the destination volume
 _gen_pkglist() {
     local _root="${1}" \
           _volume="${2}"
           _dest="${3}"
-    _dir=$(dirname "${_pkglist}")
     _install_dir_cmd "${_volume}" \
                      "${_dest}"
     pacman -Q \
@@ -2388,6 +2473,7 @@ _make_pkglist() {
           _flag \
           _path \
           _root="pacstrap" \
+          _volume="airootfs"
     _msg=("Creating a list of installed"
           "packages on live-enviroment..."
     _msg_info "${_msg[*]}"
@@ -2398,7 +2484,7 @@ _make_pkglist() {
             _path="/"
             ;;
         "iso")
-            [[ ! "$(_get "airootfs" \
+            [[ ! "$(_get "${_volume}" \
                          "image_type")" == *"luks"* ]] && \
               _flag=true \
               _dest="iso" \
@@ -2421,20 +2507,34 @@ _make_pkglist() {
 
 # Cleanup airootfs
 _cleanup_pacstrap_dir() {
-    local _images=(
-            "initramfs-*"
-            "vmlinuz-*"
-            "${ucodes[@]}")
-    local _root="${pacstrap_dir}"
-    local _boot="${_root}/boot"
-    local _log="${pacstrap_dir}/var/log"
-    local _machine_id="${pacstrap_dir}/etc/machine-id"
-    local _pacman_db="${_root}/var/lib/pacman"
-    local _pacman_cache="${_root}/var/cache/pacman/pkg"
-    local _tmp="${pacstrap_dir}/var/tmp"
-    local _cp_opts=(
-            '-af'
-            '--no-preserve=ownership,mode')
+    local _root="pacstrap" \
+          _images=() \
+          _boot \
+          _cp_opts=() \
+          _log \
+          _machine_id \
+          _pacman_db \
+          _pacman_cache \
+          _tmp \
+   _images=(
+     "initramfs-*"
+     "vmlinuz-*"
+     "${ucodes[@]}")
+    _cp_opts=(
+      '-af'
+      '--no-preserve=ownership,mode')
+    _boot="$(_get "${_root}"\
+                  "dir")/boot" \
+    _log="$(_get "${_root}" \
+                       "dir")/var/log" \
+    _machine_id="$(_get "${_root}" \
+                        "dir")/etc/machine-id" \
+    _pacman_db="$(_get "${_root}" \
+                       "dir")/var/lib/pacman" \
+    _pacman_cache="$(_get "${_root}" \
+                          "dir")/var/cache/pacman/pkg" \
+    _tmp="$(_get "${_root}" \
+                 "dir")/var/tmp" \
     _msg_info "Cleaning up in pacstrap location..."
 
     # Move kernel, initramfs and microcodes for later usage
@@ -2479,12 +2579,14 @@ _cleanup_pacstrap_dir() {
            -mindepth 1 \
            -delete
     # Delete package pacman related files.
-    find "${work_dir}" \
+    find "$(_get "work" \
+                 "dir")" \
           \( -name '*.pacnew' \
              -o -name '*.pacsave' \
              -o -name '*.pacorig' \) \
           -delete
-    if [[ "${persistent_size}" != "" ]]; then
+    if [[ "$(_get "persistent" \
+                  "size")" != "" ]]; then
         dbus-uuidgen --ensure="${_machine_id}"
     else
         # Create an empty /etc/machine-id
@@ -2593,14 +2695,12 @@ _get_device_select_cmdline() {
 # Produces the 'encrypt' hook's kernel parameters
 # needed to boot an encrypted ISO.
 _get_crypto_params() {
-    local _cryptdevice=() \
+    local _volume="airootfs" \
+          _cryptdevice=() \
           _cryptkey=() \
-          _cparams=() \
-          _keys_fs_type \
-          _keys_path
-    _keys_fs_type="$(_get_fs_type "keys")"
-    _keys_path="keys.$(_get_fs_ext "keys")"
-    [[ "${airootfs_image_type}" == *luks ]] && \
+          _cparams=()
+    [[ "$(_get "${_volume}" \
+               "image_type")" == *luks ]] && \
       _cryptdevice=(
         "UUID=$(_get_archiso_uuid),$(_get_airootfs_path)"
         "root"
@@ -2609,11 +2709,12 @@ _get_crypto_params() {
         "root=/dev/mapper/root"
         "cryptdevice=$(IFS=: ; \
                        echo "${_cryptdevice[*]}")") && \
-      [ "${airootfs_encryption_key}" != "" ] && \
+      [ "$(_get "${_volume}" \
+                "encryption_key")" != "" ] && \
         _cryptkey=(
           "UUID=$(_get_dongle_uuid)"
-          "iso9660,${_keys_fs_type}"
-          "${_keys_path},airootfs.key") && \
+          "iso9660,$(_get_fs_type "keys")"
+          "keys.$(_get_fs_ext "keys"),${volume}.key") && \
         _cparams+=(
           "cryptkey=$(IFS=: ; \
                       echo "${_cryptkey[*]}")")
@@ -2622,10 +2723,12 @@ _get_crypto_params() {
 
 # Produces kernel parameters.
 _get_kernel_params() {
-    local _kparams=() \
+    local _volume="airootfs" \
+          _kparams=() \
           _sigdevice=()
     _kparams+=(
-      "archisobasedir=${install_dir}"
+      "archisobasedir=$(_get "install" \
+                             "dir")"
       "archisolabel=${iso_label}"
       "archisouuid=$(_get_archiso_uuid)"
       "$(_get_crypto_params)")
@@ -2633,7 +2736,7 @@ _get_kernel_params() {
       _sigdevice=(
         "UUID=$(_get_dongle_uuid)"
         "iso9660"
-        "$(_get_airootfs_path).sig") && \
+        "$("_get_${_volume}_path").sig") && \
       _kparams+=("sigdevice=$(IFS=: ; \
                               echo "${_sigdevice[*]}")"
                  "verify=y")
@@ -2696,16 +2799,17 @@ _make_common_bootloader_cfg(){
                             "${_cfg_files[@]}"
 }
 
-_make_common_bootloader_cfg
+_make_common_bootloader_cfg "iso" \
+                            "grub"
 _make_common_bootmode_grub_cfg_install iso
 
 _make_common_bootmode_grub_cfg_install() {
-    local _bootable="${1}" \
+    local _volume="${1}" \
           _files=()
     _files+=(
       "${work_dir}/grub/"*'.cfg'
       "${profile_dir}/grub/"*'.cfg')
-    _install_cmd "${_bootable}" \
+    _install_cmd "${_volume}" \
                  "${_files[@]}" \
                  "/EFI/BOOT"
 }
@@ -3174,7 +3278,7 @@ _install_bootloader() {
 # Common bootmode making routine
 _make_common_bootmode() {
     [[ "${bootmode}" != *"syslinux"* ]] && \
-      _install_bootloader "${_bootable}" \
+      _install_bootloader "${_volume}" \
                           "${_code}" \
                           "${_PLATFORM}" \
                           "${_bl}"
@@ -3220,7 +3324,7 @@ _make_bootmodes_dongle_iso() {
 # Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
     # local bootable_dir="${1}"
-    local _bootable="${1}" \
+    local _volume="${1}" \
           _bl
     _make_common_bootloader "${bootmode}"
     _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
@@ -4121,9 +4225,9 @@ _prepare_airootfs_image() {
     [[ -n "${gpg_key}" ]] && \
       _mksignature "$("_get_${_volume}_img")" && \
       [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-        _set_fs_dir "dongle_iso" && \
-        _set_fs_dir "dongle_persistent" && \
-        _set_fs_dir "dongle_boot" && \
+        _set_volume_dir "dongle_iso" && \
+        _set_volume_dir "dongle_persistent" && \
+        _set_volume_dir "dongle_boot" && \
         _install_dir_cmd "dongle_iso" \
                          "${install_dir}/${arch}"
         _install_cmd "dongle_iso" \
@@ -4197,7 +4301,7 @@ _prepare_persistent_image() {
           "dir" \
          "$(_get "work" \
                  "dir")/${arch}/airootfs" \
-    _set_fs_dir "${_volume}"
+    _set_volume_dir "${_volume}"
     _set "${_volume}" \
          "epoch" \
          "$(_get_epoch "${_volume}")"
@@ -4209,9 +4313,8 @@ _prepare_persistent_image() {
          "uuid" \
          $("_get_dongle_${_volume}_uuid")
     if [ -d "${profile_dir}/${_volume}" ]; then
-        _copy_custom_files "${_volume}" \
-                           "$(_get "${_volume}" \
-                                   "dir")"
+        _copy_profile_files "${_volume}" \
+                            "${_volume}"
         _set "${_volume}_dir" \
              "size" \
              "$(_get_size "$(_get "${_volume}" \
@@ -4598,9 +4701,9 @@ _validate_requirements_buildmode_netboot() {
 _add_xorrisofs_options_boot() {
     local _img _xorrisofs_options=("$@")
     boot_guid="${luks_guid}"
-    _img="$(_get_fs_img boot)"
+    _img="$(_get_volume_img boot)"
     [[ "${buildmode}" == "dongle" ]] && \
-      _img="$(_get_fs_img dongle_boot)"
+      _img="$(_get_volume_img dongle_boot)"
     _xorrisofs_options+=(
       '-append_partition' '3'
       "${boot_guid}"
@@ -4614,7 +4717,7 @@ _add_xorrisofs_options_boot() {
 _add_xorrisofs_options_recovery() {
     local _img _xorrisofs_options=("$@")
     recovery_guid="${luks_guid}"
-    _img="$(_get_fs_img recovery)"
+    _img="$(_get_volume_img recovery)"
     _xorrisofs_options+=(
       '-append_partition' '4'
       "${recovery_guid}"
@@ -4626,7 +4729,7 @@ _add_xorrisofs_options_recovery() {
 # $@: array
 _add_xorrisofs_options_swap() {
     local _img _swap_guid _xorrisofs_options=("$@")
-    _img="$(_get_fs_img swap)"
+    _img="$(_get_volume_img swap)"
     _swap_guid="${swap_guid}"
     [[ "${swap_image_type}" == *"luks" ]] && \
       _swap_guid="${luks_guid}"
@@ -4645,9 +4748,9 @@ _add_xorrisofs_options_persistent() {
     persistent_guid="${linux_guid}"
     [[ "${persistent_image_type}" == *"luks" ]] && \
       persistent_guid="${luks_guid}"
-    _img="$(_get_fs_img persistent)"
+    _img="$(_get_volume_img persistent)"
     [[ "${buildmode}" == "dongle" ]] && \
-      _img="$(_get_fs_img dongle_persistent)"
+      _img="$(_get_volume_img dongle_persistent)"
     _xorrisofs_options+=(
       '-append_partition' '6'
       "${persistent_guid}"
@@ -5351,89 +5454,85 @@ _set_no_override() {
       printf -v "${_var}" "${_value}"
 }
 
-# Set defaults and, if present, overrides from mkarchiso 
-# command line option parameters
-_set_overrides() {
-    local _var _img
-    local no_override_fs_images=()
-      "boot"
-      "efi_boot"
-      "dongle_boot"
-      "dongle_persistent"
-      "dongle_swap"
-      "persistent"
-      "recovery"
-      "swap"
-    )
-    declare -A no_override_vars=(
-      ["airootfs_image_type"]="squashfs"
-      ["boot_image_type"]="ext4+luks"
-      ["dongle_boot_image_type"]="ext4+luks"
-      ["dongle_persistent_image_type"]="ext4+luks"
-      ["dongle_swap_image_type"]="swap+luks"
-      ["efi_boot_image_type"]="fat"
-      ["keys_image_type"]="squashfs+luks"
-      ["persistent_image_type"]="ext4+luks"
-      ["recovery_image_type"]="ext4+luks"
-      ["swap_image_type"]="swap+luks"
-      ["dongle_persistent_encryption_key"]="auto"
-      ["dongle_swap_encryption_key"]="auto"
-      ["keys_encryption_key"]="auto"
-      ["recovery_encryption_key"]="auto"
-      ["swap_encryption_key"]="auto"
-      ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
-      ["iso_dir"]="${work_dir}/iso"
-      ["dongle_iso_dir"]="${work_dir}/dongle_iso"
-      ["recovery"]="false"
-      ["iso_name"]="${app_name}"
-    )
+_set_override() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _default="${3}"
+    if [[ -v "override_${_obj}_${_var}" ]]; then
+        _set "${_obj}" \
+             "${_var}" \
+             "$(_get "override_${obj}" \
+                     "${_var}")"
+    elif [[ -z "$(_get "${_obj}" \
+                       "${_var}")" ]]; then
+        _set "${_obj}" \
+             "${_var}" \
+             "${_value}"
+    fi
+}
 
+_override_path() {
+    local _obj="${1}" \
+          _var="${2}" \
+          _value="${3}"
+    _set_override "${_obj}" \
+                  "${_var}" \
+                  "${_value}"
+    _set "${_obj}" \
+         "${_var}" \
+         "$(realpath -- "$(_get "${_obj}" \
+                                "${_var}")")"
+}
+
+_override_volume() {
+    local _volume="${1}"
+    _override_path "${_volume}" \
+                   "dir" \
+                   "./${volume}"
+}
+
+# Set defaults and, if present, overrides
+# from mkarchiso command line option parameters
+_set_overrides() {
+    local _msg=() \
+          _no_override_ciphered_volumes=() \
+          _no_override_volumes=() \
+          _img \
+          _var
+    declare -A \
+            _no_override_vars
     # Set variables that have command line overrides
     [[ ! -v override_buildmodes ]] || \
-      buildmodes=("${override_buildmodes[@]}")
-    if (( ${#buildmodes[@]} < 1 )); then
-        buildmodes+=('iso')
-    fi
-    if [[ -v override_work_dir ]]; then
-        work_dir="$override_work_dir"
-    elif [[ -z "$work_dir" ]]; then
-        work_dir='./work'
-    fi
-    work_dir="$(realpath -- "${work_dir}")"
-    if [[ -v override_out_dir ]]; then
-        out_dir="${override_out_dir}"
-    elif [[ -z "${out_dir}" ]]; then
-        out_dir='./out'
-    fi
-    out_dir="$(realpath -- "$out_dir")"
-    if [[ -v override_pacman_conf ]]; then
-        pacman_conf="${override_pacman_conf}"
-    elif [[ -z "${pacman_conf}" ]]; then
-        pacman_conf="/etc/pacman.conf"
-    fi
-    pacman_conf="$(realpath -- "${pacman_conf}")"
+      buildmodes=(
+        "${override_buildmodes[@]}")
+    (( ${#buildmodes[@]} < 1 )) && \
+      buildmodes+=(
+        'iso')
+    _override_volume "work"
+    _override_volume "out"
+    _override_path "pacman" \
+                   "conf" \
+                   "/etc/pacman.conf"
     [[ ! -v override_pkg_list ]] || \
-      pkg_list+=("${override_pkg_list[@]}")
+      pkg_list+=(
+        "${override_pkg_list[@]}")
     # TODO: allow overriding bootstrap_pkg_list
-    if [[ -v override_iso_label ]]; then
-        iso_label="${override_iso_label}"
-    elif [[ -z "${iso_label}" ]]; then
-        iso_label="${app_name^^}"
-    fi
-    if [[ -v override_iso_publisher ]]; then
-        iso_publisher="${override_iso_publisher}"
-    elif [[ -z "${iso_publisher}" ]]; then
-        iso_publisher="${app_name}"
-    fi
-    if [[ -v override_iso_application ]]; then
-        iso_application="${override_iso_application}"
-    elif [[ -z "${iso_application}" ]]; then
-        iso_application="${app_name} iso"
-    fi
-    if [[ -v override_install_dir ]]; then
-        install_dir="${override_install_dir}"
-    elif [[ -z "${install_dir}" ]]; then
-        install_dir="${app_name}"
+    _set_override "iso" \
+                  "label" \
+                  "${app_name^^}"
+    _set_override "iso" \
+                  "publisher" \
+                  "${app_name}"
+    _set_override "iso" \
+                  "application" \
+                  "${app_name} iso"
+    _set_override "install" \
+                  "dir" \
+                  "${app_name}"
+    if [[ -v override_quiet ]]; then
+        quiet="$override_quiet"
+    elif [[ -z "$quiet" ]]; then
+        quiet="y"
     fi
     [[ ! -v override_gpg_key ]] || \
       gpg_key="${override_gpg_key}"
@@ -5450,18 +5549,22 @@ _set_overrides() {
     elif [[ -z "$quiet" ]]; then
         quiet="y"
     fi
-
     # Set variables that do not have overrides
-    no_override_fs_images=()
+    _set_volume_dir "iso"
+    _set_volume_dir "dongle_iso"
+    _encrypted_volumes=(
       "boot"
-      "efi_boot"
       "dongle_boot"
       "dongle_persistent"
       "dongle_swap"
+      "keys"
       "persistent"
       "recovery"
       "swap")
-    declare -A no_override_vars=(
+    _no_override_volumes=(
+      "${_no_encrypted_volumes[@]}"
+      "efi_boot")
+    _no_override_vars=(
       ["airootfs_image_type"]="squashfs"
       ["boot_image_type"]="ext4+luks"
       ["dongle_boot_image_type"]="ext4+luks"
@@ -5471,26 +5574,32 @@ _set_overrides() {
       ["persistent_image_type"]="ext4+luks"
       ["recovery_image_type"]="ext4+luks"
       ["swap_image_type"]="swap+luks"
-      ["airootfs_encryption_key_auto"]="${work_dir}/${iso_label}.key"
-      ["dongle_persistent_encryption_key"]="auto"
-      ["dongle_swap_encryption_key"]="auto"
-      ["keys_encryption_key"]="auto"
-      ["recovery_encryption_key"]="auto"
-      ["swap_encryption_key"]="auto"
-      ["airootfs_dir"]="${work_dir}/iso/${install_dir}/${arch}"
-      ["iso_dir"]="${work_dir}/iso"
-      ["dongle_iso_dir"]="${work_dir}/dongle_iso"
+      ["airootfs_encryption_key_auto"]="$(_get "work" \
+                                               "dir")/$(_get "iso" \
+                                                             "label").key"
+      ["airootfs_dir"]="$(_get_airootfs_dir)"
       ["recovery"]="false"
       ["iso_name"]="${app_name}")
-
-    for _img in "${no_override_fs_images[@]}"; do
-        _msg_info "Setting ${_img} image to $(_get_fs_img ${_img})"
-        no_override_vars["${_img}"]="$(_get_fs_img "${_img}")"
+    for _volume in "${_encrypted_volumes[@]}"; do
+        _msg=(
+          "Setting ${_volume} encryption key to auto")
+        _msg_info "${_msg[*]}"
+        _no_override_vars["${_volume}_encryption_key"]="auto"
     done
-    for _var in "${!no_override_vars[@]}"; do
-        _msg_info "Setting ${_var} to ${no_override_vars[${_var}]}"
+    for _volume in "${_no_override_volumes[@]}"; do
+        _msg=(
+          "Setting ${_volume} image to"
+          "'$(_get_volume_img ${_volume})'"
+        _msg_info "${_msg[*]}"
+        _no_override_vars["${_volume}_img"]="$(_get_volume_img \
+                                                   "${_volume}")"
+    done
+    for _var in "${!_no_override_vars[@]}"; do
+        _msg=(
+          "Setting ${_var} to ${_no_override_vars[${_var}]}")
+        _msg_info "${_msg[*]}"
         _set_no_override "${_var}" \
-                         "${no_override_vars[${_var}]}"
+                         "${_no_override_vars[${_var}]}"
     done
 }
 
@@ -5513,66 +5622,46 @@ _export_gpg_publickey() {
 
 # Builds the base for an ISO and/or a netboot target
 _build_dongle_base() {
-    local run_once_mode="base"
-    local _sig_dir
-    _sig_dir="${dongle_iso_dir}/${install_dir}/${arch}"
-    keys_dir="${work_dir}/keys"
-
-    _setup_work_dir "keys"
-    _setup_work_dir "dongle_isofs"
-    _setup_work_dir "dongle_boot"
-    _setup_work_dir "dongle_persistent"
-    _setup_work_dir "dongle_boot"
-
-    [ "${airootfs_encryption_key}" != "" ] && \
-      cp "${airootfs_encryption_key}" \
-         "${keys_dir}/airootfs.key"
-
-    [[ "${airootfs_image_type}" == *"luks"* ]] && \
+    local run_once_mode="base" \
+          _sig_dir \
+          _volume="dongle_iso"
+    _setup_volume_dir "${_volume}"
+    _setup_volume_dir "keys"
+    _setup_volume_dir "dongle_boot"
+    _setup_volume_dir "dongle_persistent"
+    _setup_volume_dir "dongle_boot"
+    _sig_dir="$(_get "${_volume}" \
+                     "dir")/${install_dir}/${arch}"
+    [ "$(_get "airootfs" \
+              "encryption_key")" != "" ] && \
+      cp "$(_get "airootfs" \
+                 "encryption_key")" \
+         "$(_get "keys" \
+                 "dir")/airootfs.key"
+    [[ "$(_get "airootfs" \
+               "image_type")" == *"luks"* ]] && \
     [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-      _run_once _prepare_keys_image
-
-    _run_once _make_kernel_on_dongle_iso
-    _make_bootmodes_dongle_iso
+      _run_once "_prepare_keys_image"
+    _run_once "_make_kernel_on_${_volume}"
+    "_make_bootmodes_${_volume}"
 }
 
 # Create working directory
 # $1: value in fs_images
-_setup_work_dir() {
-    local _image="${1}"
-    [[ -d "$(_get "${_image}" \
+_setup_volume_dir() {
+    local _volume="${1}"
+    [[ "$(_get "${_volume}" \
+               "dir")" == "" ]] && \
+      _set_volume_dir "${_volume}"
+    [[ -d "$(_get "${volume}" \
                   "dir")" ]] || \
-      install -d -- "$(_get "${_image}" \
-                            "dir")"
+      install_root_dir "$(_get "${_volume}" \
+                               "dir")"
 }
 
-# build the base for an ISO and/or a netboot target
-_build_iso_base() {
-    local _volume="airootfs" \
-          _root="pacstrap" \
-          run_once_mode="base" \
-          buildmode_packages="${packages}" \
-          buildmode_pkg_list=("${pkg_list[@]}")
-    # Set up essential directory paths
-    _set_fs_dir "iso"
-    _set_fs_dir "keys"
-    _set_fs_dir "persistent"
-    _set_fs_dir "dongle_persistent"
-    _set_fs_dir "dongle_boot"
-    _set "${_root}" \
-         "dir" \
-         "$(_get "work" \
-                 "dir")/${arch}/${_volume}"
-    _set "${_volume}" \
-         "dir" \
-         "$(_get "iso" \
-                 "dir")/$(_get "install" \
-                               "dir")/${arch}"
-    _setup_work_dir "keys"
-    _setup_work_dir "persistent"
-    _setup_work_dir "dongle_persistent"
-    _setup_work_dir "${_volume}"
-    # Write build date to file or if the file exists, read it from there
+# Write build date to file or if the file exists,
+# read it from there
+_make_build_date() {
     if [[ -e "$(_get "work" \
                      "dir")/build_date" ]]; then
         SOURCE_DATE_EPOCH="$(<"$(_get "work" \
@@ -5583,14 +5672,39 @@ _build_iso_base() {
           "$(_get "work" \
                   "dir")/build_date"
     fi
+}
 
+# build the base for an ISO and/or a netboot target
+_build_iso_base() {
+    local _volume="airootfs" \
+          _root="pacstrap" \
+          run_once_mode="base" \
+          buildmode_packages="${packages}" \
+          buildmode_pkg_list=("${pkg_list[@]}")
+    # Set up essential directory paths
+    _setup_volume_dir "iso"
+    _setup_volume_dir "keys"
+    _setup_volume_dir "persistent"
+    _setup_volume_dir "dongle_persistent"
+    _setup_volume_dir "dongle_boot"
+    _set "${_root}" \
+         "dir" \
+         "$(_get "work" \
+                 "dir")/${arch}/${_volume}"
+    _set "${_volume}" \
+         "dir" \
+         "$(_get "iso" \
+                 "dir")/$(_get "install" \
+                               "dir")/${arch}"
+    _setup_volume_dir "${_volume}"
+    _make_build_date
     [[ "${quiet}" == "y" ]] || \
       _show_config
     _run_once _make_pacman_conf
     [[ -z "${gpg_key}" ]] || \
       _run_once _export_gpg_publickey
     _run_once "_make_custom_${_volume}"
-    _run_once "_make_packages"
+    _run_once "_make_packages_${_volume}"
     _run_once "_make_version"
     _run_once "_make_customize_${_volume}"
     _run_once "_make_pkglist"
@@ -5636,6 +5750,7 @@ _build_buildmode_bootstrap() {
          "dir" \
          "$(_get "work" \
                  "dir")/${arch}/${buildmode}/root.${arch}"
+    
     [[ -d "$(_get "work" \
                   "dir")" ]] || \
       install -d -- \
@@ -5668,7 +5783,7 @@ _build_buildmode_iso() {
           run_once_mode="${buildmode}"
     _set "efi_boot" \
          "img" \
-         "$(_get_fs_img "efi_boot")"
+         "$(_get_volume_img "efi_boot")"
     "_build_${buildmode}_base"
     _run_once "_build_${buildmode}_image"
 }
@@ -5679,7 +5794,7 @@ _build_buildmode_dongle() {
           run_once_mode="${buildmode}"
     _set "efi_boot" \
          "img" \
-         "$(_get_fs_img "efi_boot")"
+         "$(_get_volume_img "efi_boot")"
     "_build_${buildmode}_base"
     _run_once "_build_${buildmode}_image"
 }
@@ -5693,6 +5808,8 @@ _build() {
         _run_once "_build_buildmode_${buildmode}"
     done
 }
+
+_read_symbols
 
 while getopts 'c:p:C:L:P:A:D:w:m:o:g:G:H:vh?' arg; do
     case "${arg}" in
