@@ -54,10 +54,11 @@ _generate_ephemeral_openssl_key() {
         _city="${4}"\
         _org="${5}" \
         _unit="${6}" \
-        _email="${7}"
-  local _subj=() \
+        _email="${7}" \
+        _subj=() \
         _codesigning_conf \
 	_openssl_opts() \
+	codesigning_cert \
         codesigning_conf \
 	codesigning_key \
 	codesigning_subj
@@ -80,23 +81,21 @@ _generate_ephemeral_openssl_key() {
   _codesigning_conf=(
     "[codesigning]"
     "keyUsage=digitalSignature"
-    "extendedKeyUsage=codeSigning"
-  )
+    "extendedKeyUsage=codeSigning")
   printf "\n$(IFS="\n" ; \
 	    ${_codesigning_conf[*]})\n" >> \
     "${codesigning_conf}"
   _openssl_opts=(
-    -newkey rsa:4096 \
-    -keyout "${codesigning_key}" \
-    -nodes \
-    -sha256 \
-    -x509 \
-    -days 365 \
-    -out "${codesigning_cert}" \
-    -config "${codesigning_conf}" \
-    -subj "${codesigning_subj}" \
+    -newkey rsa:4096
+    -keyout "${codesigning_key}"
+    -nodes
+    -sha256
+    -x509
+    -days 365
+    -out "${codesigning_cert}"
+    -config "${codesigning_conf}"
+    -subj "${codesigning_subj}"
     -extensions codesigning)
-
   openssl req "${_openssl_opts[@]}"
 }
 

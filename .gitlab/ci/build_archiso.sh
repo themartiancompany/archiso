@@ -180,7 +180,8 @@ create_ephemeral_keys() {
   local _gen_key
   local _gen_key_options=('ephemeral') _gpg_options=() _openssl_options=()
   _gen_key="$(pwd)/.gitlab/ci/gen_key.sh"
-  [ -e "${_gen_key}" ] || _gen_key="mkarchisogenkey"
+  [ -e "${_gen_key}" ] || \
+    _gen_key="mkarchisogenkey"
   print_section_start "ephemeral_pgp_key" "Creating ephemeral PGP key"
   local gnupg_homedir="${tmpdir}/.gnupg"
   signature_info
@@ -300,44 +301,39 @@ run_mkarchiso() {
   mkdir -p "${output}/" "${tmpdir}/"
   create_ephemeral_keys
   setup_repo
-
-  _archiso_options+=('-D' "${install_dir}" 
-                     '-c' "${codesigning_cert} ${codesigning_key}"
-                     '-g' "${pgp_key_id}"
-                     '-G' "${pgp_sender}"
-                     '-o' "${output}/"
-                     '-w' "${tmpdir}/"
-                     '-v')
-
-  if [ "${buildmode}" != "iso" ]; then
+  _archiso_options+=(
+    '-D' "${install_dir}" 
+    '-c' "${codesigning_cert} ${codesigning_key}"
+    '-g' "${pgp_key_id}"
+    '-G' "${pgp_sender}"
+    '-o' "${output}/"
+    '-w' "${tmpdir}/"
+    '-v')
+  [ "${buildmode}" != "iso" ] && \
     _archiso_options+=('-m' "${buildmode}")
-  fi
-
   print_section_start "mkarchiso" "Running mkarchiso"
-  [ -e "${_mkarchiso}" ] || _mkarchiso="mkarchiso"
-  GNUPGHOME="${gnupg_homedir}" "${_mkarchiso}" "${_archiso_options[@]}" \
-                                               "configs/${profile}"
-
+  [ -e "${_mkarchiso}" ] || \
+    _mkarchiso="mkarchiso"
+  GNUPGHOME="${gnupg_homedir}" \
+    "${_mkarchiso}" "${_archiso_options[@]}" \
+                    "configs/${profile}"
   print_section_end "mkarchiso"
-
-  if [[ "${buildmode}" =~ "iso" ]]; then
-    create_zsync_delta "${output}/"*.iso
+  [[ "${buildmode}" =~ "iso" ]] && \
+    create_zsync_delta "${output}/"*.iso && \
     create_checksums "${output}/"*.iso
-  fi
-  if [[ "${buildmode}" == "bootstrap" ]]; then
-    create_zsync_delta "${output}/"*.tar*(.gz|.xz|.zst)
+  [[ "${buildmode}" == "bootstrap" ]] && \
+    create_zsync_delta "${output}/"*.tar*(.gz|.xz|.zst) && \
     create_checksums "${output}/"*.tar*(.gz|.xz|.zst)
-  fi
   create_metrics
-
   print_section_start "ownership" "Setting ownership on output"
-
-  if [[ -n "${SUDO_UID:-}" ]] && [[ -n "${SUDO_GID:-}" ]]; then
+  [[ -n "${SUDO_UID:-}" ]] && \
+  [[ -n "${SUDO_GID:-}" ]] && \
     chown -Rv "${SUDO_UID}:${SUDO_GID}" -- "${output}"
-  fi
   print_section_end "ownership"
 }
 
 trap cleanup EXIT
 
 run_mkarchiso
+
+# vim:set sw=4 sts=-1 et:
