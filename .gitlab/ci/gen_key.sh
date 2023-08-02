@@ -82,8 +82,8 @@ _generate_ephemeral_openssl_key() {
     "[codesigning]"
     "keyUsage=digitalSignature"
     "extendedKeyUsage=codeSigning")
-  printf "\n$(IFS="\n" ; \
-	      echo "${_codesigning_suffix[*]}")\n" >> \
+  printf "\n%s\n" "$(IFS="\n" ; \
+	             echo "${_codesigning_suffix[*]}")" >> \
     "${_codesigning_conf}"
   _openssl_opts=(
     -newkey rsa:4096
