@@ -254,7 +254,7 @@ setup_repo() {
   _build_repo_cmds=(
     "cd ${_profile}"
     "${_build_repo} ${_build_repo_options[*]}")
-  _build_repo_cmd="$(IFS=" && " ; \
+  _build_repo_cmd="$(IFS=";" ; \
                      echo "${_build_repo_cmds[*]}")"
   print_section_start "setup_repo" "${_setup_repo_msg}"
   [ -e "${_packages_extra}" ] && \
