@@ -50,13 +50,13 @@ EOF
 _generate_ephemeral_openssl_key() {
   local codesigning_dir="${1}" \
         _country="${2}" \
-        _state="${3}" \ 
+        _state="${3}" \
         _city="${4}"\
         _org="${5}" \
         _unit="${6}" \
         _email="${7}"
   local _subj=() \
-        _codesigning_conf \  
+        _codesigning_conf \
 	_openssl_opts() \
         codesigning_conf \
 	codesigning_key \
