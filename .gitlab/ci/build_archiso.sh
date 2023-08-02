@@ -280,8 +280,8 @@ setup_repo() {
 	                        -Si "${_pkg}" \
 	                   | grep Conflicts)"
       _conflicts=(
-        "$(echo ${_conflicts_line##*:} | \
-	    awk "${_awk_split_cmd}")")
+        $(echo ${_conflicts_line##*:} | \
+	    awk "${_awk_split_cmd}"))
       for _conflict in "${_conflicts[@]}"; do
 	echo "Removing '${_conflict}'"
         pacman -Rdd "${_conflict}" \
