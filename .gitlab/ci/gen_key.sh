@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # Generate an ephemeral PGP key for signing the rootfs image
 _generate_ephemeral_pgp_key() {
@@ -49,7 +49,7 @@ EOF
 # Generate ephemeral certificates used for codesigning
 _generate_ephemeral_openssl_key() {
   local codesigning_dir="${1}" \
-        _country="${2}" \ # es. IT
+        _country="${2}" \
         _state="${3}" \ 
         _city="${4}"\
         _org="${5}" \
@@ -58,9 +58,10 @@ _generate_ephemeral_openssl_key() {
   local _subj=() \
         _codesigning_conf \  
 	_openssl_opts() \
-        codesigning_conf="${codesigning_dir}/openssl.cnf" \
+        codesigning_conf \
 	codesigning_key \
 	codesigning_subj
+  codesigning_conf="${codesigning_dir}/openssl.cnf"
   _subj=(
     "/C=${_country}"
     "/ST=${_state}"
