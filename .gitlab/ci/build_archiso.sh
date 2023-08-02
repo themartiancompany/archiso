@@ -253,9 +253,9 @@ setup_repo() {
     _setup_user="mkarchisorepobuilder"
   _build_repo_cmds=(
     "cd ${_profile}"
-    "${_build_repo}" "${_build_repo_options[*]}")
-  _build_repo_cmd="$(IFS=" && " ;
-                     echo "${_build_repo_cmds[*]}")"
+    "${_build_repo} ${_build_repo_options[*]}")
+  _build_repo_cmd="$(echo "$(IFS=" && " ;
+                             echo "${_build_repo_cmds[*]}")")"
   print_section_start "setup_repo" "${_setup_repo_msg}"
   [ -e "${_packages_extra}" ] && \
     #shellcheck disable=SC1090
