@@ -252,7 +252,7 @@ setup_repo() {
   [ -e "${_setup_user}" ] || \
     _setup_user="mkarchisorepobuilder"
   _build_repo_cmds=(
-    "cd ${profile}"
+    "cd ${_profile}"
     "${_build_repo} ${_build_repo_options[*]}")
   _build_repo_cmd="$(IFS=" && " ; \
                      echo "${_build_repo_cmds[*]}")"
