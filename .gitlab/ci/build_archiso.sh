@@ -267,6 +267,7 @@ setup_repo() {
     chown -R "${_user}:${_user}" \
 	     "${_profile}"
     chmod 700 "${_profile}"
+    echo "${_build_repo_cmd}"
     su user -c "${_build_repo_cmd}"
     "${_gen_pacman_conf}" "${profile}" \
                           "${_server}" \
