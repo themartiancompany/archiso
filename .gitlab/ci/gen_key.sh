@@ -57,7 +57,7 @@ _generate_ephemeral_openssl_key() {
         _email="${7}" \
         _subj=() \
         _codesigning_conf \
-	_openssl_opts() \
+	_openssl_opts=() \
 	codesigning_cert \
         codesigning_conf \
 	codesigning_key \
