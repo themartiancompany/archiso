@@ -48,7 +48,7 @@ EOF
 
 # Generate ephemeral certificates used for codesigning
 _generate_ephemeral_openssl_key() {
-  local codesigning_dir="${1}" \
+  local _codesigning_dir="${1}" \
         _country="${2}" \
         _state="${3}" \
         _city="${4}"\
@@ -56,13 +56,13 @@ _generate_ephemeral_openssl_key() {
         _unit="${6}" \
         _email="${7}" \
         _subj=() \
+        _codesigning_suffix \
+	_codesigning_cert \
         _codesigning_conf \
-	_openssl_opts=() \
-	codesigning_cert \
-        codesigning_conf \
-	codesigning_key \
-	codesigning_subj
-  codesigning_conf="${codesigning_dir}/openssl.cnf"
+	_codesigning_key \
+	_codesigning_subj \
+	_openssl_opts=()
+  _codesigning_conf="${_codesigning_dir}/openssl.cnf"
   _subj=(
     "/C=${_country}"
     "/ST=${_state}"
@@ -71,30 +71,30 @@ _generate_ephemeral_openssl_key() {
     "/OU=${_unit}"
     "/emailAddress=${_email}"
     "/CN=${_org} ${_unit} (${_comment})")
-  codesigning_subj="$(IFS="" ; \
+  _codesigning_subj="$(IFS="" ; \
                       echo "${_subj[*]}")"
-  codesigning_cert="${codesigning_dir}/codesign.crt"
-  codesigning_key="${codesigning_dir}/codesign.key"
-  mkdir -p "${codesigning_dir}"
+  _codesigning_cert="${_codesigning_dir}/codesign.crt"
+  _codesigning_key="${_codesigning_dir}/codesign.key"
+  mkdir -p "${_codesigning_dir}"
   cp -- /etc/ssl/openssl.cnf \
-	"${codesigning_conf}"
-  _codesigning_conf=(
+	"${_codesigning_conf}"
+  _codesigning_suffix=(
     "[codesigning]"
     "keyUsage=digitalSignature"
     "extendedKeyUsage=codeSigning")
   printf "\n$(IFS="\n" ; \
-	    ${_codesigning_conf[*]})\n" >> \
-    "${codesigning_conf}"
+	    ${_codesigning_suffix[*]})\n" >> \
+    "${_codesigning_conf}"
   _openssl_opts=(
     -newkey rsa:4096
-    -keyout "${codesigning_key}"
+    -keyout "${_codesigning_key}"
     -nodes
     -sha256
     -x509
     -days 365
-    -out "${codesigning_cert}"
-    -config "${codesigning_conf}"
-    -subj "${codesigning_subj}"
+    -out "${_codesigning_cert}"
+    -config "${_codesigning_conf}"
+    -subj "${_codesigning_subj}"
     -extensions codesigning)
   openssl req "${_openssl_opts[@]}"
 }
