@@ -88,7 +88,10 @@ _set() {
 # Sets global variables
 _global_variables() {
     local _var \
-          _volume
+          _volume \
+          _volumes=() \
+          _volumes_string_vars=() \
+          _volumes_array_vars=()
     pkg_list=()
     bootstrap_pkg_list=()
     quiet=""
@@ -98,7 +101,6 @@ _global_variables() {
     gpg_sender=""
     gpg_home=""
     iso_name=""
-    iso_label=""
     iso_publisher=""
     iso_application=""
     iso_version=""
@@ -122,7 +124,12 @@ _global_variables() {
     declare -g \
             -A \
             images=()
-    volumes=(
+    _boot_loader_vars=(
+      'profile_path'
+      'cfg_path'
+      'install_path'
+    )
+    _volumes=(
       'iso'
       'airootfs'
       'persistent'
@@ -134,26 +141,32 @@ _global_variables() {
       'dongle_swap'
       'recovery'
       'efi_boot')
-    volumes_str_vars=(
+    _volumes_string_vars=(
       'dir'
       'encryption_key'
       'epoch'
       'image_type'
       'image_tool_options'
       'img'
+      'label'
       'size' # All sizes are in kib
              # except when specified
       'uuid')
-    volumes_arr_vars=(
+    _volumes_array_vars=(
       'files'
       'image_tool_options')
-    for _volume in "${volumes[@]}"; do
-        for _var in "${volumes_str_vars[@]}"; do
+    for _var in "${_boot_loader_vars[@]}"; do
+        _set "boot_loader" \
+             "${_var}" \
+             ""
+    done
+    for _volume in "${_volumes[@]}"; do
+        for _var in "${_volumes_string_vars[@]}"; do
             _set "${_volume}" \
                  "${_var}" \
                  ""
         done
-        for _var in "${volumes_arr_vars[@]}"; do
+        for _var in "${_volumes_array_vars[@]}"; do
             declare -g \
                     -a \
                     "${_volume}_${_var}"
@@ -2786,22 +2799,26 @@ EOF
 # Prepare bootloader configuration files
 _make_common_bootloader_cfg(){
     local _volume="${1}" \
-          _cfg_path="${2}" \
+          _boot_loader="${2}" \
+          _cfg_path \ # ="${2}" \
           _cfg_path_array=() \
           _cfg_files=() \
-    _cfg_files=("${profile_dir}/${_cfg_path}/"*'.cfg')
+    _cfg_files=("$(_get "profile" \
+                        "dir")/$(_get_bl_cfg_path \
+                                     "${_boot_loader}")/"*'.cfg')
     IFS='/' \
       read -ra \
            _cfg_path_array <<< \
         "${_cfg_path}" 
     _make_bootloader_config "${_volume}" \
-                            "/${_cfg_path}" \
+                            "/$(_get_bl_cfg_path \
+                                    "${_boot_loader}")" \
                             "${_cfg_files[@]}"
 }
 
-_make_common_bootloader_cfg "iso" \
-                            "grub"
-_make_common_bootmode_grub_cfg_install iso
+# _make_common_bootloader_cfg "iso" \
+#                             "grub"
+# _make_common_bootmode_grub_cfg_install iso
 
 _make_common_bootmode_grub_cfg_install() {
     local _volume="${1}" \
@@ -3585,13 +3602,16 @@ _make_systemd-boot() {
        "${_out}"
 }
 
-_get_bl_cfg_path() {
+_get_bl() {
     local _boot_loader="${1}" \
           _cfg_path
     _cfg_path="${_boot_loader}"
     [[ "${_boot_loader}" == "systemd-boot" ]] && \
       _cfg_path="loader/entries"
     echo "${_cfg_path}"
+}
+
+_get_bl_profile_path() {
 }
 
 # Prepares systemd-boot for booting when written to a disk (isohybrid)
