@@ -180,12 +180,12 @@ _constants() {
     # https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
     readonly \
       codes=(
-         'intel-uc.img'
-         'intel-ucode.img'
-         'amd-uc.img'
-         'amd-ucode.img'
-         'early_ucode.cpio'
-         'microcode.cpio') \
+        'intel-uc.img'
+        'intel-ucode.img'
+        'amd-uc.img'
+        'amd-ucode.img'
+        'early_ucode.cpio'
+        'microcode.cpio') \
       epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96" \
       luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC" \
       linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4" \
@@ -2799,44 +2799,18 @@ EOF
 # Prepare bootloader configuration files
 _make_common_bootloader_cfg(){
     local _volume="${1}" \
-          _boot_loader="${2}" \
-          _cfg_path \ # ="${2}" \
-          _cfg_path_array=() \
-          _cfg_files=() \
-    _cfg_files=("$(_get "profile" \
-                        "dir")/$(_get_bl_cfg_path \
-                                     "${_boot_loader}")/"*'.cfg')
-    IFS='/' \
-      read -ra \
-           _cfg_path_array <<< \
-        "${_cfg_path}" 
+          _boot_loader="${2}"
     _make_bootloader_config "${_volume}" \
-                            "/$(_get_bl_cfg_path \
-                                    "${_boot_loader}")" \
-                            "${_cfg_files[@]}"
+                            "/$(_get_bl_cfg "${_boot_loader}")" \
+                            $(_get_bl_cfg_files "profile" \
+                                                "${_boot_loader}")
 }
-
-# _make_common_bootloader_cfg "iso" \
-#                             "grub"
-# _make_common_bootmode_grub_cfg_install iso
-
-_make_common_bootmode_grub_cfg_install() {
-    local _volume="${1}" \
-          _files=()
-    _files+=(
-      "${work_dir}/grub/"*'.cfg'
-      "${profile_dir}/grub/"*'.cfg')
-    _install_cmd "${_volume}" \
-                 "${_files[@]}" \
-                 "/EFI/BOOT"
-}
-
 
 ## GRUB configuration files
 # Prepare GRUB configuration files
 _make_common_bootmode_grub_cfg(){
     _make_common_bootloader_cfg "work" \
-                                "$(_get_bl_cfg_path "grub")"
+                                "grub"
     _gen_grub_embed_cfg
 }
 
@@ -2846,7 +2820,7 @@ _make_common_bootmode_grub_cfg(){
 # Module list from 
 # https://bugs.archlinux.org/task/71382#comment202911
 # $1: 'bios' or 'efi'
-_get_grubmodules(){
+_get_grub_modules(){
     local _mode="${1}"
     _modules=(
       afsplitter boot bufio chain configfile
@@ -2888,7 +2862,8 @@ _make_bootloader_config() {
           _dest="${2}"
     shift
     local _cfgs=("${@}")
-    local _tmp_cfg="${work_dir}/bl_tmp.cfg"
+    local _tmp_cfg="$(_get "work" \
+                           "dir")/bl_tmp.cfg"
     for _cfg in "${_cfgs[@]}"; do
         _gen_bootloader_config "${_cfg}" > \
           "${_tmp_cfg}"
@@ -2906,10 +2881,12 @@ _make_bootloader_config() {
 #     default name: BOOT<IA32/X64>.EFI
 _make_grub() {
     local _out="${1}"
-    local _cfg="${work_dir}/grub.cfg"
-          _embed_cfg="${work_dir}/grub-embed.cfg" \
-          _modules="$(_get_grubmodules "${_platform}")" \
-          _grub_options=() \
+    local _cfg="$(_get "work" \
+                       "dir")/grub.cfg"
+          _embed_cfg="$(_get "work" \
+                             "dir")/grub-embed.cfg" \
+          _modules="$(_get_grub_modules "${_platform}")" \
+          _grub_options=()
     _grub_options=(
       -O "${_arch}-${_platform}"
       --modules="${_modules}"
@@ -2920,11 +2897,11 @@ _make_grub() {
       --compress=xz)
     [[ "${_platform}" == "pc" ]] && \
       _grub_options+=(
-        --install-modules="${_modules}") \
+        --install-modules="${_modules}")
     [[ "${_platform}" == "pc"* ]] && \
+      _embed_cfg="${_cfg}" \
       _grub_options+=(
-        --fonts="") \
-      _embed_cfg="${_cfg}"
+        --fonts="")
     [ -d "${_out}" ] && \
       _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
     _run_once _make_common_bootmode_grub_cfg
@@ -3170,7 +3147,8 @@ _make_common_bootloader() {
     _PLATFORM="${_bootmode_array[5]}" # (EFI, MBR, ELTORITO)
     _boot_method="${_bootmode_array[6]}" # (mbr, esp, eltorito)
     [[ "${_boot_loader}" != "syslinux" ]] && \
-      _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
+      _bl="$(_get "work" \
+                  "dir")/BOOT${_CODE}.${_PLATFORM}"
 }
 
 ### GRUB
@@ -3179,12 +3157,10 @@ _make_common_bootloader() {
 # $1: volume on which to install grub configuration files
 _make_common_bootmode_grub_cfg_install() {
     local _bootable="${1}" \
-          _files=()
-    _files+=(
-      "${work_dir}/grub/"*'.cfg'
-      "${profile_dir}/grub/"*'.cfg')
+          _boot_loader="grub" \
     _install_cmd "${_bootable}" \
-                 "${_files[@]}" \
+                 "$(_get_bl_cfg_files "work" \
+                                      "${_boot_loader}")" \
                  "/EFI/BOOT"
 }
 
@@ -3302,10 +3278,13 @@ _make_common_bootmode() {
     [[  "${bootmode}"  == "uefi-"* ]] && \
       _make_efi_sh "${_bootable}" \
                    "${_code}"
-    [[ "${bootmade}" != *"grub"* ]] && \
+    [[ "${bootmode}" != *"grub"* ]] && \
       _make_bootloader_config "${_bootable}" \ 
-                              "/${_cfg_path}" \
-                              "${_cfg_files[@]}"
+                              "/$(_get_bl \
+                                      "${_boot_loader}")/$(_get_bl_cfg \
+                                                               "${_boot_loader}")" \
+                              $(_get_bl_cfg_files "profile" \
+                                                  "${_boot_loader}")
 }
 
 ##################################
@@ -3317,8 +3296,8 @@ _make_common_bootmode() {
 # Set up boot loaders
 _make_bootmodes_iso() {
     local bootmode
-    bootmodes=(
-      $(_sort_bootmodes "${bootmodes[@]}"))
+    # bootmodes=(
+    #   $(_sort_bootmodes "${bootmodes[@]}"))
     for bootmode in "${bootmodes[@]}"; do
         _run_once "_make_bootmode_${bootmode}_iso"
     done
@@ -3342,9 +3321,7 @@ _make_bootmodes_dongle_iso() {
 _make_bootmode_bios.grub.mbr() {
     # local bootable_dir="${1}"
     local _volume="${1}" \
-          _bl
     _make_common_bootloader "${bootmode}"
-    _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}"
     _msg_info "Setting up GRUB for BIOS booting from a disk..."
     _make_grub "$(_get "work" \
                        "dir")"
@@ -3374,10 +3351,10 @@ _make_bootmode_bios.grub.mbr_dongle_iso() {
 _make_bootmode_bios.syslinux.mbr() {
     local _bootable="${1}" \
           _cfg_files=() \
-          _cfg_path="syslinux"
           _msg=() \
     _make_common_bootloader "${bootmode}"
-    _cfg_files=("${profile_dir}/syslinux/"*.cfg)
+      _cfg_files=($(_get_bl_cfg_files "profile" \
+                                      "${_boot_loader}"))
     _msg=("Setting up SYSLINUX for"
           "BIOS booting from a disk...")
     _msg_info "${_msg[*]}"
@@ -3602,23 +3579,40 @@ _make_systemd-boot() {
        "${_out}"
 }
 
-_get_bl() {
+# Returns bootloader configuration files directory
+_get_bl_cfg() {
     local _boot_loader="${1}" \
           _cfg_path
-    _cfg_path="${_boot_loader}"
     [[ "${_boot_loader}" == "systemd-boot" ]] && \
-      _cfg_path="loader/entries"
+      _cfg_path="entries"
     echo "${_cfg_path}"
 }
 
-_get_bl_profile_path() {
+# Get bootloader path in profile
+# $1: boot loader
+_get_bl() {
+    local _volume="${1}" \
+          _boot_loader="${2}" \
+    [[ "${_boot_loader}" == "systemd-boot" ]] && \
+      _boot_loader="efiboot/loader"
+    echo "$(_get "${_volume}" \
+                 "dir")/${_boot_loader}"
+}
+
+# Returns profile configuration files for a bootloader
+_get_bl_cfg_files() {
+    local _volume="${1}" \
+          _boot_loader="${2}"
+    echo "$(_get_bl "${_volume}" \
+                    "${_boot_loader}")/$(_get_bl_cfg \
+                                        "${_boot_loader}")/"*".conf"
 }
 
 # Prepares systemd-boot for booting when written to a disk (isohybrid)
 _make_bootmode_uefi-x64.systemd-boot.esp() {
     local _available_ucodes=() \
+          _boot_loader="systemd-boot" \
           _bootable="efi_boot" \
-          _cfg_path="loader/entries" \
           _cfg_files=() \
           _file \
           # _lib="/usr/lib/systemd/boot" \
@@ -3627,7 +3621,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
           _systemd_boot \
     # _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
     _cfg_files=(
-      "${profile_dir}/efiboot/$(_get_bl_cfg_path "systemd-boot")/"*".conf")
+      $(_get_bl_cfg_files "profile" \
+                          "${_boot_loader}"))
     _msg_info "Setting up systemd-boot for UEFI booting..."
     for _file in "${ucodes[@]}"; do
         [[ -e "$(_get "${_root}" \
@@ -3638,7 +3633,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
     # Calculate the required FAT image size in bytes
     efi_boot_files+=(
-      "${profile_dir}/efiboot/"
+      # "$(_get_bl "profile" \
+      #            "${_boot_loader}")/"
       "${_available_ucodes[@]}")
     _images=(
       "initramfs-*"
@@ -4255,6 +4251,16 @@ _prepare_airootfs_image() {
                      "/${install_dir}/${arch}"
 }
 
+_get_efi_bootmodes() {
+    local _bootmodes=()
+    for _bootmode in "${bootmodes[@]}"; do
+        [[ "${_bootmode}" == *'esp' ]] && \
+          _bootmodes+=(
+            "${_bootmode}")
+    done
+    echo "${_bootmodes[@]}"
+}
+
 _prepare_efi_boot_image() {
     local _bootmode \
           _code \
@@ -4262,25 +4268,25 @@ _prepare_efi_boot_image() {
           _volume="efi_boot" \
           _root="pacstrap" \
           _bootmodes=()
-    for _bootmode in "${bootmodes[@]}"; do
-        [[ "${_bootmode}" == *'esp' ]] && \
-          _bootmodes+=(
-            "${_bootmode}")
-    done
+    _bootmodes=(
+      $(_get_efi_bootmodes))
     for _code in ('ia32'
                   'x64'); do
-      [[ " ${_bootmodes[*]} " =~ ' '*"${_code}"*' ' ]] && \
-        efi_boot_files+=(
-          "$(_get_efi_sh "${_code}")"
+        [[ " ${_bootmodes[*]} " =~ ' '*"${_code}"*' ' ]] && \
+          efi_boot_files+=(
+            "$(_get_efi_sh "${_code}")"
     done
     [[ " ${_bootmodes[*]} " =~ ' '*'systemd-boot'*' ' ]] && \
       efi_boot_files+=(
-        "${profile_dir}/efiboot/loader/loader.conf")
+        "$(_get_bl "profile" \
+                   "systemd-boot")/loader.conf")
     [[ " ${_bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
       run_once "_make_common_bootmode_grub_cfg" && \
       efi_boot_files+=(
-        "${work_dir}/grub/"*'.cfg'
-        "${profile_dir}/grub/"*'.cfg')
+        $(_get_bl_cfg_files "work" \
+                            "grub")
+        $(_get_bl_cfg_files "profile" \
+                            "grub"))
     for _bootmode in "${_bootmodes[@]}"; do
         _make_common_bootloader 
         "_make_${_boot_loader}" "$(_get "work" \
@@ -5514,11 +5520,12 @@ _override_volume() {
 # Set defaults and, if present, overrides
 # from mkarchiso command line option parameters
 _set_overrides() {
-    local _msg=() \
+    local _img \
+          _msg=() \
           _no_override_ciphered_volumes=() \
           _no_override_volumes=() \
-          _img \
-          _var
+          _var \
+          _volume
     declare -A \
             _no_override_vars
     # Set variables that have command line overrides
