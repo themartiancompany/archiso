@@ -2775,7 +2775,8 @@ _gen_bootloader_config() {
 # generate an 'external loader' embedded GRUB
 # configuration file for use on UEFI platforms
 _gen_grub_embed_cfg() {
-    local _embed_cfg
+    local _boot_loader="grub" \
+          _embed_cfg
     IFS='' \
       read -r \
            -d '' \
@@ -2792,7 +2793,10 @@ configfile "${cmdpath}/grub.cfg"
 EOF
     printf '%s\n' \
            "${_embed_cfg}" > \
-      "${profile_dir}/grub/grub-embed.cfg"
+      "$(_get \
+             "profile" \
+             "dir")/$(_get_bl \
+                          "${_boot_loader}")/${_boot_loader}-embed.cfg"
 }
 
 ## Copy configuration files
@@ -2800,10 +2804,14 @@ EOF
 _make_common_bootloader_cfg(){
     local _volume="${1}" \
           _boot_loader="${2}"
-    _make_bootloader_config "${_volume}" \
-                            "/$(_get_bl_cfg "${_boot_loader}")" \
-                            $(_get_bl_cfg_files "profile" \
-                                                "${_boot_loader}")
+    _make_bootloader_config \
+        "${_volume}" \
+        "/$(_get_bl \
+                "${_boot_loader}")/$(_get_bl_cfg \
+                                         "${_boot_loader}")" \
+        $(_get_bl_cfg_files \
+              "profile" \
+              "${_boot_loader}")
 }
 
 ## GRUB configuration files
@@ -3595,17 +3603,17 @@ _get_bl() {
           _boot_loader="${2}" \
     [[ "${_boot_loader}" == "systemd-boot" ]] && \
       _boot_loader="efiboot/loader"
-    echo "$(_get "${_volume}" \
-                 "dir")/${_boot_loader}"
+    echo "${_boot_loader}"
 }
 
 # Returns profile configuration files for a bootloader
 _get_bl_cfg_files() {
     local _volume="${1}" \
-          _boot_loader="${2}"
-    echo "$(_get_bl "${_volume}" \
-                    "${_boot_loader}")/$(_get_bl_cfg \
-                                        "${_boot_loader}")/"*".conf"
+          _boot_loader="${2}" \
+          _path
+    _path="$(_get_bl "${_boot_loader}")/$(_get_bl_cfg "${_boot_loader}")/"*".conf"
+    echo "$(_get "${_volume}" \
+                 "dir")/${_path}/"*".conf"
 }
 
 # Prepares systemd-boot for booting when written to a disk (isohybrid)
@@ -3633,8 +3641,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     done
     # Calculate the required FAT image size in bytes
     efi_boot_files+=(
-      # "$(_get_bl "profile" \
-      #            "${_boot_loader}")/"
+      # "$(_get "profile" \
+      #         "dir")/$(_get_bl "${_boot_loader}")/"
       "${_available_ucodes[@]}")
     _images=(
       "initramfs-*"
@@ -4278,8 +4286,8 @@ _prepare_efi_boot_image() {
     done
     [[ " ${_bootmodes[*]} " =~ ' '*'systemd-boot'*' ' ]] && \
       efi_boot_files+=(
-        "$(_get_bl "profile" \
-                   "systemd-boot")/loader.conf")
+        "$(_get "profile" \
+                "dir")/$(_get_bl "systemd-boot")/loader.conf")
     [[ " ${_bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
       run_once "_make_common_bootmode_grub_cfg" && \
       efi_boot_files+=(
