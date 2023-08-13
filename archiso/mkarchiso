@@ -3205,6 +3205,7 @@ _get_arch() {
 }
 
 _get_standalone_name() {
+    local _bootmode="${1}"
     echo "BOOT$(_get_CODE \
                     "${_bootmode}").$(_get_PLATFORM \
                                           "${_bootmode}")"
@@ -3647,17 +3648,22 @@ _make_bootmode_uefi-x64.grub.esp_dongle_iso() {
 
 _make_systemd-boot() {
     local _out="${1}" \
+          _bootmode="${2}"
           _bl \
           _lib \
           _root \
           _systemd_boot \
     _lib="/usr/lib/systemd/boot"
     _root="pacstrap" \
-    _systemd_boot="systemd-boot${_code}.${_platform}"
+    _filename="$(_get_bootloader \
+                     "${_bootmode}")$(_get_arch_code \
+                                          "${_bootmode}").$(_get_platform \
+                                                                "${_bootmode}")"
     _bl="$(_get "${_root}" \
-                "dir")${_lib}/${_platform}/${_systemd_boot}"
+                "dir")${_lib}/$(_get_platform \
+                                    "${_bootmode}")/${_filename}"
     [ -d "${_out}" ] && \
-      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
+      _out="${_out}/$(_get_standalone_name)"
     cp "${_bl}" \
        "${_out}"
 }
