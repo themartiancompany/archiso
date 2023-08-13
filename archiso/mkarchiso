@@ -2887,30 +2887,35 @@ _make_bootloader_config() {
 #     default name: BOOT<IA32/X64>.EFI
 _make_grub() {
     local _out="${1}"
+    local _bootmode="${2}"
     local _cfg="$(_get "work" \
-                       "dir")/grub.cfg"
+                       "dir")/grub.cfg" \
           _embed_cfg="$(_get "work" \
                              "dir")/grub-embed.cfg" \
-          _modules="$(_get_grub_modules "${_platform}")" \
           _grub_options=()
+          _modules
+    _modules="$(_get_grub_modules \
+                    "$(_get_platform \
+                           "${_bootmode}")")"
     _grub_options=(
-      -O "${_arch}-${_platform}"
+      -O "$(_get_arch \
+                "${_bootmode}")-$(_get_platform \
+                                      "${_bootmode}")"
       --modules="${_modules}"
       --locales="en@quot"
       --themes=""
       --sbat=/usr/share/grub/sbat.csv
       --disable-shim-lock
       --compress=xz)
-    [[ "${_platform}" == "pc" ]] && \
-      _grub_options+=(
-        --install-modules="${_modules}")
-    [[ "${_platform}" == "pc"* ]] && \
+    [[ "$(_get_platform "${_bootmode}")" == "pc"* ]] && \
       _embed_cfg="${_cfg}" \
       _grub_options+=(
+        --install-modules="${_modules}"
         --fonts="")
     [ -d "${_out}" ] && \
-      _out="${_out}/BOOT${_CODE}.${_PLATFORM}"
-    _run_once _make_common_bootmode_grub_cfg
+      _out="${_out}/BOOT$(_get_arch_CODE \
+                              "${_bootmode}").$(_get_PLATFORM "${_bootmode}")"
+    _run_once "_make_common_bootmode_grub_cfg"
     _grub_options+=(
       -o "${_out}")
     grub-mkstandalone "${_grub_options[@]}" \
@@ -2924,37 +2929,47 @@ _make_grub() {
 # Install SYSLINUX on a volume
 # $1: volume
 _make_syslinux() {
-    _local _bootable="${1}"
-    _install_dir_cmd "${_bootable}" \
-                     "/syslinux"
-    [[ -e "${profile_dir}/syslinux/splash.png" ]] && \
-      _install_cmd "${_bootable}" \
-                   "${profile_dir}/syslinux/splash.png" \
-                   "/syslinux"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/"*.c32 \
-                 "/syslinux"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/lpxelinux.0" \
-                 "/syslinux"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/syslinux/bios/memdisk" \
-                 "/syslinux"
-    if [[ -e "$(_get "${_bootable}" \
-                     "dir")/syslinux/hdt.c32" ]]; then
-        _install_dir_cmd "${_bootable}" \
-                         "/syslinux/hdt"
-        [[ -e "${pacstrap_dir}/usr/share/hwdata/pci.ids" ]] && \
-          gzip -cn9 "${pacstrap_dir}/usr/share/hwdata/pci.ids" > \
-            "$(_get "${_bootable}" \
-                    "dir")/syslinux/hdt/pciids.gz"
-        find "${pacstrap_dir}/usr/lib/modules" \
+    local _volume="${1}"
+          _boot_loader="syslinux" \
+          _root="pacstrap"
+    _install_dir_cmd "${_volume}" \
+                     "/${_boot_loader}"
+    [[ -e "$(_get "profile" \
+                  "dir")/${_boot_loader}/splash.png" ]] && \
+      _install_cmd "${_volume}" \
+                   "$(_get "profile" \
+                           "dir")/${_boot_loader}/splash.png" \
+                   "/${_boot_loader}"
+    _install_cmd "${_volume}" \
+                 "$(_get "${_root}" \
+                         "dir")/usr/lib/${_boot_loader}/bios/"*.c32 \
+                 "/${_boot_loader}"
+    _install_cmd "${_volume}" \
+                 "$(_get "${_root}" \
+                         "dir")/usr/lib/${_boot_loader}/bios/lpxelinux.0" \
+                 "/${_boot_loader}"
+    _install_cmd "${_volume}" \
+                 "$(_get "${_root}" \
+                         "dir")/usr/lib/${_boot_loader}/bios/memdisk" \
+                 "/${_boot_loader}"
+    if [[ -e "$(_get "${_volume}" \
+                     "dir")/${_boot_loader}/hdt.c32" ]]; then
+        _install_dir_cmd "${_volume}" \
+                         "/${_boot_loader}/hdt"
+        [[ -e "$(_get "${_root}" \
+                      "dir")/usr/share/hwdata/pci.ids" ]] && \
+          gzip -cn9 "$(_get "${_root}" \
+                            "dir")/usr/share/hwdata/pci.ids" > \
+            "$(_get "${_volume}" \
+                    "dir")/${_boot_loader}/hdt/pciids.gz"
+        find "$(_get "${_root}" \
+                     "dir")/usr/lib/modules" \
              -name 'modules.alias' \
              -print \
              -exec gzip \
              -cn9 '{}' ';' > \
-          "$(_get "${_bootable}" \
-                  "dir")/syslinux/hdt/modalias.gz"
+          "$(_get "${_volume}" \
+                  "dir")/${_boot_loader}/hdt/modalias.gz"
     fi
 }
 
@@ -3012,7 +3027,8 @@ _make_ucodes() {
           _boot_dir="${2}"
     local _first \
           _licenses_dest="${_boot_dir}/licenses" \
-          _licenses_src="${pacstrap_dir}/usr/share/licenses"
+          _licenses_src="$(_get "pacstrap" \
+                                "dir")/usr/share/licenses"
     [[ "${_volume}" == "efi_boot" ]] && \
       _first="true"
     for _ucode in "${ucodes[@]}"; do
@@ -3089,72 +3105,109 @@ _make_kernel_on_isos() {
 # Bootmodes utility functions
 #################################
 
-_parse_bootmode() {
-    local _bootmode="${1}"\
-          _bootmode_array=() \
-          _arch \
-          _arr=() \
-          _boot_loader \
-          _boot_method \
-          _code \
-          _CODE \
-          _platform_code \
-          _platform_code_array \
-          _platform \
-          _PLATFORM
-    IFS='.' \
+# $1: (single character) separator
+# $2: string to split
+_split() {
+    local _separator="${1}" \
+          _string="${2}" \
+          _array=()
+    IFS="${_separator}" \
       read -ra \
-           _bootmode_array <<< \
-        "${_bootmode}" 
-    _platform_code="${_bootmode[0]}"
-    _boot_loader="${_bootmode[1]}"
-    _boot_method="${_bootmode[2]}"
-    IFS="-" \
-      read -ra \
-           _platform_code_array <<< \
-        "${_platform_code}"
-    _platform="${_platform_code_array[1]}"
-    _code="${_platform_code_array[2]}"
-    _arch="x86_64"
-    _CODE="x64"
-    _PLATFORM="EFI"
-    [[ "${_code}" == "ia32" ]] && \
-      _arch="i386" \
-      _CODE="IA32"
+           _array <<< \
+        "${_string}" 
+    echo "${_array[@]}"
+}
+
+_get_platformcode() {
+    local _bootmode="${1}" \
+          _array=()
+    _array=(
+      $(_split "." \
+               "${_bootmode}"))
+    echo "${_array[0]}"
+}
+
+
+_get_boot_loader() {
+    local _bootmode="${1}" \
+          _array=()
+    _array=(
+      $(_split "." \
+               "${_bootmode}"))
+    echo "${_array[1]}"
+}
+
+_get_boot_method() {
+    local _bootmode="${1}" \
+          _array=()
+    _array=(
+      $(_split "." \
+               "${_bootmode}"))
+    echo "${_array[2]}"
+}
+
+_get_platform() {
+    local _bootmode="${1}" \
+          _array=() \
+    _array=(
+      $(_split "-" \
+               "$(_get_platformcode "${_bootmode}")"))
+    _platform="${_array[0]}"
     [[ "${_platform}" == "uefi" ]] && \
       _platform="efi"
     [[ "${_platform}" == "bios" ]] && \
-      _arch="i386" \
-      _code="ia32" \
-      _CODE="IA32" \
       _platform="pc" \
-      _PLATFORM="MBR" \
-      [[ "${_boot_method}" == "eltorito" ]] && \
-        _platform="pc-eltorito" \
-        _PLATFORM="ELTORITO"
-    echo "${_boot_loader}" \
-         "${_arch}" \
-         "${_code}" \
-         "${_CODE}" \
-         "${_platform}" \
-         "${_PLATFORM}" \
-         "${_boot_method}"
+      [[ "$(_get_boot_method "${_bootmode}")" == "eltorito" ]] && \
+        _platform="pc-eltorito"
+    echo "${_platform}"
 }
 
-_make_common_bootloader() {
-    local _bootmode_array=()
-    _bootmode_array+=(
-      $(_parse_bootmode "${bootmode}"))
-    _boot_loader="${_bootmode_array[0]}"
-    _arch="${_bootmode_array[1]}" # GRUB specific (i386, x86_64)
-    _code="${_bootmode_array[2]}" # (ia32, x64)
-    _CODE="${_bootmode_array[3]}" # (IA32, x64)
-    _platform="${_bootmode_array[4]}" # (efi, pc, pc-eltorito)
-    _PLATFORM="${_bootmode_array[5]}" # (EFI, MBR, ELTORITO)
-    _boot_method="${_bootmode_array[6]}" # (mbr, esp, eltorito)
-    [[ "${_boot_loader}" != "syslinux" ]] && \
-      _bl="$(_get "work" \
-                  "dir")/BOOT${_CODE}.${_PLATFORM}"
+_get_arch_code() {
+    local _bootmode="${1}" \
+          _array=() \
+          _code
+    _array=(
+      $(_split "-" \
+               "$(_get_platformcode "${_bootmode}")"))
+    _code="${_array[1]}"
+    [[ "$(_get_platform "${_bootmode}")" == "bios" ]] && \
+      _code="ia32" \
+    echo "${_code}"
+}
+
+_get_arch_CODE() {
+    local _bootmode="${1}" \
+          _CODE="x64"
+    [[ "$(_get_arch_code "${_bootmode}")" == "ia32" ]] || \
+    [[ "$(_get_platform "${_bootmode}")" == "bios" ]] && \
+       _CODE="IA32"
+    echo "${_CODE}"
+}
+
+_get_PLATFORM() {
+    local _PLATFORM="EFI"
+    [[ "$(_get_platform "${_bootmode}")" == "bios" ]] && \
+      _PLATFORM="MBR" \
+      [[ "$(_get_boot_method "${_bootmode}")" == "eltorito" ]] && \
+        _PLATFORM="ELTORITO"
+    echo "${_PLATFORM}"
+}
+
+_get_arch() {
+    local _bootmode="${1}" \
+          _arch="x86_64" \
+          _arch_code
+    [[ "$(_get_arch_code "${_bootmode}")" == "ia32" ]] && \
+      _arch="i386"
+    [[ "$(_get_platform "${_bootmode}")" == "bios" ]] && \
+      _arch="i386"
+    echo "${_arch}"
+}
+
+_get_standalone_name() {
+    echo "BOOT$(_get_CODE \
+                    "${_bootmode}").$(_get_PLATFORM \
+                                          "${_bootmode}")"
 }
 
 ### GRUB
@@ -3259,32 +3312,30 @@ _make_efi_sh() {
 #     the bootloader is targeted to (MBR, ELTORITO,
 #     EFI)
 # $4: source bootloader binary
-_install_bootloader() {
+_make_bl_standalone() {
     local _volume="${1}" \
-          _code="${2}"
-          _PLATFORM="${3}"
-          _bootloader="${4}"
-    [[ "${_code}" == "ia32" ]] && \
-      _CODE="IA32"
-    _install_dir_cmd "${_bootable}" \
+          _bootmode="${2}"
+    _install_dir_cmd "${_volume}" \
                      "/EFI"
                      "/EFI/BOOT"
     _install_cmd "${_volume}" \
-                 "${_bootloader}" \
-                 "/EFI/BOOT/BOOT${_CODE}.${_PLATFORM}"
+                 "$(_get_boot_loader \
+                        "${_bootmode}")" \
+                 "/EFI/BOOT/$(_get_standalone_name \
+                                  "${_bootmode}")"
 }
 
 # Common bootmode making routine
 _make_common_bootmode() {
-    [[ "${bootmode}" != *"syslinux"* ]] && \
-      _install_bootloader "${_volume}" \
-                          "${_code}" \
-                          "${_PLATFORM}" \
-                          "${_bl}"
-    [[  "${_platform}"  == "efi" ]] && \
+    local _bootmode="${1}"
+    [[ "$(_get_boot_loader "${_bootmode}")" != "syslinux"* ]] && \
+      _make_bl_standalone \
+          "${_volume}" \
+          "${_bootmode}"
+    [[  "$(_get_platform "${_bootmode}")"  == "efi" ]] && \
       _make_efi_sh "${_volume}" \
-                   "${_code}"
-    [[ "${_boot_loader}" != "grub" ]] && \
+                   "$(_get_code "${_bootmode}")"
+    [[ "$(_get_boot_loader "${_bootmode}")" != "grub" ]] && \
       _make_bootloader_config \
           "${_volume}" \ 
           "/$(_get_bl \
@@ -3292,9 +3343,11 @@ _make_common_bootmode() {
                                            "${_boot_loader}")" \
           $(_get_bl_cfg_files "profile" \
                               "${_boot_loader}")
-    [[ "${_boot_loader}" == "grub" ]] && \
-    [[ "${bootmode}" == *"esp" ]] && \
-      _run_once "_make_common_bootmode_${_boot_loader}_cfg_${_volume}"
+    [[ "$(_get_boot_loader "${_bootmode}")" == "grub" ]] && \
+        [[ "$(_get_boot_method "${_bootmode}")" == "esp" ]] && \
+      _run_once "_mkefi_boot" && \
+      _run_once "_make_common_bootmode_$(_get_boot_loader \
+                                             "${_bootmode}")_cfg_${_volume}"
 }
 
 ##################################
@@ -3346,15 +3399,22 @@ _make_bootmode() {
 
 # Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
-    local _volume="${1}"
-    _make_common_bootloader "${bootmode}"
-    _msg_info "Setting up '${_boot_loader}' for '${_PLATFORM}' booting from a disk..."
-    _make_grub "$(_get "work" \
-                       "dir")"
-    _make_common_bootmode
+    local _volume="${1}" \
+          _msg=()
+    _msg=(
+      "Setting up '$(_get_boot_loader "${bootmode}")' for"
+      "'$(_get_PLATFORM "${bootmode}")'"
+      "booting from a disk...")
+    _msg_info "${_msg[*]}"
+    "_make_$(_get_boot_loader "${bootmode}")" \
+        "$(_get "work" \
+                "dir")"
+        "${bootmode}"
+    _make_common_bootmode "${bootmode}"
     _make_kernel_on_isos
-    _msg=("Done! GRUB set up for BIOS booting"
-          "from a disk successfully.")
+    _msg=("Done! '$(_get_boot_loader "${bootmode}")'"
+          "set up for '$(_get_PLATFORM "${_bootmode}")'"
+          "booting from a disk successfully.")
     _msg_info "${_msg[*]}"
 }
 
@@ -3378,14 +3438,19 @@ _make_bootmode_bios.syslinux.mbr() {
     local _volume="${1}" \
           _cfg_files=() \
           _msg=() \
-    _make_common_bootloader "${bootmode}"
-      _cfg_files=($(_get_bl_cfg_files "profile" \
-                                      "${_boot_loader}"))
-    _msg=("Setting up SYSLINUX for"
-          "BIOS booting from a disk...")
+    _cfg_files=(
+      $(_get_bl_cfg_files \
+            "profile" \
+            "$(_get_boot_loader \
+                   "${bootmode}")"))
+    _msg=("Setting up '$(_get_boot_loader "${bootmode}")'"
+          "for '$(_get_PLATFORM "${bootmode}")'"
+          "booting from a disk...")
     _msg_info "${_msg[*]}"
-    _make_syslinux "${_volume}"
-    _make_common_bootmode
+    "_make_$(_get_boot_loader \
+                 "${bootmode}")" \
+        "${_volume}"
+    _make_common_bootmode "${bootmode}"
     _make_kernel_on_isos
     _make_memtest "${_volume}"
     _msg=("Done! SYSLINUX set up for BIOS"
@@ -3536,9 +3601,8 @@ _make_bootmode_uefi-ia32.grub.eltorito() {
       "Preparing an /EFI directory for"
       "the ISO 9660 file system...")
     _msg_info "${_msg[*]}"
-    # _make_common_bootmode
-    # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
-    # _msg_info "Done!"
+    _make_common_bootmode
+    _msg_info "Done!"
 }
 
 # Prepares GRUB (32 bit) El Torito for UEFI on the ISO image
@@ -3704,7 +3768,7 @@ _make_bootmode_uefi-x64.grub.eltorito() {
     #   "Preparing an /EFI directory for"
     #   "the ISO 9660 file system...")
     # _msg_info "${_msg[*]}"
-    # _make_common_bootmode
+    # _make_common_bootmode "${bootmode}"
     # _run_once "_make_common_bootmode_grub_cfg_${_bootable}"
     # _msg_info "Done!"
 }
