@@ -3285,10 +3285,12 @@ _make_memtest() {
 # Returns source path for the edk2 UEFI shell
 # $1: efi architecture code (ia32, x64)
 _get_efi_sh() {
-    local _code="${1}" \
+    local _bootmode="${1}" \
+          _root="pacstrap" \
           _efi_sh
     _efi_sh="/usr/share/edk2-shell/${_code}/Shell_Full.efi"
-    echo "${pacstrap_dir}${_efi_sh}"
+    echo "$(_get "${_root}" \
+                 "dir")${_efi_sh}"
 }
 
 # Install the edk2 UEFI shell on a volume
@@ -3297,11 +3299,17 @@ _get_efi_sh() {
 # $2: efi architecture code (ia32, x64)
 _make_efi_sh() {
     local _volume="${1}" \
-          _code="${2}"
-    [[ -e "$(_get_efi_sh "${_code}")" ]] && \
+          _bootmode="${2}"
+    [[ -e "$(_get_efi_sh \
+                 "$(_get_arch_code \
+                        "${_bootmode}")")" ]] && \
       _install_cmd "${_volume}" \
-                   "$(_get_efi_sh "${_code}")" \
-                   "/shell${_code}.efi"
+                   "$(_get_efi_sh \
+                          "$(_get_arch_code \
+                                 "${_bootmode}")")" \
+                   "/shell$(_get_arch_code \
+                                "${_bootmode}").$(_get_platform \
+                                                      "${_bootmode}")"
 }
 
 ## Common functions
@@ -3329,23 +3337,32 @@ _make_bl_standalone() {
 # Common bootmode making routine
 _make_common_bootmode() {
     local _bootmode="${1}"
-    [[ "$(_get_boot_loader "${_bootmode}")" != "syslinux"* ]] && \
+    [[ "$(_get_boot_loader \
+              "${_bootmode}")" != "syslinux"* ]] && \
       _make_bl_standalone \
           "${_volume}" \
           "${_bootmode}"
-    [[  "$(_get_platform "${_bootmode}")"  == "efi" ]] && \
+    [[  "$(_get_platform \
+               "${_bootmode}")"  == "efi" ]] && \
       _make_efi_sh "${_volume}" \
-                   "$(_get_code "${_bootmode}")"
-    [[ "$(_get_boot_loader "${_bootmode}")" != "grub" ]] && \
+                   "${_bootmode}"
+    [[ "$(_get_boot_loader \
+              "${_bootmode}")" != "grub" ]] && \
       _make_bootloader_config \
           "${_volume}" \ 
           "/$(_get_bl \
-                  "${_boot_loader}")/$(_get_bl_cfg \
-                                           "${_boot_loader}")" \
-          $(_get_bl_cfg_files "profile" \
-                              "${_boot_loader}")
-    [[ "$(_get_boot_loader "${_bootmode}")" == "grub" ]] && \
-        [[ "$(_get_boot_method "${_bootmode}")" == "esp" ]] && \
+                  "$(_get_boot_loader \
+                         "${_bootmode}")/$(_get_bl_cfg \
+                                               "$(_get_boot_loader \
+                                                      "${_bootmode}")")" \
+          $(_get_bl_cfg_files \
+                "profile" \
+                "$(_get_boot_loader \
+                       "${_bootmode}")")
+    [[ "$(_get_boot_loader \
+              "${_bootmode}")" == "grub" ]] && \
+    [[ "$(_get_boot_method \
+              "${_bootmode}")" == "esp" ]] && \
       _run_once "_mkefi_boot" && \
       _run_once "_make_common_bootmode_$(_get_boot_loader \
                                              "${_bootmode}")_cfg_${_volume}"
@@ -3367,20 +3384,22 @@ _sort_bootmodes() {
     echo "${_sorted[@]}"
 }
 
-# Set up boot loaders
-_make_bootmodes_iso() {
+_make_bootmodes() {
+    local _volume="${1}"
     local bootmode
     for bootmode in $(_sort_bootmodes "${bootmodes[@]}"); do
-        _run_once "_make_bootmode_${bootmode}_iso"
+        _run_once "_make_bootmode_${bootmode}_${_volume}"
     done
 }
 
 # Set up boot loaders
+_make_bootmodes_iso() {
+    "_make_bootmodes" "iso"
+}
+
+# Set up boot loaders
 _make_bootmodes_dongle_iso() {
-    local bootmode
-    for bootmode in $(_sort_bootmodes "${bootmodes[@]}"); do
-        _run_once "_make_bootmode_${bootmode}_dongle_iso"
-    done
+    "_make_bootmodes" "dongle_iso"
 }
 
 #### BIOS
@@ -4374,17 +4393,18 @@ _prepare_efi_boot_image() {
       run_once "_make_common_bootmode_grub_cfg" && \
       efi_boot_files+=(
         $(_get_bl_cfg_files "work" \
-                            "grub")
-        $(_get_bl_cfg_files "profile" \
                             "grub"))
     for _bootmode in "${_bootmodes[@]}"; do
-        _make_common_bootloader 
-        "_make_${_boot_loader}" "$(_get "work" \
-                                        "dir")"
-        _bl="$(_get "work" \
-                    "dir")/BOOT${_CODE}.${_PLATFORM}"
+        "_make_$(_get_boot_loader \
+                     "${_bootmode}")" \
+            "$(_get "work" \
+                    "dir")"
+            "$(_get_boot_loader \
+                   "${_bootmode}")"
         efi_boot_files+=(
-          "${_bl}")
+          "$(_get "work" \
+                  "dir")/$(_get_standalone_name \
+                               "${_bootmode}")")
     done
 }
 
