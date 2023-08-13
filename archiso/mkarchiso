@@ -2930,8 +2930,11 @@ _make_grub() {
 # $1: volume
 _make_syslinux() {
     local _volume="${1}"
-          _boot_loader="syslinux" \
+          _bootmode="${2}"
+          _boot_loader \
           _root="pacstrap"
+    _boot_loader="$(_get_boot_loader \
+                        "${_bootmode}")"
     _install_dir_cmd "${_volume}" \
                      "/${_boot_loader}"
     [[ -e "$(_get "profile" \
@@ -3346,7 +3349,8 @@ _make_common_bootmode() {
     local _volume="${1}"
     local _bootmode="${2}" \
           _boot_loader \
-          _platform
+          _platform \
+          _src
     _boot_loader="$(_get_boot_loader \
                         "${_bootmode}")"
     _platform="$(_get_platform \
@@ -3365,19 +3369,21 @@ _make_common_bootmode() {
     [[  "${_platform}"  == "efi" ]] && \
       _make_efi_sh "${_volume}" \
                    "${_bootmode}"
-    [[ "${_boot_loader}" != "grub" ]] && \
+    _src="profile"
+    [[ "${_boot_loader}" == "grub" ]] && \
       _make_bootloader_config \
           "${_volume}" \ 
           "/$(_get_bl \
                   "${_boot_loader}")/$(_get_bl_cfg \
                                                "${_boot_loader}")" \
           $(_get_bl_cfg_files \
-                "profile" \
+                "${_src}" \
                 "${_boot_loader}")
     [[ "${_boot_loader}" == "grub" ]] && \
     [[ "${_boot_method}" == "esp" ]] && \
       _run_once \
           "_mkefi_boot" && \
+      # TODO: delete this step
       _run_once \
           "_make_common_bootmode_${_boot_loader}_cfg_${_volume}"
 }
@@ -3433,25 +3439,18 @@ _make_bootmode() {
     _msg_info "${_msg[*]}"
     _make_common_bootmode "${_volume}" \
                           "${bootmode}"
-
-}
-
-# Prepares GRUB for booting from MBR (isohybrid)
-_make_bootmode_bios.grub.mbr() {
-    local _volume="${1}" \
-          _msg=()
-    _msg=(
-      "Setting up '$(_get_boot_loader "${bootmode}")' for"
-      "'$(_get_PLATFORM "${bootmode}")'"
-      "booting from a disk...")
-    _msg_info "${_msg[*]}"
-    _make_common_bootmode "${_volume}" \
-                          "${bootmode}"
     _make_kernel_on_isos
     _msg=("Done! '$(_get_boot_loader "${bootmode}")'"
           "set up for '$(_get_PLATFORM "${_bootmode}")'"
           "booting from a disk successfully.")
     _msg_info "${_msg[*]}"
+}
+
+# Prepares GRUB for booting from MBR (isohybrid)
+_make_bootmode_bios.grub.mbr() {
+    local _volume="${1}"
+    _make_common_bootmode "${_volume}" \
+                          "${bootmode}"
 }
 
 # Prepares GRUB for booting from MBR on the ISO
@@ -3483,9 +3482,9 @@ _make_bootmode_bios.syslinux.mbr() {
           "for '$(_get_PLATFORM "${bootmode}")'"
           "booting from a disk...")
     _msg_info "${_msg[*]}"
-    "_make_$(_get_boot_loader \
-                 "${bootmode}")" \
-        "${_volume}"
+    # "_make_$(_get_boot_loader \
+    #              "${bootmode}")" \
+    #     "${_volume}"
     _make_common_bootmode "${bootmode}"
     _make_kernel_on_isos
     _make_memtest "${_volume}"
