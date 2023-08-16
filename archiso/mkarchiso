@@ -1224,7 +1224,7 @@ _get_mkimg_opts() {
           _squashfs_opts=() \
           _squashfs+luks_opts=() \
           _swap_opts=() \
-          _swap+luks_opts=() \
+          _swap+luks_opts=()
     _erofs_opts=(
       "${_image_path}"
       "${_dir}"
