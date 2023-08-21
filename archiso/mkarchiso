@@ -2892,7 +2892,7 @@ _make_grub() {
                        "dir")/grub.cfg" \
           _embed_cfg="$(_get "work" \
                              "dir")/grub-embed.cfg" \
-          _grub_options=()
+          _grub_options=() \
           _modules
     _modules="$(_get_grub_modules \
                     "$(_get_platform \
@@ -2907,14 +2907,15 @@ _make_grub() {
       --sbat=/usr/share/grub/sbat.csv
       --disable-shim-lock
       --compress=xz)
-    [[ "$(_get_platform "${_bootmode}")" == "pc"* ]] && \
+    [[ "$(_get_platform \
+              "${_bootmode}")" == "pc"* ]] && \
       _embed_cfg="${_cfg}" \
       _grub_options+=(
         --install-modules="${_modules}"
         --fonts="")
     [ -d "${_out}" ] && \
-      _out="${_out}/BOOT$(_get_arch_CODE \
-                              "${_bootmode}").$(_get_PLATFORM "${_bootmode}")"
+      _out="${_out}/$(_get_standalone_name \
+                                  "${_bootmode}")"
     _run_once "_make_common_bootmode_grub_cfg"
     _grub_options+=(
       -o "${_out}")
@@ -5705,8 +5706,8 @@ _set_overrides() {
                   "dir" \
                   "${app_name}"
     if [[ -v override_quiet ]]; then
-        quiet="$override_quiet"
-    elif [[ -z "$quiet" ]]; then
+        quiet="${override_quiet}"
+    elif [[ -z "${quiet}" ]]; then
         quiet="y"
     fi
     [[ ! -v override_gpg_key ]] || \
@@ -5720,8 +5721,8 @@ _set_overrides() {
     [[ ! -v override_cert_list ]] || \
       cert_list+=("${override_cert_list[@]}")
     if [[ -v override_quiet ]]; then
-        quiet="$override_quiet"
-    elif [[ -z "$quiet" ]]; then
+        quiet="${override_quiet}"
+    elif [[ -z "${quiet}" ]]; then
         quiet="y"
     fi
     # Set variables that do not have overrides
