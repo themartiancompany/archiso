@@ -1319,6 +1319,7 @@ _get_mkimg_opts() {
       "${_size}"
       "${_epoch}"
       "${_label}")
+    # shellcheck disable=SC1036
     _erofs+luks_opts=(
       "${_name}"
       "${_dir}"
