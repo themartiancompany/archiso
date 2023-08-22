@@ -1320,6 +1320,8 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_label}")
     # shellcheck disable=SC1036
+    # shellcheck disable=SC1056
+    # shellcheck disable=SC1072
     _erofs+luks_opts=(
       "${_name}"
       "${_dir}"
@@ -2692,7 +2694,7 @@ _cleanup_pacstrap_dir() {
 
 # Returns UUID for the GRUB plain mount
 _get_archiso_uuid() {
-    #shellcheck disable=SC2005
+    # shellcheck disable=SC2005
     echo "$(_epoch_to_uuid "$(_get_epoch airootfs)")"
 }
 
