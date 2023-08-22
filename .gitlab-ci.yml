@@ -42,7 +42,6 @@ check:
       mtools
       openssl
       python-docutils
-      qemu-headless
       squashfs-tools
       zsync
 
