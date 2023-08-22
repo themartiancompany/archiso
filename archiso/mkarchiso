@@ -346,6 +346,41 @@ _get_size() {
     echo $(du -s "${_dir}" | \
              cut -f 1)
 }
+
+## EROFS
+
+# Creates an EROFS image given a directory.
+# $1: resulting image
+# $2: input directory
+# $3: UNIX time (to generate a date-based uuid)
+_run_mkbtrfs() {
+    local _image_path="${1}"
+          _size="${2}" \
+          _dir="${3}" \
+          _epoch="${4}" \
+          _label="${5}" \
+          fsuuid
+    fsuuid="$(_get_epoch_fsuuid "${_epoch}")"
+    [[ "${_size}" == "" ]] && \
+      echo "autosize"
+    [[ ! "${quiet}" == "y" ]] || \
+      mkfs_btrfs_options+=('--quiet')
+    _msg_info "Creating BTRFS image"
+    _msg_info "Directory: ${_dir}"
+    _msg_info "Size: ${_size}"
+    _msg_info "Image path: ${_image_path}"
+    _msg_info "UUID: ${fsuuid}"
+    _msg_info "this may take a while..."
+    mkfs_btrfs_options+=(
+      '-L' "${_label}"
+      '-U' "${fsuuid}"
+      "${_mkfs_options[@]}")
+    mkfs.erofs "${mkfs_erofs_options[@]}" -- \
+               "${_image_path}" \
+               "${_dir}"
+    _msg_info "Done!"
+}
+
 ## EROFS
 
 # Creates an EROFS image given a directory.
@@ -361,9 +396,10 @@ _run_mkerofs() {
     [[ ! "${quiet}" == "y" ]] || \
       mkfs_erofs_options+=('--quiet')
     _msg_info "Creating EROFS image"
-    _msg_info "Directory: ${_dir}"
-    _msg_info "Image path: ${_image_path}"
-    _msg_info "UUID: ${fsuuid}"
+    _msg_info "        Directory: ${_dir}"
+    _msg_info "       Image path: ${_image_path}"
+    _msg_info "            Label: ${_label}"
+    _msg_info "             UUID: ${fsuuid}"
     _msg_info "this may take a while..."
     mkfs_erofs_options+=(
       '-U' "${fsuuid}"
@@ -793,6 +829,39 @@ _get_internal_size() {
 
 ### Base types
 
+## BTRFS (file system with many features)
+
+# Creates a btrfs file system image
+# $1: directory to use to generate the image
+# $2: image path
+# $3: image size
+# $4: UNIX time (for a date-based uuid)
+# $5: partition label
+_mkimg_btrfs() {
+    local _dir="${1}"
+    local _image_path="${2}"
+    local _size="${3}"
+    local _epoch="${4}"
+    local _label="${5}"
+    local _writable="true"
+    if [[ "${_size}" == "" ]]; then
+	_msg_info "Pre-running mkerofs to determine LUKS partition size"
+        _run_mkbtrfs "${_tmp_img}" \
+                     "${_dir}" \
+                     "${_epoch}"
+        _tmp_size=$(_get_size "${_tmp_img}")
+        _size=$(( 69420 + _tmp_size * 12 / 10))
+    fi
+    _run_mkbtrfs "${_dir}" \
+                 "$(_get_internal_size "${_size}")" \
+                 "${_epoch}" \
+                 "${_label}" \
+                 "${_writable}"
+    sync
+    _msg_info "Done!"
+}
+
+
 ## EROFS (compressed read-only image type)
 
 # Create an EROFS image containing the root file system and saves it on the ISO 9660 file system.
@@ -906,18 +975,20 @@ _mkimg_swap() {
 # $7: partition label
 # $8: if true, the dm-verity layer will be disabled so that the image can be opened from GRUB
 _mkimg_erofs+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _grub="${8}"
-    local _writable="false"
-    local _tmp_img="${work_dir}/tmp.erofs" _tmp_size
+    local _name="${1}" \
+          _dir="${2}" \
+          _image_path="${3}" \
+          _size="${4}" \
+          _encryption_key="${5}" \
+          _epoch="${6}" \
+          _label="${7}" \
+          _grub="${8}" \
+          _writable="false" \
+          _tmp_img="$(_get "work" \
+                           "dir")/tmp.erofs" \
+          _tmp_size
     if [[ "${_size}" == "" ]]; then
-	_msg_info "Running mkerofs in advance to determine LUKS partition size"
+	    _msg_info "Pre-running mkerofs to determine LUKS partition size"
         _run_mkerofs "${_tmp_img}" \
                      "${_dir}" \
                      "${_epoch}"
@@ -965,15 +1036,15 @@ _mkimg_erofs+luks() {
 # $7: partion label
 # $8: if true, the dm-verity will be disabled to let GRUB open it
 _mkimg_ext4+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _grub="${8}"
-    local _writable="true"
+    local _name="${1}" \
+          _dir="${2}" \
+          _image_path="${3}" \
+          _size="${4}" \
+          _encryption_key="${5}" \
+          _epoch="${6}" \
+          _label="${7}" \
+          _grub="${8}" \
+          _writable="true"
     _mkluks_common "${_name}" \
                    "${_encryption_key}" \
                    "${_label}"
@@ -3904,6 +3975,12 @@ _check_missing_cmd() {
 
 ## File systems type support
 
+# BTRFS
+_validate_requirements_image_type_btrfs() {
+    _check_missing_cmd "mkfs.btrfs" "btrfs-progs"
+}
+
+
 # EROFS
 _validate_requirements_image_type_erofs() {
     _check_missing_cmd "mkfs.erofs" "erofs-utils"
@@ -3938,6 +4015,11 @@ _validate_requirements_image_type_squashfs() {
 ### Airootfs
 
 ## Base image types
+
+# BTRFS airootfs
+_validate_requirements_airootfs_image_type_btrfs() {
+    _validate_requirements_image_type_btrfs
+}
 
 # EROFS airootfs
 _validate_requirements_airootfs_image_type_erofs() {
