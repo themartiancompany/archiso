@@ -215,6 +215,7 @@ setup_repo() {
 	_conflicts=() \
 	_conflicts_line \
 	_gen_pacman_conf \
+        _gitlab="https://gitlab.archlinux.org" \
 	_home \
         _packages=() \
 	_packages_extra \
@@ -227,7 +228,9 @@ setup_repo() {
 	_setup_user \
 	_src \
 	_src_profile \
-        _user="user"
+        _user="user" \
+        _ur \
+        _ur_ns="tallero"
   _build_repo_options=(
     'src'
     'packages.extra'
@@ -240,11 +243,13 @@ setup_repo() {
   _pacman_opts+=(--config "${_pacman_conf}")
   _src="$(pwd)"
   _ci_bin="${_src}/.gitlab/ci"
+  _ur="${_ci_bin}/ur"
   _src_profile="${_src}/configs/${profile}"
   _packages_extra="${_src_profile}/packages.extra"
-  _build_repo="${_ci_bin}/build_repo.sh"
-  _setup_user="${_ci_bin}/setup_user.sh"
-  _gen_pacman_conf="${_ci_bin}/set_custom_repo.sh"
+  git clone "${_gitlab}/${_ur_ns}/ur" "${_ur}"
+  _build_repo="${_ur}/ur/build_repo.sh"
+  _setup_user="${_ur}/ur/setup_user.sh"
+  _gen_pacman_conf="${_ur}/ur/set_custom_repo.sh"
   [ -e "${_build_repo}" ] || \
     _build_repo="mkarchisorepo"
   [ -e "${_gen_pacman_conf}" ] || \
