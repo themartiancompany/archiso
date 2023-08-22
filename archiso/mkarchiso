@@ -1248,15 +1248,16 @@ _mkimg_ext4+raid1+luks() {
 # $9: if true, the dm-verity layer will be disabled 
 #     so that the image can be opened from GRUB
 _mkimg_ext4+squashfs+luks() {
-    local _name="${1}"
-    local _dir="${2}"
-    local _image_path="${3}"
-    local _size="${4}"
-    local _encryption_key="${5}"
-    local _epoch="${6}"
-    local _label="${7}"
-    local _writable="${8}"
-    local _grub="${9}"
+    local \
+      _name="${1}" \
+      _dir="${2}" \
+      _image_path="${3}" \
+      _size="${4}" \
+      _encryption_key="${5}" \
+      _epoch="${6}" \
+      _label="${7}" \
+      _writable="${8}" \
+      _grub="${9}"
     _mkluks_common "${_name}" \
                    "${_encryption_key}" \
                    "${_label}"
