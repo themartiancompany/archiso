@@ -1297,6 +1297,8 @@ _get_mkimg_opts() {
     #       _squashfs+luks_opts=() \
     #       _swap_opts=() \
     #       _swap+luks_opts=()
+    fs_type="$(echo "${fs_type}" | \
+                 sed "s/+/_/g")"
     _erofs_opts=(
       "${_image_path}"
       "${_dir}"
@@ -1318,11 +1320,12 @@ _get_mkimg_opts() {
       "${_image_path}"
       "${_size}"
       "${_epoch}"
-      "${_label}")
+      "${_label}"
+    )
     # shellcheck disable=SC1036
     # shellcheck disable=SC1056
     # shellcheck disable=SC1072
-    _erofs+luks_opts=(
+    _erofs_luks_opts=(
       "${_name}"
       "${_dir}"
       "${_image_path}"
@@ -1330,8 +1333,9 @@ _get_mkimg_opts() {
       "${_encryption_key}"
       "${_epoch}"
       "${_label}"
-      "${_grub}")
-    _ext4+luks_opts=(
+      "${_grub}"
+    )
+    _ext4_luks_opts=(
       "${_name}"
       "${_dir}"
       "${_image_path}"
@@ -1340,7 +1344,7 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_label}"
       "${_grub}")
-    _ext4+squashfs_opts=(
+    _ext4_squashfs_opts=(
       "${_name}"
       "${_dir}"
       "${_image_path}"
@@ -1348,7 +1352,7 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_label}"
       "${_writable}")
-    _squashfs+luks_opts=(
+    _squashfs_luks_opts=(
       "${_name}"
       "${_dir}"
       "${_image_path}"
@@ -1358,7 +1362,7 @@ _get_mkimg_opts() {
       "${_label}"
       "${_writable}"
       "${_grub}")
-    _swap+luks=(
+    _swap_luks=(
       "${_name}"
       "${_image_path}"
       "${_size}"
@@ -1366,7 +1370,7 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_label}"
       "${_grub}")
-    _ext4+squashfs+luks_opts=(
+    _ext4_squashfs_luks_opts=(
       "${_name}"
       "${_dir}"
       "${_image_path}"
@@ -1375,7 +1379,8 @@ _get_mkimg_opts() {
       "${_epoch}"
       "${_writable}"
       "${_grub}")
-    echo "$(_get "${_fs_image}" \
+    echo "$(_get "$(echo "${fs_type}" | \
+                      sed "s/+/_/g")" \
                  "opts")"
 }
 
