@@ -1285,17 +1285,17 @@ _mkimg_ext4+squashfs+luks() {
 # Get opts for a mkimg<fs_type> function
 # $1: file system composed type (ie. ext4+squashfs+luks)
 _get_mkimg_opts() {
-    local fs_type="${1}" \
-          _erofs_opts=() \
-          _erofs+luks_opts=() \
-          _ext4_opts=() \
-          _ext4+luks_opts=() \
-          _ext4+squashfs+luks_opts=() \
-          _fat_opts=() \
-          _squashfs_opts=() \
-          _squashfs+luks_opts=() \
-          _swap_opts=() \
-          _swap+luks_opts=()
+    local fs_type="${1}"
+    #       _erofs_opts=() \
+    #       _erofs+luks_opts=() \
+    #       _ext4_opts=() \
+    #       _ext4+luks_opts=() \
+    #       _ext4+squashfs+luks_opts=() \
+    #       _fat_opts=() \
+    #       _squashfs_opts=() \
+    #       _squashfs+luks_opts=() \
+    #       _swap_opts=() \
+    #       _swap+luks_opts=()
     _erofs_opts=(
       "${_image_path}"
       "${_dir}"
