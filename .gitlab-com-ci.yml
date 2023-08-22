@@ -3,6 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 default:
-  image: archlinux
+  image: archlinux:latest
 
 include: ".gitlab-ci.yml"
