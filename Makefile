@@ -22,12 +22,12 @@ shellcheck:
 install: install-scripts install-profiles install-doc
 
 install-scripts:
-        install -vDm 755 archiso/mkarchiso -t "$(BIN_DIR)/"
-        install -vDm 755 scripts/run_archiso.sh "$(BIN_DIR)/run_archiso"
-        install -vDm 755 .gitlab/ci/gen_key.sh "$(BIN_DIR)/mkarchisogenkey"
-        install -vDm 755 .gitlab/ci/build_repo.sh "$(BIN_DIR)/mkarchisorepo"
-        install -vDm 755 .gitlab/ci/set_custom_repo.sh "$(BIN_DIR)/mkarchisosetrepo"
-        install -vDm 755 .gitlab/ci/setup_user.sh "$(BIN_DIR)/mkarchisorepobuilder"
+	install -vDm 755 archiso/mkarchiso -t "$(BIN_DIR)/"
+	install -vDm 755 scripts/run_archiso.sh "$(BIN_DIR)/run_archiso"
+	install -vDm 755 .gitlab/ci/gen_key.sh "$(BIN_DIR)/mkarchisogenkey"
+	install -vDm 755 .gitlab/ci/build_repo.sh "$(BIN_DIR)/mkarchisorepo"
+	install -vDm 755 .gitlab/ci/set_custom_repo.sh "$(BIN_DIR)/mkarchisosetrepo"
+	install -vDm 755 .gitlab/ci/setup_user.sh "$(BIN_DIR)/mkarchisorepobuilder"
 
 install-profiles:
 	install -d -m 755 $(PROFILE_DIR)
