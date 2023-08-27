@@ -5748,6 +5748,12 @@ _set_override() {
     fi
 }
 
+# Re-assign an object variable pointing to
+# a path if an override variable is defined,
+# otherwise it defaults to an input path
+# $1: object
+# $2: variable
+# $3: value (a path) 
 _override_path() {
     local _obj="${1}" \
           _var="${2}" \
@@ -5766,6 +5772,11 @@ _override_path() {
                                 "${_var}")")"
 }
 
+# Override a volume directory if an override
+# variable is defined; otherwise it defaults
+# to a directory named as the volume in the
+# current directory.
+# $1: volume
 _override_volume() {
     local _volume="${1}"
     _override_path "${_volume}" \
