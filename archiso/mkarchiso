@@ -5744,7 +5744,7 @@ _set_override() {
                        "${_var}")" ]]; then
         _set "${_obj}" \
              "${_var}" \
-             "${_value}"
+             "${_default}"
     fi
 }
 
@@ -6131,14 +6131,12 @@ done
 
 shift $((OPTIND - 1))
 
-if (( $# < 1 )); then
-    _msg_error "No profile specified" 0
-    _usage 1
-fi
+(( $# < 1 )) && \
+  _msg_error "No profile specified" 0 && \
+  _usage 1
 
-if (( EUID != 0 )); then
-    _msg_error "${app_name} must be run as root." 1
-fi
+(( EUID != 0 )) && \
+  _msg_error "${app_name} must be run as root." 1
 
 # get the absolute path representation of the first non-option argument
 _set "profile" \
