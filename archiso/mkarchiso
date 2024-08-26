@@ -1939,28 +1939,47 @@ _gen_key() {
 # $1: a value in fs_images
 # $2: auto-generated output key path
 _resolve_fs_encryption_key(){
-    local _volume="${1}" \
-          _auto_key="${2}"
-    local _encryption_key \
-          _msg=() \
-          _out_dir
-    _encryption_key="$(_get "${_volume}" \
-                            "encryption_key")"
-    _out_dir="$(dirname "${_auto_key}")"
-    [ ! -f "${_encryption_key}" ] && \
+    local \
+      _volume="${1}" \
+      _auto_key="${2}" \
+      _encryption_key \
+      _msg=() \
+      _out_dir
+    _encryption_key="$( \
+      _get \
+        "${_volume}" \
+        "encryption_key")"
+    _out_dir="$( \
+      dirname \
+        "${_auto_key}")"
+    if [ ! -f "${_encryption_key}" ]; then
       if [ "${_encryption_key}" = 'auto' ]; then
-          _set "${_volume}" \
-               "encryption_key" \
-               "${_auto_key}"
-          [ ! -d "${_out_dir}" ] && \
-            install -d -m 700 "${_out_dir}"
-          _gen_key "${_auto_key}" \
-                   "binary"
+        _key_gen_opts+=(
+          -t
+          binary
+        )
+        _set \
+          "${_volume}" \
+          "encryption_key" \
+          "${_auto_key}"
+        if [ ! -d "${_out_dir}" ]; then
+          install \
+            -dm700 \
+            "${_out_dir}"
+        fi
+        key-gen \
+          "${_key_gen_opts[@]}" \
+          "${_auto_key}"
       elif [ "${_encryption_key}" != 'auto' ]; then
-          _msg=("File '${_encryption_key}'"
-                "does not exist.")
-          _msg_error "${_msg[*]}" 0
+        _msg=(
+          "File '${_encryption_key}'"
+          "does not exist."
+        )
+        _msg_error \
+          "${_msg[*]}" \
+          0
       fi
+    fi
 }
 
 # Returns encryption key destination volume and
@@ -2005,33 +2024,55 @@ _get_secondary_key_opts() {
 # <image>_encryption_key profiledef.sh variable
 # $1: a value in volumes
 _resolve_secondary_key() {
-    local _volume="${1}"
-    local _auto_key="${work_dir}/${_volume}.key" \
-          _dest \
-          _msg \
-          _key_opts=() \
-          _mode
-    _key_opts=(
-      $(_get_secondary_key_opts "${_volume}"))
+    local \
+      _volume="${1}" \
+      _auto_key \
+      _dest \
+      _msg \
+      _key_opts=() \
+      _key_gen_opts=() \
+      _type
+    _auto_key="${work_dir}/${_volume}.key"
+    if [[ "${quiet}" != "y" ]]; then
+      _key_gen_opts+=(
+        -v
+      )
+    fi
+    _key_opts=( $( \
+      _get_secondary_key_opts \
+        "${_volume}")
+    )
     _dest="${_key_opts[0]}"
-    _mode="${_key_opts[1]}"
+    _type="${_key_opts[1]}"
     [[ "${_dest}" == "seedphrase" ]] && \
-      _msg=("Rootfs encryption and dongle buildmode disabled."
-            "You will be prompted to insert a password for"
-            "the ${_volume} partition.") && \
-      _msg_warning "${_msg[*]}" && \
-      _set "${_volume}" \
-           "encryption_key" \
-           "" && \
+      _msg=(
+        "Rootfs encryption and dongle buildmode disabled."
+        "You will be prompted to insert a password for"
+        "the ${_volume} partition."
+      ) && \
+      _msg_warning \
+        "${_msg[*]}" && \
+      _set \
+        "${_volume}" \
+        "encryption_key" \
+        "" && \
       return
-    _set "${_volume}" \
-         "encryption_key" \
-         "${_auto_key}"
-    _gen_key "$(_get "${_volume}" \
-                     "encryption_key")" \
-             "${_mode}"
-    _install_key "${_dest}" \
-                 "${_auto_key}"
+    _set \
+      "${_volume}" \
+      "encryption_key" \
+      "${_auto_key}"
+    _key_gen_opts+=(
+      -t
+        "${_type}"
+    )
+    key-gen \
+      "${_key_gen_opts[@]}" \
+      "$(_get \
+           "${_volume}" \
+           "encryption_key")" 
+    _install_key \
+      "${_dest}" \
+      "${_auto_key}"
 }
 
 # Adds archiso hooks to profile's mkinitcpio.conf
