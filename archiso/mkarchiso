@@ -2,231 +2,174 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-set -e -u
-shopt -s extglob
-
-# Control the environment
-umask 0022
-export LC_ALL="C.UTF-8"
-# LC_ALL=C.UTF-8, unlike LC_ALL=C, does not override LANGUAGE.
-# See https://sourceware.org/bugzilla/show_bug.cgi?id=16621 \
-# and https://savannah.gnu.org/bugs/?62815
-[[ -v LANGUAGE ]] && \
-  unset LANGUAGE
-[[ -v SOURCE_DATE_EPOCH ]] || \
-  printf -v SOURCE_DATE_EPOCH '%(%s)T' -1
-export SOURCE_DATE_EPOCH
-
-# Set application name from the script's file name
-app_name="${0##*/}"
-
-# Show an INFO message
-# $1: message string
-_msg_info() {
-    local _msg="${1}"
-    [[ "${quiet}" == "y" ]] || \
-      printf '[%s] INFO: %s\n' "${app_name}" "${_msg}"
-}
-
-# Show a WARNING message
-# $1: message string
-_msg_warning() {
-    local _msg="${1}"
-    printf '[%s] WARNING: %s\n' "${app_name}" "${_msg}" >&2
-}
-
-# Show an ERROR message then exit with status
-# $1: message string
-# $2: exit code number (with 0 does not exit)
-_msg_error() {
-    local _msg="${1}"
-    local _error=${2}
-    printf '[%s] ERROR: %s\n' "${app_name}" "${_msg}" >&2
-    if (( _error > 0 )); then
-        exit "${_error}"
-    fi
-}
-
-# Returns an attribute value for a 
-# given object
-# $1: an object
-# $2: an object attribute
-_get() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _msg \
-          _ref \
-          _type
-    _ref="${_obj}_${_var}[@]"
-    _type="$(declare -p "${_obj}_${_var}}")"
-    [[ "${_type}" == *"declare: "*": not found" ]] && \
-      _msg=(
-        "Attribute '${_var}' is not defined"
-        "for object '${_obj}'") && \
-      _msg_error "${_msg[*]}" 1
-    [[ "${_type}" == "declare -A "* ]] && \
-      echo "${_image[${_var}]}" && \
-      return
-    printf "%s\n" "${!_ref}"
-}
-
-# Sets object string attributes
-# $1: object
-# $2: an object string attribute
-# $3: a value
-_set() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _value="${3}" \
-          _type
-    printf -v "${_obj}_${_var}" \
-              "${_value}"
-}
+_bin="$( \
+  dirname \
+    "$( \
+      command \
+        -v \
+	  "env")")"
+_lib="${_bin}/../lib"
+source \
+  "${_lib}/libcrash-bash/crash-bash"
 
 # Sets global variables
 _global_variables() {
-    local _var \
-          _volume \
-          _volumes=() \
-          _volumes_string_vars=() \
-          _volumes_array_vars=()
-    pkg_list=()
-    bootstrap_pkg_list=()
-    quiet=""
-    work_dir=""
-    out_dir=""
-    gpg_key=""
-    gpg_sender=""
-    gpg_home=""
-    iso_name=""
-    iso_publisher=""
-    iso_application=""
-    iso_version=""
-    install_dir=""
-    arch=""
-    pacman_conf=""
-    packages=""
-    bootstrap_packages=""
-    pacstrap_dir=""
-    buildmodes=()
-    bootmodes=()
-    xorriso_options=()
-    xorrisofs_options=()
-    dongle_xorriso_options=()
-    dongle_xorrisofs_options=()
-    cert_list=()
-    sign_netboot_artifacts=""
-    declare -g \
-            -A \
-            file_permissions=()
-    declare -g \
-            -A \
-            images=()
-    _boot_loader_vars=(
-      'profile_path'
-      'cfg_path'
-      'install_path'
-    )
-    _volumes=(
-      'iso'
-      'airootfs'
-      'persistent'
-      'keys'
-      'swap'
-      'dongle_iso'
-      'dongle_boot'
-      'dongle_persistent'
-      'dongle_swap'
-      'recovery'
-      'efi_boot')
-    _volumes_string_vars=(
-      'dir'
-      'encryption_key'
-      'epoch'
-      'image_type'
-      'image_tool_options'
-      'img'
-      'label'
-      'size' # All sizes are in kib
-             # except when specified
-      'uuid')
-    _volumes_array_vars=(
-      'files'
-      'image_tool_options')
-    for _var in "${_boot_loader_vars[@]}"; do
-        _set "boot_loader" \
-             "${_var}" \
-             ""
+  local \
+    _var \
+    _volume \
+    _volumes=() \
+    _volumes_string_vars=() \
+    _volumes_array_vars=()
+  pkg_list=()
+  bootstrap_pkg_list=()
+  quiet=""
+  work_dir=""
+  out_dir=""
+  gpg_key=""
+  gpg_sender=""
+  gpg_home=""
+  iso_name=""
+  iso_publisher=""
+  iso_application=""
+  iso_version=""
+  install_dir=""
+  arch=""
+  pacman_conf=""
+  packages=""
+  bootstrap_packages=""
+  pacstrap_dir=""
+  buildmodes=()
+  bootmodes=()
+  xorriso_options=()
+  xorrisofs_options=()
+  dongle_xorriso_options=()
+  dongle_xorrisofs_options=()
+  cert_list=()
+  sign_netboot_artifacts=""
+  declare \
+    -g \
+    -A \
+    file_permissions=()
+  declare \
+    -g \
+    -A \
+    images=()
+  _boot_loader_vars=(
+    'profile_path'
+    'cfg_path'
+    'install_path'
+  )
+  _volumes=(
+    'iso'
+    'airootfs'
+    'persistent'
+    'keys'
+    'swap'
+    'dongle_iso'
+    'dongle_boot'
+    'dongle_persistent'
+    'dongle_swap'
+    'recovery'
+    'efi_boot'
+  )
+  _volumes_string_vars=(
+    'dir'
+    'encryption_key'
+    'epoch'
+    'image_type'
+    'image_tool_options'
+    'img'
+    'label'
+    'size' # All sizes are in kib
+           # except when specified
+    'uuid'
+  )
+  _volumes_array_vars=(
+    'files'
+    'image_tool_options'
+  )
+  for _var \
+      in "${_boot_loader_vars[@]}"; do
+    _set \
+      "boot_loader" \
+      "${_var}" \
+      ""
+  done
+  for _volume \
+      in "${_volumes[@]}"; do
+    for _var in "${_volumes_string_vars[@]}"; do
+      _set \
+        "${_volume}" \
+        "${_var}" \
+        ""
     done
-    for _volume in "${_volumes[@]}"; do
-        for _var in "${_volumes_string_vars[@]}"; do
-            _set "${_volume}" \
-                 "${_var}" \
-                 ""
-        done
-        for _var in "${_volumes_array_vars[@]}"; do
-            declare -g \
-                    -a \
-                    "${_volume}_${_var}"
-        done
+    for _var \
+      in "${_volumes_array_vars[@]}"; do
+      declare \
+        -g \
+        -a \
+        "${_volume}_${_var}"
     done
+  done
 }
 
 # Sets constants
 _constants() {
-    # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
-    # https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
-    readonly \
-      codes=(
-        'intel-uc.img'
-        'intel-ucode.img'
-        'amd-uc.img'
-        'amd-ucode.img'
-        'early_ucode.cpio'
-        'microcode.cpio') \
-      epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96" \
-      luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC" \
-      linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4" \
-      swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f" \
-      _PI=$((3 * 1415)) \
-      _E=$((2 * 71828)) \
-      _EL=$((42 * 69)) \
-      _RO=$((16 * 1803)) \
-      airootfs_const=0 \
-      dongle_const="${_EL}" \
-      boot_const="${_RO}" \
-      persistent_const="${_PI}" \
-      swap_const="${_E}" \
-      dongle_boot_const=$((
-        dongle_const + \
-        boot_const)) \
-      dongle_persistent_const=$((
-        dongle_const + \
-        persistent_const)) \
-      dongle_swap_const=$((
-        dongle_const + \
-        swap_const)) \
-      keys_const=$((
-        dongle_const + \
-        boot_const + \
-        persistent_const)) \
-      recovery_const=$((
-        dongle_const + \
-        boot_const + \
-        keys_const))
-}
-
-# Sets global symbols
-_read_symbols() {
-  _global_variables
-  _constants
+  # adapted from GRUB_EARLY_INITRD_LINUX_STOCK in 
+  # https://git.savannah.gnu.org/cgit/grub.git/tree/util/grub-mkconfig.in
+  readonly \
+    codes=(
+      'intel-uc.img'
+      'intel-ucode.img'
+      'amd-uc.img'
+      'amd-ucode.img'
+      'early_ucode.cpio'
+      'microcode.cpio') \
+    epoch_namespace="93a870ff-8565-4cf3-a67b-f47299271a96" \
+    luks_guid="CA7D7CCB-63ED-4C53-861C-1742536059CC" \
+    linux_guid="0FC63DAF-8483-4772-8E79-3D69D8477DE4" \
+    swap_guid="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f" \
+    _PI=$((3 * 1415)) \
+    _E=$((2 * 71828)) \
+    _EL=$((42 * 69)) \
+    _RO=$((16 * 1803)) \
+    airootfs_const=0 \
+    dongle_const="${_EL}" \
+    boot_const="${_RO}" \
+    persistent_const="${_PI}" \
+    swap_const="${_E}" \
+    dongle_boot_const=$((
+      dongle_const + \
+      boot_const)) \
+    dongle_persistent_const=$((
+      dongle_const + \
+      persistent_const)) \
+    dongle_swap_const=$((
+      dongle_const + \
+      swap_const)) \
+    keys_const=$((
+      dongle_const + \
+      boot_const + \
+      persistent_const)) \
+    recovery_const=$((
+      dongle_const + \
+      boot_const + \
+      keys_const))
 }
 
 # Show help usage, with an exit status.
 # $1: exit status number.
 _usage() {
-    IFS='' read -r -d '' usagetext <<ENDUSAGETEXT || true
-usage: ${app_name} [options] <profile_dir>
+  IFS='' \
+  read \
+    -r \
+    -d \
+      '' \
+    usagetext <<ENDUSAGETEXT || true
+usage:
+  ${app_name}
+    [options]
+    <profile_dir>
   options:
      -A <application> Set an application name for the ISO
                       Default: '${iso_application}'
@@ -6144,46 +6087,58 @@ _build() {
     done
 }
 
-_read_symbols
-
-while getopts 'c:p:C:L:P:A:D:w:m:o:g:G:H:vh?' arg; do
-    case "${arg}" in
-        p) read -r -a override_pkg_list <<< "${OPTARG}" ;;
-        C) override_pacman_conf="${OPTARG}" ;;
-        L) override_iso_label="${OPTARG}" ;;
-        P) override_iso_publisher="${OPTARG}" ;;
-        A) override_iso_application="${OPTARG}" ;;
-        D) override_install_dir="${OPTARG}" ;;
-        c) read -r -a override_cert_list <<< "${OPTARG}" ;;
-        w) override_work_dir="${OPTARG}" ;;
-        m) read -r -a override_buildmodes <<< "${OPTARG}" ;;
-        o) override_out_dir="${OPTARG}" ;;
-        g) override_gpg_key="${OPTARG}" ;;
-        G) override_gpg_sender="${OPTARG}" ;;
-        H) override_gpg_home="${OPTARG}" ;;
-        v) override_quiet="n" ;;
-        h|?) _usage 0 ;;
-        *)
-            _msg_error "Invalid argument '${arg}'" 0
-            _usage 1
-            ;;
-    esac
+_globals
+_global_variables
+_constants
+_requirements
+_config_user_init \
+  "$(_get \
+       "app" \
+       "name")"
+while \
+  getopts \
+    'c:p:C:L:P:A:D:w:m:o:g:G:H:vh?' arg; do
+  case "${arg}" in
+      p) read -r -a override_pkg_list <<< "${OPTARG}" ;;
+      C) override_pacman_conf="${OPTARG}" ;;
+      L) override_iso_label="${OPTARG}" ;;
+      P) override_iso_publisher="${OPTARG}" ;;
+      A) override_iso_application="${OPTARG}" ;;
+      D) override_install_dir="${OPTARG}" ;;
+      c) read -r -a override_cert_list <<< "${OPTARG}" ;;
+      w) override_work_dir="${OPTARG}" ;;
+      m) read -r -a override_buildmodes <<< "${OPTARG}" ;;
+      o) override_out_dir="${OPTARG}" ;;
+      g) override_gpg_key="${OPTARG}" ;;
+      G) override_gpg_sender="${OPTARG}" ;;
+      H) override_gpg_home="${OPTARG}" ;;
+      v) override_quiet="n" ;;
+      h|?) _usage 0 ;;
+      *)
+          _msg_error "Invalid argument '${arg}'" 0
+          _usage 1
+          ;;
+  esac
 done
-
-shift $((OPTIND - 1))
-
+shift \
+  $((OPTIND - 1))
 (( $# < 1 )) && \
-  _msg_error "No profile specified" 0 && \
-  _usage 1
-
+  _msg_error \
+    "No profile specified" \
+    0 && \
+  _usage \
+  1
 (( EUID != 0 )) && \
-  _msg_error "${app_name} must be run as root." 1
-
-# get the absolute path representation of the first non-option argument
-_set "profile" \
-     "dir" \
-     "$(realpath -- "${1}")"
-
+  _msg_error \
+    "${app_name} must be run as root." \
+    1
+# get the absolute path representation
+# of the first non-option argument
+_set \
+  "profile" \
+  "dir" \
+  "$(realpath -- \
+       "${1}")"
 _read_profile
 _set_overrides
 _validate_options
