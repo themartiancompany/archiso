@@ -12,6 +12,11 @@ _lib="${_bin}/../lib"
 source \
   "${_lib}/libcrash-bash/crash-bash"
 
+_requirements() {
+  _check_cmd \
+    'uuidgen'
+}
+
 # Sets global variables
 _global_variables() {
   local \
