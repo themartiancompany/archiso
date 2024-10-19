@@ -3079,16 +3079,6 @@ _validate_requirements_image_type_fat() {
     _check_missing_cmd "mmd" "mtools"
 }
 
-# LUKS
-_validate_requirements_image_type_luks() {
-    _check_missing_cmd "cryptsetup"
-}
-
-# SQUASHFS
-_validate_requirements_image_type_squashfs() {
-    _check_missing_cmd "mksquashfs" "squashfs-tools"
-}
-
 ##################################################
 # Volumes file systems support validate functions
 ##################################################
@@ -3125,46 +3115,62 @@ _validate_requirements_airootfs_image_type_luks() {
     _get \
       "airootfs" \
       "encryption_key_auto")"
-  _validate_requirements_image_type_luks
+  mkimg \
+    -t \
+    -f \
+      "luks"
   [[ -n "${_encryption_key}" ]] && \
     _resolve_fs_encryption_key \
       "airootfs" \
       "${_key_auto}"
-  # _validate_requirements_image_type_luks
+}
+
+_validate_requirements_image_type() {
+  local \
+    _image_type="${1}" \
+    _mkimg_opts=()
+  _mkimg_opts+=(
+    -t
+    -f
+      "${_image_type}"
+  )
+  mkimg \
+    "${_mkimg_opts[@]}"
 }
 
 # SQUASHFS airootfs
 _validate_requirements_airootfs_image_type_squashfs() {
-    _validate_requirements_image_type_squashfs
+  _validate_requirements_image_type \
+    "squashfs"
 }
 
 ## 2-layered image types
 
 # EROFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_erofs+luks() {
-    _validate_requirements_image_type_luks
-    _validate_requirements_image_type_erofs
+  _validate_requirements_image_type \
+    "squashfs"
 }
 
 # EXT4 over SQUASHFS airootfs
 _validate_requirements_airootfs_image_type_ext4+squashfs() {
-    _validate_requirements_image_type_ext4
-    _validate_requirements_image_type_squashfs
+  _validate_requirements_image_type \
+    "ext4+squashfs"
 }
 
 # SQUASHFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_squashfs+luks() {
-    _validate_requirements_airootfs_image_type_luks
-    _validate_requirements_airootfs_image_type_squashfs
+  _validate_requirements_image_type \
+    "squashfs+luks"
 }
 
 ## 3-layered image types
 
 # EXT4 over SQUASHFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
-    _validate_requirements_airootfs_image_type_luks
-    _validate_requirements_image_type_squashfs
-    _validate_requirements_image_type_ext4
+  _validate_requirements_airootfs_image_type_luks
+  _validate_requirements_image_type \
+    "ext4+squashfs+luks"
 }
 
 ### Persistent
@@ -3173,49 +3179,73 @@ _validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
 
 # EXT4 persistent
 _validate_requirements_persistent_image_type_ext4() {
-    local _msg=() \
-          _etc="${profile_dir}/airootfs/etc"
-    local _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
-    local _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
-    _validate_requirements_image_type_ext4
-    if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _msg=("Persistent image not encrypted."
-              "Be sure not to put sensitive data"
-              "on it and write the resulting image"
-              "on a write-once device.")
-        _msg_warning "${_msg[*]}"
-    fi
-    if [ ! -e "${_ro_udev_rule}" ]; then
-        (( validation_error=validation_error+1 ))
-        _msg=("Validating '${persistent_image_type}' "
-              "for persistent partition: udev rule not found!")
-        _msg_error "${_msg[*]}" 0
-    fi
-    if [ ! -e "${_dongle_ro_udev_rule}" ]; then
-        (( validation_error=validation_error+1 ))
-        _msg=("Validating '$(_get "dongle_persistent" \
-                                  "image_type")' "
-              "for dongle persistent partition: udev rule not found!")
-        _msg_error "${_msg[*]}" 0
-    fi
+  local \
+    _msg=() \
+    _etc \
+    _ro_rule \
+    _dongle_ro_rule
+  _etc="${profile_dir}/airootfs/etc"
+  _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
+  _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
+  _validate_requirements_image_type \
+    "ext4"
+  if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _msg=(
+      "Persistent image not encrypted."
+      "Be sure not to put sensitive data"
+      "on it and write the resulting image"
+      "on a write-once device."
+    )
+    _msg_warning \
+      "${_msg[*]}"
+  fi
+  if [ ! -e "${_ro_udev_rule}" ]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '${persistent_image_type}' "
+      "for persistent partition: udev rule not found!"
+    )
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  if [ ! -e "${_dongle_ro_udev_rule}" ]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '$( \
+        _get \
+          "dongle_persistent" \
+          "image_type")' "
+      "for dongle persistent partition:"
+      "udev rule not found!")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
 }
 
 ## 2-layered image types
 
 # EXT4 over LUKS persistent
 _validate_requirements_persistent_image_type_ext4+luks() {
-    local _volume="persistent" \
-          _msg=()
-    "_validate_requirements_image_type_luks"
-    "_validate_requirements_${_volume}_image_type_ext4"
-    [ ! -e "$(_get_crypttab "profile")" ] && \
-      (( validation_error=validation_error+1 )) \
-      _msg=(
-        "Validating '$(_get "${_volume}" \
-                            "image_type")'"
-        "for "${_volume}" partition:"
-        "crypttab not found!") && \
-      _msg_error "${_msg[*]}" 0
+  local \
+    _volume="persistent" \
+    _msg=()
+  _validate_requirements_image_type \
+    "ext4+luks"
+  "_validate_requirements_${_volume}_image_type_ext4"
+  if [ ! -e "$(_get_crypttab \
+                 "profile")" ]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '$(_get "${_volume}" \
+                          "image_type")'"
+      "for "${_volume}" partition:"
+      "crypttab not found!")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
 }
 
 #######################################
@@ -3226,7 +3256,6 @@ _validate_requirements_persistent_image_type_ext4+luks() {
 
 # MBR
 _validate_common_requirements_mbr() {
-    [[ ]] \
     if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
     if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
 }
