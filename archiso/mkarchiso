@@ -3083,23 +3083,39 @@ _validate_requirements_image_type_fat() {
 # Volumes file systems support validate functions
 ##################################################
 
+_validate_requirements_image_type() {
+  local \
+    _image_type="${1}" \
+    _mkimg_opts=()
+  _mkimg_opts+=(
+    -t
+    -f
+      "${_image_type}"
+  )
+  mkimg \
+    "${_mkimg_opts[@]}"
+}
+
 ### Airootfs
 
 ## Base image types
 
 # BTRFS airootfs
 _validate_requirements_airootfs_image_type_btrfs() {
-    _validate_requirements_image_type_btrfs
+  _validate_requirements_image_type \
+   "btrfs"
 }
 
 # EROFS airootfs
 _validate_requirements_airootfs_image_type_erofs() {
-    _validate_requirements_image_type_erofs
+  _validate_requirements_image_type \
+   "erofs"
 }
 
 # EXT4 airootfs
 _validate_requirements_airootfs_image_type_ext4() {
-    _validate_requirements_image_type_ext4
+  _validate_requirements_image_type \
+    "ext4"
 }
 
 # LUKS airootfs
@@ -3115,27 +3131,12 @@ _validate_requirements_airootfs_image_type_luks() {
     _get \
       "airootfs" \
       "encryption_key_auto")"
-  mkimg \
-    -t \
-    -f \
-      "luks"
+  _validate_requirements_image_type \
+    "luks"
   [[ -n "${_encryption_key}" ]] && \
     _resolve_fs_encryption_key \
       "airootfs" \
       "${_key_auto}"
-}
-
-_validate_requirements_image_type() {
-  local \
-    _image_type="${1}" \
-    _mkimg_opts=()
-  _mkimg_opts+=(
-    -t
-    -f
-      "${_image_type}"
-  )
-  mkimg \
-    "${_mkimg_opts[@]}"
 }
 
 # SQUASHFS airootfs
@@ -3149,7 +3150,7 @@ _validate_requirements_airootfs_image_type_squashfs() {
 # EROFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_erofs+luks() {
   _validate_requirements_image_type \
-    "squashfs"
+    "erofs+luks"
 }
 
 # EXT4 over SQUASHFS airootfs
@@ -3160,8 +3161,7 @@ _validate_requirements_airootfs_image_type_ext4+squashfs() {
 
 # SQUASHFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_squashfs+luks() {
-  _validate_requirements_image_type \
-    "squashfs+luks"
+  return
 }
 
 ## 3-layered image types
@@ -3169,8 +3169,15 @@ _validate_requirements_airootfs_image_type_squashfs+luks() {
 # EXT4 over SQUASHFS over LUKS airootfs
 _validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
   _validate_requirements_airootfs_image_type_luks
-  _validate_requirements_image_type \
-    "ext4+squashfs+luks"
+}
+
+_validate_requirements_volume() {
+  local \
+    _volume="${1}" \
+    _image_type="${2}"
+  "_validate_requirements_${_image_type}"
+  "_validate_requirements_${_volume}_image_type_${_image_type}" || \
+    true
 }
 
 ### Persistent
@@ -3187,8 +3194,8 @@ _validate_requirements_persistent_image_type_ext4() {
   _etc="${profile_dir}/airootfs/etc"
   _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
   _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
-  _validate_requirements_image_type \
-    "ext4"
+  # _validate_requirements_image_type \
+  #   "ext4"
   if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
     _msg=(
       "Persistent image not encrypted."
@@ -3231,8 +3238,8 @@ _validate_requirements_persistent_image_type_ext4+luks() {
   local \
     _volume="persistent" \
     _msg=()
-  _validate_requirements_image_type \
-    "ext4+luks"
+  # _validate_requirements_image_type \
+  #   "ext4+luks"
   "_validate_requirements_${_volume}_image_type_ext4"
   if [ ! -e "$(_get_crypttab \
                  "profile")" ]; then
@@ -3252,182 +3259,150 @@ _validate_requirements_persistent_image_type_ext4+luks() {
 # Bootmodes support validate functions
 #######################################
 
-## Common
-
-# MBR
-_validate_common_requirements_mbr() {
-    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
-    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
-}
-
-# GRUB common
-_validate_common_requirements_grub() {
-    local _no_cfg_msg=() \
-          _no_dir_msg=() \
-          _no_cfgs_msg=() \
-          _conf_file
-    _no_cfg_mgs=(
-      "Validating '${bootmode}':"
-      "File '${profile_dir}/grub/grub.cfg' not found!")
-    _no_dir_msg=(
-      "Validating '${bootmode}':"
-      "The '${profile_dir}/grub' directory is missing!")
-    _no_cfgs_msg=(
-      "Validating '${bootmode}':"
-      "No configuration file found in '${profile_dir}/grub/'!"
-    _check_missing_cmd "grub-mkstandalone" "grub"
-    # Check if GRUB configuration files exist
-    if [[ ! -d "${profile_dir}/grub" ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg_error "${_no_dir_msg[*]}" 0
-    else
-        [[ ! -e "${profile_dir}/grub/grub.cfg" ]] && \
-          (( validation_error=validation_error+1 ))
-          _msg_error "${_no_cfg_msg[*]}" 0
-        for _conf_file in "${profile_dir}/grub/"*'.cfg'; do
-            if [[ -e "${_conf_file}" ]]; then
-                break
-            else
-                (( validation_error=validation_error+1 ))
-                _msg_error "${_no_cfgs_msg[*]}" 0
-            fi
-        done
-    fi
-}
-
-#### BIOS
-
 ### GRUB
 
 # GRUB BIOS MBR
 _validate_requirements_bootmode_bios.grub.mbr() {
-    local _msg=()
-    # bios.syslinux.mbr requires bios.grub.eltorito
-    # actually I'm not sure this is true
-    _validate_common_requirements_grub
-    # shellcheck disable=SC2076
-    if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg=("Using 'bios.grub.mbr' boot mode without"
-              "'bios.grub.eltorito' is not supported.")
-        _msg_error "${_msg[*]}" 0
-    fi
-
-    # Check if the grub package is in the package list
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' grub ' ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg=("Validating '${bootmode}':"
-              "The 'grub' package is missing"
-              "from the package list!")
-        _msg_error "${_msg[*]}" 0
-    fi
+  local _msg=()
+  # bios.syslinux.mbr requires bios.grub.eltorito
+  # actually I'm not sure this is true
+  # shellcheck disable=SC2076
+  if [[ ! " ${bootmodes[*]} " =~ ' bios.grub.eltorito ' ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Using 'bios.grub.mbr' boot mode without"
+      "'bios.grub.eltorito' is not supported.")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  # Check if the grub package is in the package list
+  # shellcheck disable=SC2076
+  if [[ ! " ${pkg_list[*]} " =~ ' grub ' ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '${bootmode}':"
+      "The 'grub' package is missing"
+      "from the package list!")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
 }
 
 # GRUB BIOS ELTORITO
 _validate_requirements_bootmode_bios.grub.eltorito() {
-    # bios.grub.eltorito has the exact same requirements as bios.grub.mbr
-    _validate_requirements_bootmode_bios.grub.mbr
+  # bios.grub.eltorito has the exact same requirements as bios.grub.mbr
+  _validate_requirements_bootmode_bios.grub.mbr
 }
 
 ### SYSLINUX
 
 # SYSLINUX BIOS MBR
 _validate_requirements_bootmode_bios.syslinux.mbr() {
-    local _msg
-    # bios.syslinux.mbr requires bios.syslinux.eltorito
-    # shellcheck disable=SC2076
-    if [[ ! " ${bootmodes[*]} " =~ ' bios.syslinux.eltorito ' ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg=(
-          "Using 'bios.syslinux.mbr' boot mode"
-          "without 'bios.syslinux.eltorito'"
-          "is not supported.")
-        _msg_error "${_msg[*]}" 0
-    fi
+  local _msg
+  # bios.syslinux.mbr requires bios.syslinux.eltorito
+  # shellcheck disable=SC2076
+  if [[ ! " ${bootmodes[*]} " =~ ' bios.syslinux.eltorito ' ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Using 'bios.syslinux.mbr' boot mode"
+      "without 'bios.syslinux.eltorito'"
+      "is not supported.")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
 
-    # Check if the syslinux package is in the package list
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' syslinux ' ]]; then
+  # Check if the syslinux package is in the package list
+  # shellcheck disable=SC2076
+  if [[ ! " ${pkg_list[*]} " =~ ' syslinux ' ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '${bootmode}':"
+      "The 'syslinux' package is missing"
+      "from the package list!")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  # Check if syslinux configuration files exist
+  if [[ ! -d "${profile_dir}/syslinux" ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '${bootmode}':"
+      "The '${profile_dir}/syslinux' directory is missing!")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  else
+    local cfgfile
+    for cfgfile \
+      in "${profile_dir}/syslinux/"*'.cfg'; do
+      if [[ -e "${cfgfile}" ]]; then
+        break
+      else
         (( validation_error=validation_error+1 ))
         _msg=(
           "Validating '${bootmode}':"
-          "The 'syslinux' package is missing"
-          "from the package list!")
-        _msg_error "${_msg[*]}" 0
-    fi
-
-    # Check if syslinux configuration files exist
-    if [[ ! -d "${profile_dir}/syslinux" ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg=(
-          "Validating '${bootmode}':"
-          "The '${profile_dir}/syslinux' directory is missing!")
-        _msg_error "${_msg[*]}" 0
-    else
-        local cfgfile
-        for cfgfile in "${profile_dir}/syslinux/"*'.cfg'; do
-            if [[ -e "${cfgfile}" ]]; then
-                break
-            else
-                (( validation_error=validation_error+1 ))
-                _msg=(
-                  "Validating '${bootmode}':"
-                  "No configuration file found"
-                  "in '${profile_dir}/syslinux/'!")
-                _msg_error "${_msg[*]}" 0
-            fi
-        done
-    fi
-
-    # Check for optional packages
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' memtest86+ ' ]]; then
-        _msg=("Validating '${bootmode}': 'memtest86+'"
-              "is not in the package list."
-              "Memory testing will not be available"
-              "from syslinux.")
-        _msg_info "${_msg[*]}"
-    fi
+          "No configuration file found"
+          "in '${profile_dir}/syslinux/'!")
+        _msg_error \
+          "${_msg[*]}" \
+          0
+        fi
+    done
+  fi
+  # Check for optional packages
+  # shellcheck disable=SC2076
+  if [[ ! " ${pkg_list[*]} " =~ ' memtest86+ ' ]]; then
+    _msg=(
+      "Validating '${bootmode}': 'memtest86+'"
+      "is not in the package list."
+      "Memory testing will not be available"
+      "from syslinux.")
+    _msg_info \
+      "${_msg[*]}"
+  fi
 }
 
 # SYSLINUX BIOS ELTORITO
 _validate_requirements_bootmode_bios.syslinux.eltorito() {
-    # bios.syslinux.eltorito has the exact same requirements as bios.syslinux.mbr
-    _validate_requirements_bootmode_bios.syslinux.mbr
+  # bios.syslinux.eltorito has the exact same requirements as bios.syslinux.mbr
+  _validate_requirements_bootmode_bios.syslinux.mbr
 }
 
 #### UEFI
 
 _validate_common_requirements_bootmode_uefi(){
-    _validate_requirements_image_type_fat
+  _validate_requirements_image_type_fat
 }
 
 ### UEFI x64
 
 # GRUB UEFI x64 ESP
 _validate_requirements_bootmode_uefi-x64.grub.esp() {
-    local _conflict_msg=() \
-          _no_efi_shell_msg=()
-    _conflict_msg=(
-      "Validating '${bootmode}':"
-      "cannot be used with bootmode"
-      "uefi-x64.systemd-boot.esp!")
-    _no_efi_shell_msg=(
-      "'edk2-shell' is not in the package list."
-      "The ISO will not contain a bootable UEFI shell.")
-    _validate_common_requirements_bootmode_uefi
-    _validate_common_requirements_grub
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
-        _msg_error "${_conflict_msg[*]}" 0
-    fi
+  local \
+    _conflict_msg=() \
+    _no_efi_shell_msg=()
+  _conflict_msg=(
+    "Validating '${bootmode}':"
+    "cannot be used with bootmode"
+    "uefi-x64.systemd-boot.esp!")
+  _no_efi_shell_msg=(
+    "'edk2-shell' is not in the package list."
+    "The ISO will not contain a bootable UEFI shell.")
+  _validate_common_requirements_bootmode_uefi
+  # shellcheck disable=SC2076
+  if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
+      _msg_error "${_conflict_msg[*]}" 0
+  fi
 
-    # Check for optional packages
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
-        _msg_info "${_no_efi_shell_msg[*]}'"
-    fi
+  # Check for optional packages
+  # shellcheck disable=SC2076
+  if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
+      _msg_info "${_no_efi_shell_msg[*]}'"
+  fi
 }
 
 # GRUB UEFI x64 ELTORITO
@@ -3451,22 +3426,26 @@ _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
 _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
     local _msg=()
     # shellcheck disable=SC2076
-    [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]] && \
+    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
       _msg=(
         "Validating '${bootmode}':"
-        "cannot be used with bootmode uefi-x64.grub.esp!") && \
-      _msg_error "${_msg[*]}" 0
-
+        "cannot be used with bootmode uefi-x64.grub.esp!"
+      )
+      _msg_error \
+        "${_msg[*]}" \
+        0
+    fi
     _validate_common_requirements_bootmode_uefi
-
     # Check if systemd-boot configuration files exist
     if [[ ! -d "${profile_dir}/efiboot/loader/entries" ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg=(
-          "Validating '${bootmode}':"
-          "The '${profile_dir}/efiboot/loader/entries'"
-          "directory is missing!"
-        _msg_error "${_msg[*]}" 0
+      (( validation_error=validation_error+1 ))
+      _msg=(
+        "Validating '${bootmode}':"
+        "The '${profile_dir}/efiboot/loader/entries'"
+        "directory is missing!"
+      _msg_error \
+        "${_msg[*]}" \
+        0
     else
         [[ ! -e "${profile_dir}/efiboot/loader/loader.conf" ]] && \
           (( validation_error=validation_error+1 )) \
@@ -3502,62 +3481,77 @@ _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
 
 # SYSTEMD-BOOT UEFI64 ELTORITO
 _validate_requirements_bootmode_uefi-x64.systemd-boot.eltorito() {
-    local _bootmode="uefi-x64.grub.eltorito"  \
-          _msg=()
-    _msg=("Validating '${bootmode}':"
-          "cannot be used with bootmode"
-          "${_bootmode}!")
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ " ${_bootmode} " ]]; then
-        _msg_error "${_msg[*]}" 0
-    fi
-
-    # uefi-x64.systemd-boot.eltorito has the exact
-    # same requirements as uefi-x64.systemd-boot.esp
-    _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
+  local \
+    _bootmode="uefi-x64.grub.eltorito"  \
+    _msg=()
+  _msg=(
+    "Validating '${bootmode}':"
+    "cannot be used with bootmode"
+    "${_bootmode}!")
+  # shellcheck disable=SC2076
+  if [[ " ${bootmodes[*]} " =~ " ${_bootmode} " ]]; then
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  # uefi-x64.systemd-boot.eltorito has the exact
+  # same requirements as uefi-x64.systemd-boot.esp
+  _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
 }
 
 ### UEFI IA32
 
 # GRUB UEFI IA32 ESP
 _validate_requirements_bootmode_uefi-ia32.grub.esp() {
-    local _msg=()
-    _msg=("Validating '${bootmode}': requires one of bootmode"
-          "uefi-x64.systemd-boot.esp or uefi-x64.grub.esp")
-    _validate_common_requirements_grub
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
-        _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
-    elif [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
-        _validate_requirements_bootmode_uefi-x64.grub.esp
-    else
-        # Please someone remembers me why 32-bit grub needs
-        # a 64-bit bootmode enabled
-        _msg_error "${_msg[*]}" 0
-    fi
+  local \
+    _msg=()
+  _msg=(
+    "Validating '${bootmode}': requires one of bootmode"
+    "uefi-x64.systemd-boot.esp or uefi-x64.grub.esp")
+  # shellcheck disable=SC2076
+  if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
+    _validate_requirements_bootmode_uefi-x64.systemd-boot.esp
+  elif [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
+    _validate_requirements_bootmode_uefi-x64.grub.esp
+  else
+    # Please someone remembers me why 32-bit grub needs
+    # a 64-bit bootmode enabled
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
 }
 
 # GRUB UEFI IA32 ELTORITO
 _validate_requirements_bootmode_uefi-ia32.grub.eltorito() {
-    # uefi-ia32.grub.eltorito has the exact 
-    # same requirements as uefi-ia32.grub.esp
-    _validate_requirements_bootmode_uefi-ia32.grub.esp
+  # uefi-ia32.grub.eltorito has the exact 
+  # same requirements as uefi-ia32.grub.esp
+  _validate_requirements_bootmode_uefi-ia32.grub.esp
 }
 
 # Fills templatized udev rules for the persistent partitions
 # $1: template udev rule file
 _make_rule_persistent() {
-    local _template="${1}" \
-          _sed_cmd
-    # shellcheck disable=SC2154
-    _sed_cmd='/%DONGLE_PERSISTENT_UUID%/d'
-    [[ "${persistent_size}" != "" ]] && \
-      _sed_cmd="s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g"
-    sed -i "${_sed_cmd}" "${_template}"
-    _sed_cmd='/%PERSISTENT_UUID%/d'
-    [[ "${persistent_size}" != "" ]] && \
-        _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
-    sed -i "${_sed_cmd}" "${_template}"
+  local \
+    _template="${1}" \
+    _sed_cmd
+  # shellcheck disable=SC2154
+  _sed_cmd='/%DONGLE_PERSISTENT_UUID%/d'
+  if [[ "${persistent_size}" != "" ]]; then
+    _sed_cmd="s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" \
+    sed \
+      -i \
+      "${_sed_cmd}" \
+      "${_template}"
+  fi
+  _sed_cmd='/%PERSISTENT_UUID%/d'
+  if [[ "${persistent_size}" != "" ]]; then
+    _sed_cmd="s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
+    sed \
+      -i \
+      "${_sed_cmd}" \
+      "${_template}"
+  fi
 }
 
 #################################
@@ -4005,22 +3999,25 @@ _validate_requirements_fs_image_type() {
   local \
     _error_msg \
     _image_type
-    _validate_fun_error_msg=()
+    _validate_fun_error_msg=() \
+    _valid_fs_image_type
   _image_type="$(\
     _get \
       "${_fs_image}" \
       "image_type")"
   _error_msg="Unsupported image type: '${_image_type}'"
-  _validate_fun_error_msg=(
-    "Validating the requirements"
-    "of '${_image_type}' for ${_fs_image}"
-    "image type will not be possible.")
-  _validate_requirements \
-    "_mkimg_${_image_type}" \
-    "${_fs_image}_image_type" \
-    "${_image_type}" \
-    "${_error_msg}" \
-    "${_validate_fun_error_msg[*]}"
+  _validate_requirements_image_type \
+    "${_image_type}"
+  _valid_fs_image_type="_validate_requirements_${_fs_image}_${_image_type}"
+  if typeset \
+       -f \
+       "${_valid_fs_image_type}"; then
+    "${_valid_fs_image_type}"
+  else
+    _msg_error \
+      "function '${_valid_fs_image_type}' not found" \
+      0
+  fi
 }
 
 _validate_common_requirements_buildmode_iso_netboot() {
@@ -4059,12 +4056,16 @@ _validate_common_requirements_buildmode_iso_netboot() {
 }
 
 _validate_requirements_buildmode_dongle() {
-    _validate_common_requirements_buildmode_all
-    _validate_requirements_image_type_luks
-    [[ ! "${airootfs_image_type}" == *luks ]] && \
-      _msg=("Dongle buildmode active but root file system "
-            "encryption disabled.") && \
-      _msg_warning "${_msg[*]}"
+  _validate_common_requirements_buildmode_all
+  _validate_requirements_image_type \
+    "luks"
+  if [[ ! "${airootfs_image_type}" == *luks ]]; then
+    _msg=(
+      "Dongle buildmode active but root file system "
+      "encryption disabled."
+    )
+    _msg_warning "${_msg[*]}"
+  fi
 }
 
 _validate_requirements_buildmode_iso() {
@@ -4096,7 +4097,8 @@ _validate_requirements_buildmode_iso() {
 
     # Check if the profile supports
     # the specified persistent_image_type
-    _validate_requirements_fs_image_type "persistent"
+    _validate_requirements_fs_image_type \
+      "persistent"
 }
 
 _validate_requirements_buildmode_netboot() {
