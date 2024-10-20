@@ -1557,93 +1557,125 @@ _make_pkglist() {
 
 # Cleanup airootfs
 _cleanup_pacstrap_dir() {
-    local _root="pacstrap" \
-          _images=() \
-          _boot \
-          _cp_opts=() \
-          _log \
-          _machine_id \
-          _pacman_db \
-          _pacman_cache \
-          _tmp \
-   _images=(
-     "initramfs-*"
-     "vmlinuz-*"
-     "${ucodes[@]}")
-    _cp_opts=(
-      '-af'
-      '--no-preserve=ownership,mode')
-    _boot="$(_get "${_root}"\
-                  "dir")/boot" \
-    _log="$(_get "${_root}" \
-                       "dir")/var/log" \
-    _machine_id="$(_get "${_root}" \
-                        "dir")/etc/machine-id" \
-    _pacman_db="$(_get "${_root}" \
-                       "dir")/var/lib/pacman" \
-    _pacman_cache="$(_get "${_root}" \
-                          "dir")/var/cache/pacman/pkg" \
-    _tmp="$(_get "${_root}" \
-                 "dir")/var/tmp" \
-    _msg_info "Cleaning up in pacstrap location..."
-
-    # Move kernel, initramfs and microcodes for later usage
-    _install_dir_cmd "work" \
-                     "/boot"
-    for _query in "${_images[@]}"; do
-        find "${_boot}" \
-             -iname "${_query}" \
-             -exec cp "${_cp_opts[@]}" \
-                      {} \
-                      "${work_dir}/boot" \; \
-             -quit
-    done
-    [[ -d "${_boot}" ]] && \
-      find "${_boot}" \
-           -maxdepth 1 \
-           -type f \
-           -delete
-    # Delete pacman database sync cache files (*.tar.gz)
-    [[ -d "${_pacman_db}" ]] && \
-      find "${_pacman_db}" \
-           -maxdepth 1 \
-           -type f \
-           -delete
-    # Delete pacman database sync cache
-    [[ -d "${_pacman_db}/sync" ]] && \
-      find "${_pacman_db}/sync" \
-           -delete
-    # Delete pacman cache files
-    [[ -d "${_pacman_cache}" ]] && \
-      find "${_pacman_cache}" \
-           -type f \
-           -delete
-    # Delete all log files, keeps empty dirs.
-    [[ -d "${_log}" ]] && \
-      find "${_log}" \
-           -type f \
-           -delete
-    # Delete all temporary files and dirs
-    [[ -d "${_tmp}" ]] && \
-      find "${_tmp}" \
-           -mindepth 1 \
-           -delete
-    # Delete package pacman related files.
-    find "$(_get "work" \
-                 "dir")" \
-          \( -name '*.pacnew' \
-             -o -name '*.pacsave' \
-             -o -name '*.pacorig' \) \
-          -delete
-    if [[ "$(_get "persistent" \
-                  "size")" != "" ]]; then
-        dbus-uuidgen --ensure="${_machine_id}"
-    else
-        # Create an empty /etc/machine-id
-        rm -f -- "${_machine_id}"
-        printf '' > "${_machine_id}"
-    fi
-    _msg_info "Done!"
+  local \
+    _root="pacstrap" \
+    _images=() \
+    _boot \
+    _cp_opts=() \
+    _log \
+    _machine_id \
+    _pacman_db \
+    _pacman_cache \
+    _tmp \
+    _root_dir
+  _root_dir="$( \
+    _get \
+      "${_root}" \
+      "dir")"
+  images=(
+   "initramfs-*"
+   "vmlinuz-*"
+   "${ucodes[@]}"
+  )
+  _cp_opts=(
+    '-af'
+    '--no-preserve=ownership,mode'
+  )
+  _boot="${_root_dir}/boot" \
+  _log="${_root_dir}/var/log" \
+  _machine_id="${_root_dir}/etc/machine-id" \
+  _pacman_db="${_root}/var/lib/pacman" \
+  _pacman_cache="${_root}/var/cache/pacman/pkg" \
+  _tmp="${_root}/var/tmp" \
+  _msg_info \
+    "Cleaning up in pacstrap location..."
+  # Move kernel, initramfs and microcodes for later usage
+  _install_dir_cmd \
+    "work" \
+    "/boot"
+  for _query \
+    in "${_images[@]}"; do
+    find \
+      "${_boot}" \
+      -iname \
+        "${_query}" \
+      -exec \
+        cp \
+          "${_cp_opts[@]}" \
+          {} \
+          "${work_dir}/boot" \; \
+      -quit
+  done
+  [[ -d "${_boot}" ]] && \
+    find \
+      "${_boot}" \
+       -maxdepth \
+         1 \
+       -type \
+         f \
+       -delete
+  # Delete pacman database sync cache files (*.tar.gz)
+  [[ -d "${_pacman_db}" ]] && \
+    find \
+      "${_pacman_db}" \
+       -maxdepth \
+         1 \
+       -type \
+         f \
+       -delete
+  # Delete pacman database sync cache
+  [[ -d "${_pacman_db}/sync" ]] && \
+    find \
+      "${_pacman_db}/sync" \
+       -delete
+  # Delete pacman cache files
+  [[ -d "${_pacman_cache}" ]] && \
+    find \
+      "${_pacman_cache}" \
+      -type \
+        f \
+      -delete
+  # Delete all log files, keeps empty dirs.
+  [[ -d "${_log}" ]] && \
+    find \
+      "${_log}" \
+      -type \
+        f \
+      -delete
+  # Delete all temporary files and dirs
+  [[ -d "${_tmp}" ]] && \
+    find \
+      "${_tmp}" \
+      -mindepth 1 \
+      -delete
+  # Delete package pacman related files.
+  find \
+    "$(_get \
+      "work" \
+      "dir")" \
+    \( \
+      -name '*.pacnew' \
+      -o -name '*.pacsave' \
+      -o -name '*.pacorig' \) \
+    -delete
+  if [[ "$(_get \
+             "persistent" \
+             "size")" != "" ]]; then
+    _check_cmd \
+      "dbus"
+    dbus-uuidgen \
+      --ensure="${_machine_id}"
+  else
+    # Create an empty /etc/machine-id
+    rm \
+      -f -- \
+      "${_machine_id}"
+    printf \
+      '' > \
+      "${_machine_id}"
+  fi
+  _msg_info \
+    "Done!"
 }
 
 ################
@@ -1656,19 +1688,29 @@ _cleanup_pacstrap_dir() {
 
 # Returns UUID for the GRUB plain mount
 _get_archiso_uuid() {
-    # shellcheck disable=SC2005
-    echo "$(_epoch_to_uuid "$(_get_epoch airootfs)")"
+  # shellcheck disable=SC2005
+  echo \
+    "$(_epoch_to_uuid \
+         "$(_get_epoch \
+              airootfs)")"
 }
 
 # Swap partition
 
 # Returns UUID for the dongle swap mount
 _get_swap_uuid() {
-    local _epoch
-    _epoch="$(_get_epoch swap)"
-    [[ "${buildmode}" == 'dongle' ]] && \
-      _epoch="$(_get_epoch dongle_swap)"
-    _get_epoch_fsuuid "${_epoch}"
+  local \
+    _epoch
+  _epoch="$( \
+    _get_epoch \
+      swap)"
+  if [[ "${buildmode}" == 'dongle' ]]; then
+    _epoch="$( \
+      _get_epoch \
+        dongle_swap)"
+  fi
+  _get_epoch_fsuuid \
+    "${_epoch}"
 }
 
 ## Dongle ISO
@@ -1873,38 +1915,6 @@ _gen_bootloader_config() {
 
 ### GRUB
 
-# # Probably super-deprecated
-# # generate an 'external loader' embedded GRUB
-# # configuration file for use on UEFI platforms
-# _gen_grub_embed_cfg() {
-#   local \
-#     _boot_loader="grub" \
-#     _embed_cfg
-#   IFS='' \
-#   read \
-#     -r \
-#     -d '' \
-#     _embed_cfg <<'EOF' || true
-# if ! [ -d "$cmdpath" ]; then
-#     # On some firmware, GRUB has a wrong cmdpath
-#     # when booted from an optical disc.
-#     # https://gitlab.archlinux.org/archlinux/archiso/-/issues/183
-#     if regexp --set=1:isodevice '^(\([^)]+\))\/?[Ee][Ff][Ii]\/[Bb][Oo][Oo][Tt]\/?$' "$cmdpath"; then
-#         cmdpath="${isodevice}/EFI/BOOT"
-#     fi
-# fi
-# configfile "${cmdpath}/grub.cfg"
-# EOF
-#   printf \
-#     '%s\n' \
-#     "${_embed_cfg}" > \
-#   "$(_get \
-#        "profile" \
-#        "dir")/$( \
-#        _get_bl \
-#          "${_boot_loader}")/${_boot_loader}-embed.cfg"
-# }
-
 ## Copy configuration files
 # Prepare bootloader configuration files
 _make_common_bootloader_cfg(){
@@ -1921,51 +1931,6 @@ _make_common_bootloader_cfg(){
         "profile" \
         "${_boot_loader}")
 }
-
-## GRUB configuration files
-# Prepare GRUB configuration files
-# _make_common_bootloader_grub_cfg(){
-#   _make_common_bootloader_cfg \
-#     "work" \
-#     "grub"
-#   _gen_grub_embed_cfg
-# }
-
-# Get correct GRUB module list for a given platform
-# Module list from 
-# https://bugs.archlinux.org/task/71382#comment202911
-# $1: 'bios' or 'efi'
-# _get_grub_modules(){
-#     local _mode="${1}"
-#     _modules=(
-#       afsplitter boot bufio chain configfile
-#       disk echo ext2
-#       gcry_sha256 halt iso9660 linux
-#       loadenv loopback minicmd  normal 
-#       part_apple part_gpt part_msdos
-#       reboot search search_fs_uuid test usb)
-#     # Encryption specific modules
-#     _modules+=(
-#       cryptodisk gcry_rijndael gcry_sha512
-#       luks2 password_pbkdf2)
-#     if [[ "${_mode}" != "pc" ]] && \
-#        [[ "${_mode}" != "pc-eltorito" ]]; then
-#         _modules+=(
-#           at_keyboard all_video btrfs cat echo
-#           diskfilter echo efifwsetup f2fs fat
-#           font gcry_crc gfxmenu gfxterm gzio
-#           hfsplus jpeg keylayouts ls lsefi
-#           lsefimmap lzopio ntfs png read regexp
-#           search_fs_file search_label serial sleep
-#           tpm trig usbserial_common usbserial_ftdi
-#           usbserial_pl2303 usbserial_usbdebug video
-#           xfs zstd)
-#     elif [[ "${_mode}" == "pc" ]] || \
-#          [[ "${_mode}" == "pc-eltorito" ]]; then
-#         _modules+=(biosdisk)
-#     fi
-#     echo "${_modules[*]}"
-# }
 
 # Install bootloader configurations
 # $1: install volume
@@ -2364,13 +2329,16 @@ _make_common_bootmode_grub_cfg_efi_boot() {
 # Install GRUB Eltorito hybrid image
 # $1: volume on which to install the loader
 _make_grub_hybrid() {
-    local _bootable="${1}"
-    _install_dir_cmd "${_bootable}" \
-                     "/EFI" \
-                     "/EFI/BOOT"
-    _install_cmd "${_bootable}" \
-                 "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
-                 "/EFI/BOOT"
+  local \
+    _bootable="${1}"
+  _install_dir_cmd \
+    "${_bootable}" \
+    "/EFI" \
+    "/EFI/BOOT"
+  _install_cmd \
+    "${_bootable}" \
+    "${pacstrap_dir}/usr/lib/grub/i386-pc/boot_hybrid.img" \
+    "/EFI/BOOT"
 }
 
 ### BIOS
@@ -2381,21 +2349,21 @@ _make_grub_hybrid() {
 # $1: destination volume
 #     (a value in 'fs_images')
 _make_memtest() {
-    local _bootable="${1}" \
-          _memtest="/boot/memtest86+/memtest.bin" \
-          _gpl2
-    _gpl2="/usr/share/licenses/common/GPL2/license.txt"
-    [[ -e "${pacstrap_dir}${_memtest}" ]] && \
-        # rename for PXE:
-        # https://wiki.archlinux.org/title/Syslinux#Using_memtest
-        _install_cmd "${_bootable}" \
-                     "${pacstrap_dir}${_memtest}" \
-                     "/${install_dir}/boot/memtest" && \
-        _install_dir_cmd "${_bootable}" \
-                         "/${install_dir}/boot/licenses/memtest86+" && \
-        _install_cmd "${_bootable}" \
-                     "${pacstrap_dir}${_gpl2}" \
-                     "/${install_dir}/boot/licenses/memtest86+"
+  local _bootable="${1}" \
+        _memtest="/boot/memtest86+/memtest.bin" \
+        _gpl2
+  _gpl2="/usr/share/licenses/common/GPL2/license.txt"
+  [[ -e "${pacstrap_dir}${_memtest}" ]] && \
+      # rename for PXE:
+      # https://wiki.archlinux.org/title/Syslinux#Using_memtest
+      _install_cmd "${_bootable}" \
+                   "${pacstrap_dir}${_memtest}" \
+                   "/${install_dir}/boot/memtest" && \
+      _install_dir_cmd "${_bootable}" \
+                       "/${install_dir}/boot/licenses/memtest86+" && \
+      _install_cmd "${_bootable}" \
+                   "${pacstrap_dir}${_gpl2}" \
+                   "/${install_dir}/boot/licenses/memtest86+"
 }
 
 ### UEFI
@@ -2442,16 +2410,20 @@ _make_efi_sh() {
 #     EFI)
 # $4: source bootloader binary
 _make_bl_standalone() {
-    local _volume="${1}" \
-          _bootmode="${2}"
-    _install_dir_cmd "${_volume}" \
-                     "/EFI"
-                     "/EFI/BOOT"
-    _install_cmd "${_volume}" \
-                 "$(_get_boot_loader \
-                        "${_bootmode}")" \
-                 "/EFI/BOOT/$(_get_standalone_name \
-                                  "${_bootmode}")"
+  local \
+    _volume="${1}" \
+    _bootmode="${2}"
+  _install_dir_cmd \
+    "${_volume}" \
+    "/EFI"
+    "/EFI/BOOT"
+  _install_cmd \
+    "${_volume}" \
+    "$(_get_boot_loader \
+        "${_bootmode}")" \
+        "/EFI/BOOT/$( \
+          _get_standalone_name \
+            "${_bootmode}")"
 }
 
 # Common bootmode making routine
@@ -2505,21 +2477,31 @@ _make_common_bootmode() {
 #### Main callers
 
 _sort_bootmodes() {
-    local _bootmodes=("${@}") \
-          _sorted=() 
-    _sorted+=(
-      $(_get_bootmodes_boot_method "mbr")
-      $(_get_bootmodes_boot_method "esp")
-      $(_get_bootmodes_boot_method "eltorito"))
-    echo "${_sorted[@]}"
+  local \
+    _bootmodes=("${@}") \
+    _sorted=() 
+  _sorted+=(
+    $(_get_bootmodes_boot_method \
+        "mbr")
+    $(_get_bootmodes_boot_method \
+        "esp")
+    $(_get_bootmodes_boot_method \
+        "eltorito"))
+  echo \
+    "${_sorted[@]}"
 }
 
 _make_bootmodes() {
-    local _volume="${1}"
-    local bootmode
-    for bootmode in $(_sort_bootmodes "${bootmodes[@]}"); do
-        _run_once "_make_bootmode_${bootmode}_${_volume}"
-    done
+  local \
+    _volume="${1}"
+  local \
+    bootmode
+  for bootmode \
+    in $(_sort_bootmodes \
+           "${bootmodes[@]}"); do
+    _run_once \
+      "_make_bootmode_${bootmode}_${_volume}"
+  done
 }
 
 # Set up boot loaders
@@ -2539,38 +2521,54 @@ _make_bootmodes_dongle_iso() {
 ## GRUB BIOS MBR
 
 _make_bootmode() {
-    local _volume="${1}" \
-          _bootmode="${2}" \
-          _msg=()
-    _msg=(
-      "Setting up '$(_get_boot_loader "${_bootmode}")' for"
-      "'$(_get_PLATFORM "${_bootmode}")'"
-      "booting from a disk...")
-    _msg_info "${_msg[*]}"
-    _make_common_bootmode "${_volume}" \
-                          "${bootmode}"
-    _make_kernel_on_isos
-    _msg=("Done! '$(_get_boot_loader "${bootmode}")'"
-          "set up for '$(_get_PLATFORM "${_bootmode}")'"
-          "booting from a disk successfully.")
-    _msg_info "${_msg[*]}"
+  local \
+    _volume="${1}" \
+    _bootmode="${2}" \
+    _msg=()
+  _msg=(
+    "Setting up '$( \
+      _get_boot_loader \
+        "${_bootmode}")' for"
+    "'$(_get_PLATFORM \
+          "${_bootmode}")'"
+    "booting from a disk...")
+  _msg_info \
+    "${_msg[*]}"
+  _make_common_bootmode \
+    "${_volume}" \
+    "${bootmode}"
+  _make_kernel_on_isos
+  _msg=(
+    "Done! '$( \
+      _get_boot_loader \
+        "${bootmode}")'"
+    "set up for '$( \
+      _get_PLATFORM \
+        "${_bootmode}")'"
+    "booting from a disk successfully.")
+  _msg_info \
+    "${_msg[*]}"
 }
 
 # Prepares GRUB for booting from MBR (isohybrid)
 _make_bootmode_bios.grub.mbr() {
-    local _volume="${1}"
-    _make_common_bootmode "${_volume}" \
-                          "${bootmode}"
+  local \
+    _volume="${1}"
+  _make_common_bootmode \
+    "${_volume}" \
+    "${bootmode}"
 }
 
 # Prepares GRUB for booting from MBR on the ISO
 _make_bootmode_bios.grub.mbr_iso() {
-    _make_bootmode_bios.grub.mbr "iso"
+  _make_bootmode_bios.grub.mbr \
+    "iso"
 }
 
 # Prepares GRUB for booting from MBR on the dongle ISO
 _make_bootmode_bios.grub.mbr_dongle_iso() {
-    _make_bootmode_bios.grub.mbr "dongle_iso"
+  _make_bootmode_bios.grub.mbr \
+    "dongle_iso"
 }
 
 ## SYSLINUX BIOS MBR
@@ -2580,37 +2578,51 @@ _make_bootmode_bios.grub.mbr_dongle_iso() {
 #     (value is fs_images)
 # $2: device type (iso, dongle)
 _make_bootmode_bios.syslinux.mbr() {
-    local _volume="${1}" \
-          _cfg_files=() \
-          _msg=() \
-    _cfg_files=(
-      $(_get_bl_cfg_files \
-            "profile" \
-            "$(_get_boot_loader \
-                   "${bootmode}")"))
-    _msg=("Setting up '$(_get_boot_loader "${bootmode}")'"
-          "for '$(_get_PLATFORM "${bootmode}")'"
-          "booting from a disk...")
-    _msg_info "${_msg[*]}"
-    # "_make_$(_get_boot_loader \
-    #              "${bootmode}")" \
-    #     "${_volume}"
-    _make_common_bootmode "${bootmode}"
-    _make_kernel_on_isos
-    _make_memtest "${_volume}"
-    _msg=("Done! SYSLINUX set up for BIOS"
-          "booting from a disk successfully.")
-    _msg_info "${_msg[*]}"
+  local \
+    _volume="${1}" \
+    _cfg_files=() \
+    _msg=()
+  _cfg_files=( $( \
+    _get_bl_cfg_files \
+      "profile" \
+      "$(_get_boot_loader \
+           "${bootmode}")")
+  )
+  _msg=(
+    "Setting up '$( \
+      _get_boot_loader \
+        "${bootmode}")'"
+    "for '$( \
+      _get_PLATFORM \
+        "${bootmode}")'"
+    "booting from a disk...")
+  _msg_info \
+    "${_msg[*]}"
+  # "_make_$( \
+  #   _get_boot_loader \
+  #     "${bootmode}")" \
+  #   "${_volume}"
+  _make_common_bootmode \
+    "${bootmode}"
+  _make_kernel_on_isos
+  _make_memtest \
+    "${_volume}"
+  _msg=(
+    "Done! SYSLINUX set up for BIOS"
+    "booting from a disk successfully.")
+  _msg_info "${_msg[*]}"
 }
 
 # Prepares syslinux for booting from MBR on the ISO
 _make_bootmode_bios.syslinux.mbr_iso() {
-    _make_bootmode_bios.syslinux.mbr "iso"
+  _make_bootmode_bios.syslinux.mbr \
+    "iso"
 }
 
 # Prepares syslinux for booting from MBR on the ISO
 _make_bootmode_bios.syslinux.mbr_dongle_iso() {
-    _make_bootmode_bios.syslinux.mbr "dongle_iso"
+  _make_bootmode_bios.syslinux.mbr \
+    "dongle_iso"
 }
 
 ### BIOS ELTORITO
@@ -2620,18 +2632,24 @@ _make_bootmode_bios.syslinux.mbr_dongle_iso() {
 # Prepares GRUB for El-Torito booting on BIOS systems
 # $1: root file system for grub
 _make_bootmode_bios.grub.eltorito() {
-    local _volume="${1}" \
-          _bl \
-          _msg
-    _make_common_bootloader "${bootmode}"
-    # _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
-    _msg=("Setting up '${_boot_loader}' for '${_PLATFORM}' booting"
-          "from an optical disc...")
-    _msg_info "${_msg[*]}"
-    _make_grub_hybrid "${_volume}"
-    _make_common_bootmode "${_volume}" \
-                          "${_bootmode}"
-    _make_kernel_on_isos
+  local \
+    _volume="${1}" \
+    _bl \
+    _msg
+  _make_common_bootloader \
+    "${bootmode}"
+  # _bl="${work_dir}/BOOT${_CODE}.${_PLATFORM}" \
+  _msg=(
+    "Setting up '${_boot_loader}' for '${_PLATFORM}' booting"
+    "from an optical disc...")
+  _msg_info \
+    "${_msg[*]}"
+  _make_grub_hybrid \
+    "${_volume}"
+  _make_common_bootmode \
+    "${_volume}" \
+    "${_bootmode}"
+  _make_kernel_on_isos
 }
 
 # Prepares GRUB El Torito on BIOS for the ISO image
@@ -2825,10 +2843,13 @@ _get_bl_cfg() {
 # Get bootloader base directory in a volume
 # $1: boot loader
 _get_bl() {
-    local _boot_loader="${1}" \
-    [[ "${_boot_loader}" == "systemd-boot" ]] && \
-      _boot_loader="loader"
-    echo "${_boot_loader}"
+  local \
+    _boot_loader="${1}"
+  if [[ "${_boot_loader}" == "systemd-boot" ]]; then
+    _boot_loader="loader"
+  echo \
+    "${_boot_loader}"
+  fi
 }
 
 # Returns path for a profile boot loader configuration
@@ -2836,15 +2857,21 @@ _get_bl() {
 # $1: a volume
 # $2: a boot loader
 _get_bl_profile() {
-   local _volume="${1}" \
-         _boot_loader="${2}"
-         _dir
-   _dir="$(_get "${_volume}" \
-                "dir")"
-   [[ "${_boot_loader}" == "systemd-boot" ]] && \
+   local \
+     _volume="${1}" \
+     _boot_loader="${2}" \
+     _dir
+   _dir="$( \
+     _get \
+       "${_volume}" \
+       "dir")"
+   if [[ "${_boot_loader}" == "systemd-boot" ]]; then
       _dir="${_dir}/efiboot"
-    echo "${_dir}/$(_get_bl \
-                        "${_boot_loader}")"
+    echo \
+      "${_dir}/$( \
+        _get_bl \
+          "${_boot_loader}")"
+   fi
 }
 
 # Returns profile configuration files for a bootloader
@@ -2908,7 +2935,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
   # Calculate the required FAT image size in bytes
   _images=(
     "initramfs-*"
-    "vmlinuz-*")
+    "vmlinuz-*"
+  )
   for _query in "${_images[@]}"; do
       mapfile -t efi_boot_files < \
         <(find \
@@ -2938,12 +2966,12 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
 
 # Prepares systemd-boot for the ISO image
 _make_bootmode_uefi-x64.systemd-boot.esp_iso() {
-    _make_bootmode_uefi-x64.systemd-boot.esp
+  _make_bootmode_uefi-x64.systemd-boot.esp
 }
 
 # Prepares systemd-boot for the dongle ISO image
 _make_bootmode_uefi-x64.systemd-boot.esp_dongle() {
-    _make_bootmode_uefi-x64.systemd-boot.esp
+  _make_bootmode_uefi-x64.systemd-boot.esp
 }
 
 ### UEFI x64 ELTORITO
@@ -2978,12 +3006,14 @@ _make_bootmode_uefi-x64.grub.eltorito() {
 
 # Prepares GRUB El Torito for UEFI on the ISO image
 _make_bootmode_uefi-x64.grub.eltorito_iso() {
-  _make_bootmode_uefi-x64.grub.eltorito "iso"
+  _make_bootmode_uefi-x64.grub.eltorito \
+    "iso"
 }
 
 # Prepares GRUB El Torito for UEFI the dongle ISO image
 _make_bootmode_uefi-x64.grub.eltorito_dongle_iso() {
-  _make_bootmode_uefi-x64.grub.eltorito "dongle_iso"
+  _make_bootmode_uefi-x64.grub.eltorito \
+    "dongle_iso"
 }
 
 ## SYSTEMD-BOOT UEFI x64 ELTORITO
@@ -3016,67 +3046,20 @@ _make_bootmode_uefi-x64.systemd-boot.eltorito() {
   #   "${_bootable}" \
   #   "/${_cfg_path}"
   # _make_common_bootmode
-  _msg_info "Done!"
+  _msg_info \
+    "Done!"
 }
 
 # Prepares systemd-boot for El Torito booting on the ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_iso() {
-  _make_bootmode_uefi-x64.systemd-boot.eltorito "iso"
+  _make_bootmode_uefi-x64.systemd-boot.eltorito \
+    "iso"
 }
 
 # Prepares systemd-boot for El Torito booting on the dongle ISO
 _make_bootmode_uefi-x64.systemd-boot.eltorito_dongle_iso() {
-  _make_bootmode_uefi-x64.systemd-boot.eltorito "dongle_iso"
-}
-
-##################################
-# File system validate functions
-##################################
-
-# Checks for a missing program and suggests to install a package
-# $1: the command to check
-# $2: package to install if the command is missing
-_check_missing_cmd() {
-  local \
-    _cmd="${1}" \
-    _pkg="${2}"
-    _msg=() \
-  _msg=(
-    "Validating build mode '${_buildmode}':"
-    "${_cmd} is not available on this host."
-    "Install '${_pkg}'!")
-  if [[ "${_pkg}" == "" ]]; then
-    _pkg="${_cmd}"
-  fi
-  if ( ! command -v "${_cmd}" &> /dev/null ); then
-    (( validation_error=validation_error+1 )) \
-    _msg_error "${_msg[*]}" 0
-  fi
-}
-
-## File systems type support
-
-# BTRFS
-_validate_requirements_image_type_btrfs() {
-    _check_missing_cmd "mkfs.btrfs" "btrfs-progs"
-}
-
-
-# EROFS
-_validate_requirements_image_type_erofs() {
-    _check_missing_cmd "mkfs.erofs" "erofs-utils"
-}
-
-# EXT4
-_validate_requirements_image_type_ext4() {
-    _check_missing_cmd "mkfs.ext4" "e2fsprogs"
-    _check_missing_cmd "tune2fs" "e2fsprogs"
-}
-
-# FAT
-_validate_requirements_image_type_fat() {
-    _check_missing_cmd "mkfs.fat" "dosfstools"
-    _check_missing_cmd "mmd" "mtools"
+  _make_bootmode_uefi-x64.systemd-boot.eltorito \
+    "dongle_iso"
 }
 
 ##################################################
@@ -3100,22 +3083,12 @@ _validate_requirements_image_type() {
 
 ## Base image types
 
-# BTRFS airootfs
-_validate_requirements_airootfs_image_type_btrfs() {
-  _validate_requirements_image_type \
-   "btrfs"
-}
-
-# EROFS airootfs
-_validate_requirements_airootfs_image_type_erofs() {
-  _validate_requirements_image_type \
-   "erofs"
-}
-
-# EXT4 airootfs
-_validate_requirements_airootfs_image_type_ext4() {
-  _validate_requirements_image_type \
-    "ext4"
+_validate_requirements_airootfs_image_type() {
+  local \
+    _image_type="${1}"
+  if [[ "${_image_type}" == *"luks"* ]]; then
+    "_validate_requirements_airootfs_image_type_luks"
+  fi
 }
 
 # LUKS airootfs
@@ -3139,48 +3112,26 @@ _validate_requirements_airootfs_image_type_luks() {
       "${_key_auto}"
 }
 
-# SQUASHFS airootfs
-_validate_requirements_airootfs_image_type_squashfs() {
-  _validate_requirements_image_type \
-    "squashfs"
-}
-
-## 2-layered image types
-
-# EROFS over LUKS airootfs
-_validate_requirements_airootfs_image_type_erofs+luks() {
-  _validate_requirements_image_type \
-    "erofs+luks"
-}
-
-# EXT4 over SQUASHFS airootfs
-_validate_requirements_airootfs_image_type_ext4+squashfs() {
-  _validate_requirements_image_type \
-    "ext4+squashfs"
-}
-
-# SQUASHFS over LUKS airootfs
-_validate_requirements_airootfs_image_type_squashfs+luks() {
-  return
-}
-
-## 3-layered image types
-
-# EXT4 over SQUASHFS over LUKS airootfs
-_validate_requirements_airootfs_image_type_ext4+squashfs+luks() {
-  _validate_requirements_airootfs_image_type_luks
-}
-
 _validate_requirements_volume() {
   local \
     _volume="${1}" \
     _image_type="${2}"
   "_validate_requirements_${_image_type}"
-  "_validate_requirements_${_volume}_image_type_${_image_type}" || \
-    true
+  "_validate_requirements_${_volume}_image_type" \
+    "${_image_type}"
 }
 
 ### Persistent
+
+_validate_requirements_persistent_image_type() {
+  local \
+    _image_type="${1}"
+  if [[ "${_image_type}" == "ext4" ]] ||
+     [[ "${_image_type}" == "ext4+luks" ]]; then
+    "_validate_requirements_persistent_image_type_${_image_type}"
+  fi
+
+}
 
 ## Base image types
 
@@ -3995,29 +3946,15 @@ _validate_requirements() {
 # $1: a value in fs_images
 _validate_requirements_fs_image_type() {
   local \
-    _fs_image="${1}"
-  local \
-    _error_msg \
+    _fs_image="${1}" \
     _image_type
-    _validate_fun_error_msg=() \
-    _valid_fs_image_type
   _image_type="$(\
     _get \
       "${_fs_image}" \
       "image_type")"
-  _error_msg="Unsupported image type: '${_image_type}'"
-  _validate_requirements_image_type \
+  _validate_requirements_volume \
+    "${_fs_image}" \
     "${_image_type}"
-  _valid_fs_image_type="_validate_requirements_${_fs_image}_${_image_type}"
-  if typeset \
-       -f \
-       "${_valid_fs_image_type}"; then
-    "${_valid_fs_image_type}"
-  else
-    _msg_error \
-      "function '${_valid_fs_image_type}' not found" \
-      0
-  fi
 }
 
 _validate_common_requirements_buildmode_iso_netboot() {
@@ -4069,79 +4006,94 @@ _validate_requirements_buildmode_dongle() {
 }
 
 _validate_requirements_buildmode_iso() {
-    local _error_msg \
-          _msg=()
-          _validate_fun_error_msg=()
-    _validate_common_requirements_buildmode_iso_netboot
-    _validate_common_requirements_buildmode_all
-    # Check if the specified bootmodes are supported
-    if (( ${#bootmodes[@]} < 1 )); then
-        (( validation_error=validation_error+1 ))
-        _msg=("No boot modes specified in"
-              "'${profile_dir}/profiledef.sh'.")
-        _msg_error "${_msg[*]}" 0
-    fi
-    for bootmode in "${bootmodes[@]}"; do
-        _error_msg="${bootmode} is not a valid boot mode!"
-        _validate_fun_error_msg=(
-          "Validating the requirements of '${bootmode}' "
-          "boot mode will not be possible.")
-        _validate_requirements "make_bootmode_${bootmode}" \
-                               "bootmode" \
-                               "${bootmode}" \
-                               "${_error_msg}" \
-                               "${_validate_fun_error_msg[*]}"
-    done
-
-    _check_missing_cmd "awk"
-
-    # Check if the profile supports
-    # the specified persistent_image_type
-    _validate_requirements_fs_image_type \
-      "persistent"
+  local _error_msg \
+        _msg=()
+        _validate_fun_error_msg=()
+  _validate_common_requirements_buildmode_iso_netboot
+  _validate_common_requirements_buildmode_all
+  # Check if the specified bootmodes are supported
+  if (( ${#bootmodes[@]} < 1 )); then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "No boot modes specified in"
+      "'${profile_dir}/profiledef.sh'.")
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  for bootmode \
+    in "${bootmodes[@]}"; do
+    _error_msg="${bootmode} is not a valid boot mode!"
+    _validate_fun_error_msg=(
+      "Validating the requirements of '${bootmode}' "
+      "boot mode will not be possible.")
+    _validate_requirements \
+      "make_bootmode_${bootmode}" \
+      "bootmode" \
+      "${bootmode}" \
+      "${_error_msg}" \
+      "${_validate_fun_error_msg[*]}"
+  done
+  _check_cmd \
+    "awk"
+  # Check if the profile supports
+  # the specified persistent_image_type
+  _validate_requirements_fs_image_type \
+    "persistent"
 }
 
 _validate_requirements_buildmode_netboot() {
-    local _msg=() _override_cert_list=()
-
-    if [[ "${sign_netboot_artifacts}" == "y" ]]; then
-        # Check if the certificate files exist
-        for _cert in "${cert_list[@]}"; do
-            if [[ -e "${_cert}" ]]; then
-                _override_cert_list+=(
-                  "$(realpath -- "${_cert}")")
-            else
-                (( validation_error=validation_error+1 ))
-                _msg_error "File '${_cert}' does not exist." 0
-            fi
-        done
-        cert_list=("${_override_cert_list[@]}")
-        # Check if there are at least two certificate files
-        if (( ${#cert_list[@]} < 2 )); then
-            (( validation_error=validation_error+1 ))
-            _msg=("Two certificates are required for codesigning,"
-                  "but '${cert_list[*]}' is provided.")
-            _msg_error "${_msg[*]}" 0
-        fi
+  local \
+    _msg=() \
+    _override_cert_list=()
+  if [[ "${sign_netboot_artifacts}" == "y" ]]; then
+    # Check if the certificate files exist
+    for _cert \
+      in "${cert_list[@]}"; do
+      if [[ -e "${_cert}" ]]; then
+        _override_cert_list+=(
+          "$(realpath -- \
+               "${_cert}")")
+      else
+        (( validation_error=validation_error+1 ))
+        _msg_error \
+          "File '${_cert}' does not exist." \
+          0
+      fi
+    done
+    cert_list=(
+      "${_override_cert_list[@]}"
+    )
+    # Check if there are at least two certificate files
+    if (( ${#cert_list[@]} < 2 )); then
+      (( validation_error=validation_error+1 ))
+      _msg=(
+        "Two certificates are required for codesigning,"
+        "but '${cert_list[*]}' is provided.")
+      _msg_error \
+        "${_msg[*]}" \
+        0
     fi
-    _validate_common_requirements_buildmode_iso_netboot
-    _validate_common_requirements_buildmode_all
-    _check_missing_cmd "openssl"
+  fi
+  _validate_common_requirements_buildmode_iso_netboot
+  _validate_common_requirements_buildmode_all
+  _check_cmd \
+    "openssl"
 }
 
 # Add boot partition options to a xorrisofs options array
 # $@: array
 _add_xorrisofs_options_boot() {
-    local _img _xorrisofs_options=("$@")
-    boot_guid="${luks_guid}"
-    _img="$(_get_volume_img boot)"
-    [[ "${buildmode}" == "dongle" ]] && \
-      _img="$(_get_volume_img dongle_boot)"
-    _xorrisofs_options+=(
-      '-append_partition' '3'
-      "${boot_guid}"
-      "${_img}")
-    echo "${_xorrisofs_options[@]}"
+  local _img _xorrisofs_options=("$@")
+  boot_guid="${luks_guid}"
+  _img="$(_get_volume_img boot)"
+  [[ "${buildmode}" == "dongle" ]] && \
+    _img="$(_get_volume_img dongle_boot)"
+  _xorrisofs_options+=(
+    '-append_partition' '3'
+    "${boot_guid}"
+    "${_img}")
+  echo "${_xorrisofs_options[@]}"
 }
 
 # Add recovery partition options to a
