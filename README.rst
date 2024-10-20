@@ -197,4 +197,4 @@ Afterwards a tag can be verified from a clone of this repository:
 License
 =======
 
-Archiso is licensed under the terms of the **GPL-3.0-or-later** (see `LICENSE <LICENSE>`_).
+Archiso is licensed under the terms of the **AGPL-3.0-or-later** (see `LICENSE <LICENSE>`_).

@@ -323,42 +323,58 @@ _mkimg() {
 # $@: files
 # $#: destination as path in volume
 _install_dir_cmd(){
-    local _volume="${1}" \
-          _cmd \
-          _dir \
-          _dir_array=() \
-          _path=() \
-          _dirs=() \
-          _total_dirs=()
-    shift
-    _dirs=("${@}")
-    for _dir in "${_dirs[@]}"; do
-        _path=()
-        IFS="/" \
-          read -ra \
-               _dir_array <<< \
-            "${_dir}" 
-        for _dir in "${_dir_array[@]}"; do
-            _path+=(
-              "${_dir}")
-            _total_dirs+=(
-              "$(IFS="/" ; \
-                 echo "${_path[*]}")")
-        done
+  local \
+    _volume="${1}" \
+    _cmd \
+    _dir \
+    _dir_array=() \
+    _path=() \
+    _dirs=() \
+    _total_dirs=()
+  shift
+  _dirs=(
+    "$@"
+  )
+  for _dir \
+    in "${_dirs[@]}"; do
+    _path=()
+    IFS="/" \
+    read \
+      -ra \
+      _dir_array <<< \
+      "${_dir}" 
+    for _dir \
+      in "${_dir_array[@]}"; do
+      _path+=(
+        "${_dir}"
+      )
+      _total_dirs+=(
+        "$(IFS="/" ; \
+        echo \
+          "${_path[*]}")")
     done
-    _dirs=(
-      "${_total_dirs[@]}")
+  done
+  _dirs=(
+    "${_total_dirs[@]}"
+  )
+  _cmd=(
+    install \
+      -dm0755 --)
+  if [[ "${_volume}" == "efi_boot" ]]; then
     _cmd=(
-      install -d
-              -m 0755 --)
-    [[ "${_volume}" == "efi_boot" ]] && \
-      _cmd=(
-        mmd -D o
-            -i "$(_get "efi_boot" \
-                       "img")" --) \
-      _dirs=(
-        "${_dirs[@]/#/::}")
-    "${_cmd[@]}" "${_dirs[@]}"
+      mmd
+        -D
+          o
+        -i
+          "$(_get \
+               "efi_boot" \
+               "img")" --
+    )
+    _dirs=(
+      "${_dirs[@]/#/::}")
+  fi
+  "${_cmd[@]}" \
+    "${_dirs[@]}"
 }
 
 # Install public files to a given volume
@@ -366,41 +382,58 @@ _install_dir_cmd(){
 # $@: files
 # $#: destination as path in volume 
 _install_cmd(){
-    local _volume="${1}" \
-          _cmd \
-          _dest \
-          _files=() \
-          _root
+  local \
+    _volume="${1}" \
+    _cmd \
+    _dest \
+    _files=() \
+    _root
+  shift
+  while [ "${#}" -gt 1 ]; do
+    _files+=(
+      "${1}"
+    )
     shift
-    while [ "${#}" -gt 1 ]; do
-        _files+=(
-          "${1}")
-        shift
-    done
-    printf -v _dest \
-           '%s\n' \
-           "${1}"
-    [[ ! -d "${_dest}" ]] && \
-    [[ ! -d "$(dirname "${_dest}")" ]] && \
-      _install_dir_cmd "${_volume}" \
-                       "${_dest}"
-    if [[ "${_volume}" == "efi_boot" ]]; then
-        _root="$(_get "${_volume}" \
-                      "img")"
-          _cmd=(
-            mcopy -D o \
-                  -i "${_root}" --)
-          _dest="::${_dest}"
-    else
-        _root="$(_get "${_volume}" \
-                      "dir")"
-        _cmd=(
-          install -D
-                  -m 0644 --)
-        _dest="${_root}${_dest}"
-    fi
-    "${_cmd[@]}" "${_files[@]}" \
-                 "${_dest}"
+  done
+  printf \
+    -v \
+      _dest \
+    '%s\n' \
+    "${1}"
+  if [[ ! -d "${_dest}" ]] && \
+     [[ ! -d "$(dirname \
+                  "${_dest}")" ]]; then
+    _install_dir_cmd \
+      "${_volume}" \
+      "${_dest}"
+  fi
+  if [[ "${_volume}" == "efi_boot" ]]; then
+    _root="$( \
+      _get \
+        "${_volume}" \
+        "img")"
+    _cmd=(
+      mcopy
+        -D 
+          o
+        -i
+          "${_root}" --
+    )
+    _dest="::${_dest}"
+  else
+    _root="$( \
+      _get \
+        "${_volume}" \
+        "dir")"
+    _cmd=(
+      install
+        -Dm0644 --
+    )
+    _dest="${_root}${_dest}"
+  fi
+  "${_cmd[@]}" \
+    "${_files[@]}" \
+    "${_dest}"
 }
 
 # Install an encryption key in its
@@ -519,20 +552,36 @@ _set_volume_guid() {
 # Sets parameters for _mk<fs_image> functions
 # $1: value in fs_images
 _mkfs_common() {
-    local _volume="${1}"
-    _name="$(_get_volume_name "${_volume}")"
-    _dir="$(_get "${_volume}" \
-                 "dir")"
-    _epoch="$(_get_epoch "${_fs_image}")"
-    _encryption_key="$(_get "${_volume}" \
-                            "encryption_key")"
-    _label="$(_get_iso_partition_label "${_volume}")"
-    _size="$(_get "${_volume}" \
-                  "size")"
-    _image_path="$(_get_volume_img "${_volume}")"
-    _grub="false"
-    _writable="false"
-    _set_volume_guid "${_volume}"
+  local \
+    _volume="${1}"
+  _name="$( \
+    _get_volume_name \
+    "${_volume}")"
+  _dir="$(\
+    _get \
+      "${_volume}" \
+      "dir")"
+  _epoch="$( \
+    _get_epoch \
+      "${_fs_image}")"
+  _encryption_key="$( \
+    _get \
+      "${_volume}" \
+      "encryption_key")"
+  _label="$( \
+    _get_iso_partition_label \
+      "${_volume}")"
+  _size="$( \
+    _get \
+      "${_volume}" \
+      "size")"
+  _image_path="$( \
+    _get_volume_img \
+      "${_volume}")"
+  _grub="false"
+  _writable="false"
+  _set_volume_guid \
+    "${_volume}"
 }
 
 ### Main ISO volumes
@@ -541,53 +590,83 @@ _mkfs_common() {
 
 # Returns destination airootfs image path
 _get_airootfs_dir() {
-    echo "$(_get "iso" \
-                 "dir")/$(_get "install" \
-                               "dir")/${arch}"
+  echo \
+    "$(_get \
+         "iso" \
+         "dir")/$( \
+         _get \
+           "install" \
+           "dir")/${arch}"
 }
 
 # Returns path of airootfs image in work directory
 _get_airootfs_img(){
-    echo "$(_get_airootfs_dir)/airootfs.$(_get_fs_ext "airootfs")"
+  echo \
+    "$(_get_airootfs_dir)/airootfs.$( \
+         _get_fs_ext \
+           "airootfs")"
 }
 
 # Returns ISO airootfs image path
 _get_airootfs_path(){
-    echo "$(_get "install" \
-                 "dir")/${arch}/airootfs.$(_get_fs_ext "airootfs")"
+  echo \
+    "$(_get \
+         "install" \
+         "dir")/${arch}/airootfs.$( \
+         _get_fs_ext \
+           "airootfs")"
 }
 
 # Evaluate expected airootfs size given an input volume
 # $1: volume from which to guess the airootfs size
 _get_airootfs_size() {
-    local _volume="${1}"
-    echo $(( $(_get_size "$(_get "${_volume}" \
-                                 "dir")") + 200000 ))
+  local \
+    _volume="${1}"
+  echo \
+    "$(( $(_get_size \
+            "$(_get \
+                 "${_volume}" \
+                 "dir")") + \
+        200000 ))"
 }
 
 # Sets correct airootfs given an input volume
 # $1: volume to use to set the airootfs size
 _set_airootfs_size() {
-    local _root="${1}" \
-          _volume="airootfs"
-    _set "${_volume}" \
-         "size" \
-         "$("_get_${_volume}_size" "${_root}")"
+  local \
+    _root="${1}" \
+    _volume="airootfs"
+  _set \
+    "${_volume}" \
+    "size" \
+    "$("_get_${_volume}_size" \
+         "${_root}")"
 }
 
 # Produces airootfs image
 _mkairootfs() {
-    _mkfs_common "airootfs"
-    _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _dir="$(_get "pacstrap" \
-                 "dir")"
-    _image_path="$(_get_airootfs_img)"
-    _auto_size=""
-    [[ -e "${_dir}" ]] || \
-      _msg_error "The path '${_dir}' does not exist" 1
-    install -d -m 0755 -- "$(_get "airootfs" \
-                                  "dir")"
-    _mkimg "airootfs"
+  _mkfs_common \
+    "airootfs"
+  _mkfs_options=(\
+    "${airootfs_image_tool_options[@]}")
+  _dir="$( \
+    _get \
+      "pacstrap" \
+      "dir")"
+  _image_path="$( \
+    _get_airootfs_img)"
+  _auto_size=""
+  [[ -e "${_dir}" ]] || \
+    _msg_error \
+      "The path '${_dir}' does not exist" \
+      1
+  install \
+    -dm0755 -- \
+    "$(_get \
+         "airootfs" \
+         "dir")"
+  _mkimg \
+    "airootfs"
 }
 
 ## EFI System Partition (ESP)
@@ -596,46 +675,55 @@ _mkairootfs() {
 # will serve as the EFI system partition
 # $1: image size in bytes
 _mkefi_boot() {
-    _mkfs_common "efi_boot"
-    _label="ARCHISO_EFI"
-    _size="$(du -bcs -- \
-                "${efi_boot_files[@]}" 2>/dev/null | \
-               awk 'END { print $1 }')"
-    _mkimg "efi_boot"
-    # Create the default/fallback boot path in
-    # which boot loaders will be placed later.
-    # _install_dir_cmd "efi_boot" \
-    #                  "/EFI" \
-    #                  "/EFI/BOOT"
-    # ^ These should not be needed anymore due
-    #   to directory recursively created
-    #   in _install_dir_cmd
+  _mkfs_common \
+    "efi_boot"
+  _label="ARCHISO_EFI"
+  _size="$( \
+    du \
+      -bcs -- \
+      "${efi_boot_files[@]}" 2>/dev/null | \
+      awk \
+        'END { print $1 }')"
+  _mkimg \
+    "efi_boot"
+  # Create the default/fallback boot path in
+  # which boot loaders will be placed later.
+  # _install_dir_cmd "efi_boot" \
+  #                  "/EFI" \
+  #                  "/EFI/BOOT"
+  # ^ These should not be needed anymore due
+  #   to directory recursively created
+  #   in _install_dir_cmd
 }
 
 ## Persistent (the user data partition)
 
 # Builds persistent partition image
 _mkpersistent() {
-    _mkfs_common "persistent"
-    _writable="true"
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _grub="false"
-    else
-        _grub="true"
-    fi
-    _auto_size=""
-    persistent_epoch="${_epoch}"
-    _mkimg "persistent"
+  _mkfs_common \
+    "persistent"
+  _writable="true"
+  if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _grub="false"
+  else
+    _grub="true"
+  fi
+  _auto_size=""
+  persistent_epoch="${_epoch}"
+  _mkimg \
+    "persistent"
 }
 
 ## Swap (on-disk virtual memory partition)
 
 # Parameters for _mkswap_<fs_type> functions
 _mkswap() {
-    _mkfs_common "swap"
-    _writable="true"
-    _auto_size=""
-    _mkimg "swap"
+  _mkfs_common \
+    "swap"
+  _writable="true"
+  _auto_size=""
+  _mkimg \
+    "swap"
 }
 
 ### Dongle ISO volumes
@@ -644,45 +732,60 @@ _mkswap() {
 
 # Returns workdir airootfs image path
 _get_keys_img(){
-    echo "$(_get "dongle_isofs" \
-                 "dir")/${_name}.$(_get_fs_ext "keys")"
+  echo \
+    "$(_get \
+         "dongle_isofs" \
+         "dir")/${_name}.$( \
+         _get_fs_ext \
+           "keys")"
 }
 
 # Builds keys image
 _mkkeys() {
-    _mkfs_common "keys"
-    _mkfs_options=("${keys_image_tool_options[@]}")
-    _image_path="$(_get_keys_img)"
-    _auto_size=""
-    _mkimg "keys"
+  _mkfs_common \
+    "keys"
+  _mkfs_options=(
+    "${keys_image_tool_options[@]}"
+  )
+  _image_path="$( \
+    _get_keys_img)"
+  _auto_size=""
+  _mkimg \
+    "keys"
 }
 
 ## Dongle boot (encrypted boot partition)
 
 # Builds dongle boot partition image
 _mkdongle_boot() {
-    _mkfs_common "dongle_boot"
-    _grub="true"
-    _mkimg "boot"
+  _mkfs_common \
+    "dongle_boot"
+  _grub="true"
+  _mkimg \
+    "boot"
 }
 
 ## Dongle persistent (user data partition)
 
 # Parameters for _mkdongle_persistent_<fs_type> functions
 _mkdongle_persistent() {
-    _mkfs_common "dongle_persistent"
-    _writable="true"
-    _mkimg "dongle_persistent"
+  _mkfs_common \
+    "dongle_persistent"
+  _writable="true"
+  _mkimg \
+    "dongle_persistent"
 }
 
 ## Dongle swap (on-disk virtual memory partition)
 
 # Parameters for _mkdongle_swap_<fs_type> functions
 _mkdongle_swap() {
-    _mkfs_common "dongle_swap"
-    _writable="true"
-    _auto_size=""
-    _mkimg "dongle_swap"
+  _mkfs_common \
+    "dongle_swap"
+  _writable="true"
+  _auto_size=""
+  _mkimg \
+    "dongle_swap"
 }
 
 ## Recovery (airootfs but onto a partition to boot
@@ -690,33 +793,49 @@ _mkdongle_swap() {
 
 # Parameters for _mkrecovery_<fs_type> functions
 _mkrecovery() {
-    _mkfs_common "recovery"
-    _mkfs_options=("${airootfs_image_tool_options[@]}")
-    _dir="${pacstrap_dir}"
-    _grub=true
-    _auto_size=""
-    [[ -e "${_dir}" ]] || \
-      _msg_error "The path '${_dir}' does not exist" 1
-    _mkimg "dongle_swap"
+  _mkfs_common \
+    "recovery"
+  _mkfs_options=(
+    "${airootfs_image_tool_options[@]}"
+  )
+  _dir="${pacstrap_dir}"
+  _grub=true
+  _auto_size=""
+  if [[ ! -e "${_dir}" ]]; then
+    _msg_error \
+      "The path '${_dir}' does not exist" \
+      1
+  fi
+  _mkimg \
+    "dongle_swap"
 }
 
 ### Image integrity checking functions
 
 # Returns a file SHA512 checksum
 _mkchecksum() {
-    local _file
-    local _dir
-    local _name
-    _file="${1}"
-    _dir=$(dirname "${_file}")
-    _name=$(basename "${_file%.*}")
-
-    cd -- "${_dir}"
-    if [[ -e "${_file}" ]]; then
-        _msg_info "Creating checksum of ${_file} for self-test..."
-        sha512sum "$(basename "${_file}")" > "${_name}.sha512"
-    fi
-    cd -- "${OLDPWD}"
+  local \
+    _file="${1}" \
+    _dir \
+    _name
+  _dir=$( \
+    dirname \
+      "${_file}")
+  _name=$( \
+    basename \
+      "${_file%.*}")
+  cd -- \
+    "${_dir}"
+  if [[ -e "${_file}" ]]; then
+    _msg_info \
+      "Creating checksum of ${_file} for self-test..."
+    sha512sum \
+      "$(basename \
+           "${_file}")" > \
+      "${_name}.sha512"
+  fi
+  cd -- \
+    "${OLDPWD}"
 }
 
 # GPG signs a file
@@ -818,30 +937,6 @@ _make_crypttab() {
                             "dir")/etc/crypttab"
 }
 
-# Generates an encryption key when the "auto" value
-# has been specified for an <image>_encryption_key
-# variable in profiledef.sh
-# $1: output file path
-# $2: mode (binary/random plain)
-_gen_key() {
-    local _out="${1}" \
-          _mode="${2}" \
-          _Mode
-    if [ "${_mode}" == "binary" ]; then
-        _Mode="Binary key file"
-        dd if=/dev/random \
-           bs=512 \
-           count=1 \
-           of="${_out}" > /dev/null 2>&1
-    elif [ "${_mode}" == "plain" ]; then
-        _Mode="Random plaitext password"
-        printf "%s" \
-               "$(tr -dc A-Za-z0-9 </dev/urandom | \
-                    head -c 20 ; \
-                    echo '')" > "${_out}"
-    fi
-    _msg_info "${_Mode} for ${_volume}"
-}
 
 # Parse encryption key variable value for a
 # file system image.
@@ -2809,26 +2904,36 @@ _make_bootmode_uefi-x64.grub.esp_dongle_iso() {
 ## SYSTEMD-BOOT UEFI x64 ESP
 
 _make_systemd-boot() {
-    local _out="${1}" \
-          _bootmode="${2}" \
-          _root="pacstrap" \
-          _bl \
-          _filename \
-          _lib \
-          _root \
-    _lib="/usr/lib/systemd/boot"
-    _filename="$(_get_bootloader \
-                     "${_bootmode}")$(_get_arch_code \
-                                          "${_bootmode}").$(_get_platform \
-                                                                "${_bootmode}")"
-    _bl="$(_get "${_root}" \
-                "dir")${_lib}/$(_get_platform \
-                                    "${_bootmode}")/${_filename}"
-    [ -d "${_out}" ] && \
-      _out="${_out}/$(_get_standalone_name \
-                          "${_bootmode}")"
-    cp "${_bl}" \
-       "${_out}"
+  local \
+    _out="${1}" \
+    _bootmode="${2}" \
+    _root="pacstrap" \
+    _bl \
+    _filename \
+    _lib \
+    _root \
+  _lib="/usr/lib/systemd/boot"
+  _filename="$( \
+    _get_bootloader \
+      "${_bootmode}")$( \
+        _get_arch_code \
+          "${_bootmode}").$( \
+            _get_platform \
+              "${_bootmode}")"
+  _bl="$(\
+    _get \
+      "${_root}" \
+      "dir")${_lib}/$( \
+        _get_platform \
+          "${_bootmode}")/${_filename}"
+  if [ -d "${_out}" ]; then
+    _out="${_out}/$( \
+      _get_standalone_name \
+        "${_bootmode}")"
+  fi
+  cp \
+    "${_bl}" \
+    "${_out}"
 }
 
 # Returns bootloader configuration files directory
@@ -3079,17 +3184,27 @@ _validate_requirements_image_type() {
     "${_mkimg_opts[@]}"
 }
 
+_validate_requirements_volume() {
+  local \
+    _volume="${1}" \
+    _image_type="${2}"
+  _validate_requirements_image_type \
+    "${_image_type}"
+  "_validate_requirements_${_volume}" \
+    "${_image_type}"
+}
+
 ### Airootfs
 
-## Base image types
-
-_validate_requirements_airootfs_image_type() {
+_validate_requirements_airootfs() {
   local \
     _image_type="${1}"
   if [[ "${_image_type}" == *"luks"* ]]; then
-    "_validate_requirements_airootfs_image_type_luks"
+    _validate_requirements_airootfs_image_type_luks
   fi
 }
+
+## Base image types
 
 # LUKS airootfs
 _validate_requirements_airootfs_image_type_luks() {
@@ -3104,26 +3219,16 @@ _validate_requirements_airootfs_image_type_luks() {
     _get \
       "airootfs" \
       "encryption_key_auto")"
-  _validate_requirements_image_type \
-    "luks"
   [[ -n "${_encryption_key}" ]] && \
     _resolve_fs_encryption_key \
       "airootfs" \
       "${_key_auto}"
 }
 
-_validate_requirements_volume() {
-  local \
-    _volume="${1}" \
-    _image_type="${2}"
-  "_validate_requirements_${_image_type}"
-  "_validate_requirements_${_volume}_image_type" \
-    "${_image_type}"
-}
 
 ### Persistent
 
-_validate_requirements_persistent_image_type() {
+_validate_requirements_persistent() {
   local \
     _image_type="${1}"
   if [[ "${_image_type}" == "ext4" ]] ||
@@ -3145,8 +3250,6 @@ _validate_requirements_persistent_image_type_ext4() {
   _etc="${profile_dir}/airootfs/etc"
   _ro_rule="${_etc}/udev/rules.d/98_persistent.rules"
   _dongle_ro_rule="${_etc}/udev/rules.d/99_donglepersistent.rules"
-  # _validate_requirements_image_type \
-  #   "ext4"
   if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
     _msg=(
       "Persistent image not encrypted."
@@ -3189,8 +3292,6 @@ _validate_requirements_persistent_image_type_ext4+luks() {
   local \
     _volume="persistent" \
     _msg=()
-  # _validate_requirements_image_type \
-  #   "ext4+luks"
   "_validate_requirements_${_volume}_image_type_ext4"
   if [ ! -e "$(_get_crypttab \
                  "profile")" ]; then
@@ -3251,7 +3352,9 @@ _validate_requirements_bootmode_bios.grub.eltorito() {
 
 # SYSLINUX BIOS MBR
 _validate_requirements_bootmode_bios.syslinux.mbr() {
-  local _msg
+  local \
+    _msg \
+    _conf_file
   # bios.syslinux.mbr requires bios.syslinux.eltorito
   # shellcheck disable=SC2076
   if [[ ! " ${bootmodes[*]} " =~ ' bios.syslinux.eltorito ' ]]; then
@@ -3264,7 +3367,6 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
       "${_msg[*]}" \
       0
   fi
-
   # Check if the syslinux package is in the package list
   # shellcheck disable=SC2076
   if [[ ! " ${pkg_list[*]} " =~ ' syslinux ' ]]; then
@@ -3287,10 +3389,9 @@ _validate_requirements_bootmode_bios.syslinux.mbr() {
       "${_msg[*]}" \
       0
   else
-    local cfgfile
-    for cfgfile \
+    for _conf_file \
       in "${profile_dir}/syslinux/"*'.cfg'; do
-      if [[ -e "${cfgfile}" ]]; then
+      if [[ -e "${_conf_file}" ]]; then
         break
       else
         (( validation_error=validation_error+1 ))
@@ -3326,7 +3427,8 @@ _validate_requirements_bootmode_bios.syslinux.eltorito() {
 #### UEFI
 
 _validate_common_requirements_bootmode_uefi(){
-  _validate_requirements_image_type_fat
+  _validate_requirements_image_type \
+    "fat"
 }
 
 ### UEFI x64
@@ -3339,95 +3441,113 @@ _validate_requirements_bootmode_uefi-x64.grub.esp() {
   _conflict_msg=(
     "Validating '${bootmode}':"
     "cannot be used with bootmode"
-    "uefi-x64.systemd-boot.esp!")
+    "uefi-x64.systemd-boot.esp!"
+  )
   _no_efi_shell_msg=(
     "'edk2-shell' is not in the package list."
-    "The ISO will not contain a bootable UEFI shell.")
+    "The ISO will not contain a bootable UEFI shell."
+  )
   _validate_common_requirements_bootmode_uefi
   # shellcheck disable=SC2076
   if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.esp ' ]]; then
-      _msg_error "${_conflict_msg[*]}" 0
+    _msg_error \
+      "${_conflict_msg[*]}" \
+      0
   fi
-
   # Check for optional packages
   # shellcheck disable=SC2076
   if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
-      _msg_info "${_no_efi_shell_msg[*]}'"
+    _msg_info \
+      "${_no_efi_shell_msg[*]}'"
   fi
 }
 
 # GRUB UEFI x64 ELTORITO
 _validate_requirements_bootmode_uefi-x64.grub.eltorito() {
-    local _msg=()
-    _msg=(
-      "Validating '${bootmode}': cannot be used with bootmode"
-      "uefi-x64.systemd-boot.eltorito!")
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]]; then
-        _msg_error "${_msg[*]}" 0
-    fi
-    # uefi-x64.grub.eltorito has the exact same requirements
-    # as uefi-x64.grub.esp
-    _validate_requirements_bootmode_uefi-x64.grub.esp
+  local \
+    _msg=()
+  _msg=(
+    "Validating '${bootmode}':"
+    "cannot be used with bootmode"
+    "uefi-x64.systemd-boot.eltorito!"
+  )
+  # shellcheck disable=SC2076
+  if [[ " ${bootmodes[*]} " =~ ' uefi-x64.systemd-boot.eltorito ' ]]; then
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  # uefi-x64.grub.eltorito has the exact same requirements
+  # as uefi-x64.grub.esp
+  _validate_requirements_bootmode_uefi-x64.grub.esp
 }
 
 ## SYSTEMD-BOOT
 
 ## SYSTEMD-BOOT UEFI x64 ESP
 _validate_requirements_bootmode_uefi-x64.systemd-boot.esp() {
-    local _msg=()
-    # shellcheck disable=SC2076
-    if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
+  local \
+    _msg=() \
+    _conf_file
+  # shellcheck disable=SC2076
+  if [[ " ${bootmodes[*]} " =~ ' uefi-x64.grub.esp ' ]]; then
+    _msg=(
+      "Validating '${bootmode}':"
+      "cannot be used with bootmode uefi-x64.grub.esp!"
+    )
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  fi
+  _validate_common_requirements_bootmode_uefi
+  # Check if systemd-boot configuration files exist
+  if [[ ! -d "${profile_dir}/efiboot/loader/entries" ]]; then
+    (( validation_error=validation_error+1 ))
+    _msg=(
+      "Validating '${bootmode}':"
+      "The '${profile_dir}/efiboot/loader/entries'"
+      "directory is missing!"
+    )
+    _msg_error \
+      "${_msg[*]}" \
+      0
+  elif [[ -d "${profile_dir}/efiboot/loader/entries" ]]; then
+    if [[ ! -e "${profile_dir}/efiboot/loader/loader.conf" ]]; then
+      (( validation_error=validation_error+1 ))
       _msg=(
         "Validating '${bootmode}':"
-        "cannot be used with bootmode uefi-x64.grub.esp!"
+        "File '${profile_dir}/efiboot/loader/loader.conf'"
+        "not found!"
       )
       _msg_error \
         "${_msg[*]}" \
         0
     fi
-    _validate_common_requirements_bootmode_uefi
-    # Check if systemd-boot configuration files exist
-    if [[ ! -d "${profile_dir}/efiboot/loader/entries" ]]; then
-      (( validation_error=validation_error+1 ))
-      _msg=(
-        "Validating '${bootmode}':"
-        "The '${profile_dir}/efiboot/loader/entries'"
-        "directory is missing!"
-      _msg_error \
-        "${_msg[*]}" \
-        0
-    else
-        [[ ! -e "${profile_dir}/efiboot/loader/loader.conf" ]] && \
-          (( validation_error=validation_error+1 )) \
-          _msg=(
-            "Validating '${bootmode}':"
-            "File '${profile_dir}/efiboot/loader/loader.conf'"
-            "not found!") && \
-          _msg_error "${_msg[*]}" 0
-        local conffile
-        for conffile in "${profile_dir}/efiboot/loader/entries/"*'.conf'; do
-            if [[ -e "${conffile}" ]]; then
-                break
-            else
-                (( validation_error=validation_error+1 ))
-                _msg=(
-                  "Validating '${bootmode}':"
-                  "No configuration file found in"
-                  "'${profile_dir}/efiboot/loader/entries/'!")
-            _msg_error "${_msg[*]}" 0
-            fi
-        done
-    fi
-
-    # Check for optional packages
-    # shellcheck disable=SC2076
-    if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
+    for _conf_file \
+      in "${profile_dir}/efiboot/loader/entries/"*'.conf'; do
+      if [[ -e "${_conf_file}" ]]; then
+        break
+      else
+        (( validation_error=validation_error+1 ))
         _msg=(
-          "'edk2-shell' is not in the package list."
-          "The ISO will not contain a bootable UEFI shell.")
-        _msg_info "${_msg[*]}"
-    fi
+          "Validating '${bootmode}':"
+          "No configuration file found in"
+          "'${profile_dir}/efiboot/loader/entries/'!")
+        _msg_error \
+          "${_msg[*]}" \
+          0
+      fi
+    done
+  fi
+  # Check for optional packages
+  # shellcheck disable=SC2076
+  if [[ ! " ${pkg_list[*]} " =~ ' edk2-shell ' ]]; then
+    _msg=(
+      "'edk2-shell' is not in the package list."
+      "The ISO will not contain a bootable UEFI shell.")
+    _msg_info \
+      "${_msg[*]}"
+  fi
 }
 
 # SYSTEMD-BOOT UEFI64 ELTORITO
@@ -3796,7 +3916,6 @@ _validate_requirements_persistent_image_type_ext4() {
     local _rules="${_etc}/udev/rules.d"
     local _ro_rule="${_rules}/98_persistent.rules"
     local _dongle_ro_rule="${_rules}/99_donglepersistent.rules"
-    _validate_requirements_image_type_ext4
     if [[ ! " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _msg=("Persistent image not encrypted."
               "Be sure not to put sensitive data"
@@ -3820,15 +3939,15 @@ _validate_requirements_persistent_image_type_ext4() {
 }
 
 _validate_requirements_persistent_image_type_ext4+luks() {
-    local _crypttab="${profile_dir}/airootfs/etc/crypttab" \
-          _msg=()
-    _validate_requirements_image_type_luks
-    _validate_requirements_persistent_image_type_ext4
-    [ ! -e "${_crypttab}" ] && \
-      (( validation_error=validation_error+1 )) \
-      _msg=("Validating '${persistent_image_type}'"
-            "for persistent partition: crypttab not found!") && \
-      _msg_error "${_msg[*]}" 0
+  local \
+    _crypttab \
+    _msg=()
+  _crypttab="${profile_dir}/airootfs/etc/crypttab"
+  [ ! -e "${_crypttab}" ] && \
+    (( validation_error=validation_error+1 )) \
+    _msg=("Validating '${persistent_image_type}'"
+          "for persistent partition: crypttab not found!") && \
+    _msg_error "${_msg[*]}" 0
 }
 
 ### Buildmodes
@@ -4001,7 +4120,8 @@ _validate_requirements_buildmode_dongle() {
       "Dongle buildmode active but root file system "
       "encryption disabled."
     )
-    _msg_warning "${_msg[*]}"
+    _msg_warning \
+      "${_msg[*]}"
   fi
 }
 
@@ -4826,64 +4946,6 @@ _validate_options() {
         _msg_error "${_msg[*]}" 1
     fi
     _msg_info "Done!"
-}
-
-# Assign value to variable if empty
-# $1: variable
-# $2: value
-_set_no_override() {
-    local _var="${1}"
-    local _value="${2}"
-    ([[ "${!_var}" == "" ]] || \
-     (! declare -p "${_var}" &> /dev/null)) && \
-      printf -v "${_var}" "${_value}"
-}
-
-# Re-assign an object variable to an override
-# variable is defined; otherwise it defaults
-# to an input default
-# $1: object
-# $2: variable
-# $3: default value
-_set_override() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _default="${3}"
-    if [[ -v "override_${_obj}_${_var}" ]]; then
-        _set "${_obj}" \
-             "${_var}" \
-             "$(_get "override_${obj}" \
-                     "${_var}")"
-    elif [[ -z "$(_get "${_obj}" \
-                       "${_var}")" ]]; then
-        _set "${_obj}" \
-             "${_var}" \
-             "${_default}"
-    fi
-}
-
-# Re-assign an object variable pointing to
-# a path if an override variable is defined,
-# otherwise it defaults to an input path
-# $1: object
-# $2: variable
-# $3: value (a path) 
-_override_path() {
-    local _obj="${1}" \
-          _var="${2}" \
-          _value="${3}" \
-          _path
-    _path="$(realpath -q -- "${_value}" || 
-             true)"
-    [[ "${_path}" == "" ]] && \
-      _msg_error "${_value} is not a valid path." 1
-    _set_override "${_obj}" \
-                  "${_var}" \
-                  "${_value}"
-    _set "${_obj}" \
-         "${_var}" \
-         "$(realpath -- "$(_get "${_obj}" \
-                                "${_var}")")"
 }
 
 # Override a volume directory if an override
