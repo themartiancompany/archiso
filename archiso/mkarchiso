@@ -358,7 +358,7 @@ _install_dir_cmd(){
     "${_total_dirs[@]}"
   )
   _cmd=(
-    install \
+    install
       -dm0755 --)
   if [[ "${_volume}" == "efi_boot" ]]; then
     _cmd=(
@@ -368,7 +368,8 @@ _install_dir_cmd(){
         -i
           "$(_get \
                "efi_boot" \
-               "img")" --
+               "img")"
+        --
     )
     _dirs=(
       "${_dirs[@]/#/::}")
@@ -417,7 +418,8 @@ _install_cmd(){
         -D 
           o
         -i
-          "${_root}" --
+          "${_root}"
+        --
     )
     _dest="::${_dest}"
   else
@@ -442,20 +444,26 @@ _install_cmd(){
 #     'fs_images')
 # $2: encryption key to install
 _install_key() {
-    local _volume="${1}" \
-          _key="${2}" \
-          _dest
-    _dest="$(_get "${_dest}" \
-                  "dir")"
-    _install_dir_cmd "${_volume}" \
-                     "/etc"
-    install -d \
-            -m 700 \
-            "${_dest}/etc/cryptsetup-keys.d"
-    install -D \
-            -m 400 \
-            "${_key}" \
-            "${_dest}/etc/cryptsetup-keys.d"
+  local \
+    _volume="${1}" \
+    _key="${2}" \
+    _dest
+  _dest="$( \
+    _get \
+      "${_dest}" \
+      "dir")"
+  _install_dir_cmd \
+    "${_volume}" \
+    "/etc"
+  install \
+    -d \
+    -m700 \
+    "${_dest}/etc/cryptsetup-keys.d"
+  install \
+    -D \
+    -m400 \
+    "${_key}" \
+    "${_dest}/etc/cryptsetup-keys.d"
 }
 
 ### Utility fuctions
@@ -464,33 +472,47 @@ _install_key() {
 # a given file system image, ignoring LUKS
 # $1: a value in the 'fs_images' array
 _get_fs_type() {
-    local _volume="${1}" \
-          _tmp
-    _tmp="$(_get "${_volume}" \
-                 "image_type")"
-    _tmp="${_tmp%%+luks}"
-    echo "${_tmp##*"+"}"
+  local \
+    _volume="${1}" \
+    _tmp
+  _tmp="$( \
+    _get \
+      "${_volume}" \
+      "image_type")"
+  _tmp="${_tmp%%+luks}"
+  echo \
+    "${_tmp##*"+"}"
 }
 
 # Returns the extension for a given file system image
 # $1: a value in 'fs_images' (airootfs, persistent, ...)
 _get_fs_ext() {
-    local _volume="${1}"
-    local _fs_type
-    _fs_type=$(_get_fs_type "${_volume}")
-    if [ "${_fs_type}" = "squashfs" ]; then
-        echo "sfs"
-    else
-        echo "${_fs_type}"
-    fi
+  local \
+    _volume="${1}" \
+    _fs_type
+  _fs_type=$( \
+    _get_fs_type \
+      "${_volume}")
+  if [ "${_fs_type}" = "squashfs" ]; then
+    echo \
+      "sfs"
+  else
+    echo \
+      "${_fs_type}"
+  fi
 }
 
 # Returns <image filename/device mapper name>
 # for a given file system image.
 # $1: a value in 'fs_images' array
 _get_volume_name() {
-    local _volume="${1}"
-    echo "${_volume}" | tr -d '_'
+  local \
+    _volume="${1}"
+  echo \
+    "${_volume}" | \
+    tr \
+      -d \
+        '_'
 }
 
 # Produces canonical path for an image file
@@ -498,55 +520,76 @@ _get_volume_name() {
 # (i.e. efi_boot -> <work_dir>/efiboot.img)
 # $1: value in fs_images
 _get_volume_img() {
-    local _volume="${1}" \
-          _ext \
-          _volume_name
-    _volume_name="$(_get_volume_name "${_volume}")"
-    _ext="$(_get_fs_ext "${_volume}")"
-    echo "$(_get "work" \
-                 "dir")/${_volume_name}.${_ext}"
+  local \
+    _volume="${1}" \
+    _ext \
+    _volume_name
+  _volume_name="$( \
+    _get_volume_name \
+      "${_volume}")"
+  _ext="$( \
+    _get_fs_ext \
+      "${_volume}")"
+  echo \
+    "$(_get \
+         "work" \
+         "dir")/${_volume_name}.${_ext}"
 }
 
 # Returns partition label for a physical partition
 # $1: value in fs_images
 _get_iso_partition_label() {
-    local _image="${1}" \
-          _label=("${iso_label}") \
-          _suffix
-    _suffix="$(echo "${_image}" | \
-                 tr '[:lower:]' '[:upper:]')"
-    [[ "${_suffix}" != "" ]] && \
-    [[ "${_suffix}" != "airootfs" ]] && \
-      _label+=("${_suffix}")
-    echo "$(IFS=, ; \
-            echo "${_label[*]}")" 
+  local \
+    _image="${1}" \
+    _label=("${iso_label}") \
+    _suffix
+  _suffix="$( \
+    echo \
+      "${_image}" | \
+      tr \
+        '[:lower:]' '[:upper:]')"
+  [[ "${_suffix}" != "" ]] && \
+  [[ "${_suffix}" != "airootfs" ]] && \
+    _label+=(
+      "${_suffix}")
+  echo \
+    "$(IFS=, ; \
+       echo \
+         "${_label[*]}")" 
 }
 
 _set_volume_dir() {
-    local _volume="${1}"
-    _set "${_volume}" \
-         "dir" \
-         "$(_get "work" \
-                 "dir")/${_volume}"
+  local \
+    _volume="${1}"
+  _set \
+    "${_volume}" \
+    "dir" \
+    "$(_get \
+         "work" \
+         "dir")/${_volume}"
 }
 
 # Sets correct file system guid given type
 _set_volume_guid() {
-    local _volume="${1}" \
-          _guid \
-          _image_type
-    _image_type="$(_get "${_volume}" \
-                        "image_type")"
-    if [[ "${_image_type}" == *"luks" ]]; then
-        _guid="${luks_guid}"
-    elif [[ "${_image_type}" == *swap ]]; then
-        _guid="${swap_guid}"
-    elif [[ "${_image_type}" == *ext4 ]]; then
-        _guid="${linux_guid};"
-    fi
-    _set "${_volume}" \
-         "guid" \
-         "${_guid}"
+  local \
+    _volume="${1}" \
+    _guid \
+    _image_type
+  _image_type="$( \
+    _get \
+      "${_volume}" \
+      "image_type")"
+  if [[ "${_image_type}" == *"luks" ]]; then
+    _guid="${luks_guid}"
+  elif [[ "${_image_type}" == *swap ]]; then
+    _guid="${swap_guid}"
+  elif [[ "${_image_type}" == *ext4 ]]; then
+    _guid="${linux_guid};"
+  fi
+  _set \
+    "${_volume}" \
+    "guid" \
+    "${_guid}"
 }
 
 # Sets parameters for _mk<fs_image> functions
@@ -556,7 +599,7 @@ _mkfs_common() {
     _volume="${1}"
   _name="$( \
     _get_volume_name \
-    "${_volume}")"
+      "${_volume}")"
   _dir="$(\
     _get \
       "${_volume}" \
@@ -613,8 +656,8 @@ _get_airootfs_path(){
     "$(_get \
          "install" \
          "dir")/${arch}/airootfs.$( \
-         _get_fs_ext \
-           "airootfs")"
+           _get_fs_ext \
+             "airootfs")"
 }
 
 # Evaluate expected airootfs size given an input volume
@@ -623,11 +666,12 @@ _get_airootfs_size() {
   local \
     _volume="${1}"
   echo \
-    "$(( $(_get_size \
-            "$(_get \
-                 "${_volume}" \
-                 "dir")") + \
-        200000 ))"
+    "$(( \
+      $(_get_size \
+          "$(_get \
+               "${_volume}" \
+               "dir")") + \
+      200000 ))"
 }
 
 # Sets correct airootfs given an input volume
@@ -736,8 +780,8 @@ _get_keys_img(){
     "$(_get \
          "dongle_isofs" \
          "dir")/${_name}.$( \
-         _get_fs_ext \
-           "keys")"
+           _get_fs_ext \
+             "keys")"
 }
 
 # Builds keys image
@@ -840,34 +884,50 @@ _mkchecksum() {
 
 # GPG signs a file
 _mksignature() {
-    local _file="${1}"
-    rm -f -- "${_file}.sig"
-    local gpg_options=(
-      --batch
-      --no-armor
-      --no-include-key-block
-      --output "${_file}.sig"
-      --detach-sign
-      --default-key "${gpg_key}")
-    # Add gpg sender option if the value is provided
-    [[ -z "${gpg_sender}" ]] || \
-      gpg_options+=('--sender' "${gpg_sender}")
-    if [ -e "${_file}" ]; then
-        _msg_info "Signing $(basename "${_file}")..."
-        # always use the .sig file extension, as that is what 
-        # mkinitcpio-archiso's hooks expect
-        _msg_info "GPG home: ${gpg_home}"
-        if [ "${gpg_home}" != "" ]; then
-            gpg_options+=('--homedir' "${gpg_home}")
-            GNUPGHOME="${gpg_home}" \
-              gpg "${gpg_options[@]}" \
-                  "${_file}"
-        else
-            gpg "${gpg_options[@]}" \
-                "${_file}"
-        fi
+  local \
+    _file="${1}" \
+    _gpg_options=()
+  rm \
+    -f -- \
+    "${_file}.sig"
+  _gpg_options=(
+    --batch
+    --no-armor
+    --no-include-key-block
+    --output
+      "${_file}.sig"
+    --detach-sign
+    --default-key
+      "${gpg_key}"
+  )
+  # Add gpg sender option if the value is provided
+  [[ -z "${gpg_sender}" ]] || \
+    _gpg_options+=(
+      '--sender'
+        "${gpg_sender}")
+  if [ -e "${_file}" ]; then
+    _msg_info \
+      "Signing $(basename \
+                   "${_file}")..."
+    # always use the .sig file extension, as that is what 
+    # mkinitcpio-archiso's hooks expect
+    _msg_info \
+      "GPG home: ${gpg_home}"
+    if [ "${gpg_home}" != "" ]; then
+      _gpg_options+=(
+        '--homedir' "${gpg_home}")
+      GNUPGHOME="${gpg_home}" \
+      gpg \
+        "${gpg_options[@]}" \
+        "${_file}"
+    else
+      gpg \
+        "${gpg_options[@]}" \
+        "${_file}"
     fi
-    _msg_info "Done!"
+  fi
+  _msg_info \
+    "Done!"
 }
 
 ###################################
@@ -882,59 +942,91 @@ _mksignature() {
 # $1: crypttab template
 # $2: out file
 _build_crypttab() {
-    local _template="${1}"
-    local _out="${2}"
-    if [[ "$(_get "persistent" \
-                  "image_type")" == *"luks" ]]; then
-        sed "s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
-            "${_template}" > "${_out}"
-    else
-        sed '/%PERSISTENT_UUID%/d' \
-            "${_template}" > "${_out}"
-    fi
-    if [[ "$(_get "dongle_persistent" \
-                  "image_type")" == *"luks" ]]; then
-        sed -i "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" \
-            "${_out}"
-    else
-        sed -i '/%DONGLE_PERSISTENT_UUID%/d' \
-            "${_out}"
-    fi
-    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        sed -i "s|%SECURE_MOUNT%|/run/archiso/donglepersistent|g" \
-            "${_out}"
-    else
-        sed -i "s|%SECURE_MOUNT%||g" \
-            "${_out}"
-    fi
-    if [[ "${swap_image_type}" == *"luks" ]]; then
-        sed -i "s|%SWAP_UUID%|$(_get_swap_uuid)|g" \
-            "${_out}"
-    else
-        sed -i '/%SWAP_UUID%/d' \
-            "${_out}"
-    fi
-    if [[ "${swap_size}" != "" ]] && \
-       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        sed -i "s|%DONGLE_SWAP_UUID%|$(_get_dongle_swap_uuid)|g" \
-            "${_out}"
-    else
-        sed -i '/%DONGLE_SWAP_UUID%/d' "${_out}"
-    fi
+  local _template="${1}"
+  local _out="${2}"
+  if [[ "$(_get \
+             "persistent" \
+             "image_type")" == *"luks" ]]; then
+    sed \
+      "s|%PERSISTENT_UUID%|${persistent_uuid}|g" \
+      "${_template}" > \
+      "${_out}"
+  else
+    sed \
+      '/%PERSISTENT_UUID%/d' \
+      "${_template}" > \
+      "${_out}"
+  fi
+  if [[ "$(_get \
+             "dongle_persistent" \
+             "image_type")" == *"luks" ]]; then
+    sed \
+      -i \
+      "s|%DONGLE_PERSISTENT_UUID%|${dongle_persistent_uuid}|g" \
+      "${_out}"
+  else
+    sed \
+      -i \
+      '/%DONGLE_PERSISTENT_UUID%/d' \
+      "${_out}"
+  fi
+  if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    sed \
+      -i \
+      "s|%SECURE_MOUNT%|/run/archiso/donglepersistent|g" \
+      "${_out}"
+  else
+    sed \
+      -i \
+      "s|%SECURE_MOUNT%||g" \
+      "${_out}"
+  fi
+  if [[ "${swap_image_type}" == *"luks" ]]; then
+    sed \
+      -i \
+      "s|%SWAP_UUID%|$( \
+        _get_swap_uuid)|g" \
+      "${_out}"
+  else
+    sed \
+      -i \
+      '/%SWAP_UUID%/d' \
+      "${_out}"
+  fi
+  if [[ "${swap_size}" != "" ]] && \
+     [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    sed \
+      -i \
+      "s|%DONGLE_SWAP_UUID%|$( \
+        _get_dongle_swap_uuid)|g" \
+      "${_out}"
+  else
+    sed \
+      -i \
+      '/%DONGLE_SWAP_UUID%/d' \
+      "${_out}"
+  fi
 }
 
 _get_crypttab() {
-    local _volume="${1}"
-    echo "($(_get "${_volume}"
-                  "dir")/airootfs/etc/crypttab"
+  local \
+    _volume="${1}"
+  echo \
+    "($(_get \
+          "${_volume}"
+          "dir")/airootfs/etc/crypttab"
 }
 
 _make_crypttab() {
-    local _src="${1}"
-    local _root="${2}" \
-    _build_crypttab "$(_get_crypttab "${1}")" \
-                    "$(_get "${_root}" \
-                            "dir")/etc/crypttab"
+  local \
+    _src="${1}" \
+    _root="${2}"
+  _build_crypttab \
+    "$(_get_crypttab \
+         "${1}")" \
+    "$(_get \
+         "${_root}" \
+         "dir")/etc/crypttab"
 }
 
 
@@ -945,214 +1037,263 @@ _make_crypttab() {
 # $1: a value in fs_images
 # $2: auto-generated output key path
 _resolve_fs_encryption_key(){
-    local \
-      _volume="${1}" \
-      _auto_key="${2}" \
-      _encryption_key \
-      _msg=() \
-      _out_dir
-    _encryption_key="$( \
-      _get \
+  local \
+    _volume="${1}" \
+    _auto_key="${2}" \
+    _encryption_key \
+    _msg=() \
+    _out_dir
+  _encryption_key="$( \
+    _get \
+      "${_volume}" \
+      "encryption_key")"
+  _out_dir="$( \
+    dirname \
+      "${_auto_key}")"
+  if [ ! -f "${_encryption_key}" ]; then
+    if [ "${_encryption_key}" = 'auto' ]; then
+      _key_gen_opts+=(
+        -t
+        binary
+      )
+      _set \
         "${_volume}" \
-        "encryption_key")"
-    _out_dir="$( \
-      dirname \
-        "${_auto_key}")"
-    if [ ! -f "${_encryption_key}" ]; then
-      if [ "${_encryption_key}" = 'auto' ]; then
-        _key_gen_opts+=(
-          -t
-          binary
-        )
-        _set \
-          "${_volume}" \
-          "encryption_key" \
-          "${_auto_key}"
-        if [ ! -d "${_out_dir}" ]; then
-          install \
-            -dm700 \
-            "${_out_dir}"
-        fi
-        key-gen \
-          "${_key_gen_opts[@]}" \
-          "${_auto_key}"
-      elif [ "${_encryption_key}" != 'auto' ]; then
-        _msg=(
-          "File '${_encryption_key}'"
-          "does not exist."
-        )
-        _msg_error \
-          "${_msg[*]}" \
-          0
+        "encryption_key" \
+        "${_auto_key}"
+      if [ ! -d "${_out_dir}" ]; then
+        install \
+          -dm700 \
+          "${_out_dir}"
       fi
+      key-gen \
+        "${_key_gen_opts[@]}" \
+        "${_auto_key}"
+    elif [ "${_encryption_key}" != 'auto' ]; then
+      _msg=(
+        "File '${_encryption_key}'"
+        "does not exist."
+      )
+      _msg_error \
+        "${_msg[*]}" \
+        0
     fi
+  fi
 }
 
 # Returns encryption key destination volume and
 # generation mode for a given file system volume
 # $1 file system volume
 _get_secondary_key_opts() {
-    local _volume="${1}" \
-          _dest \
-          _encryption_key \
-          _image_type \
-          _mode="binary" \
-          _public_image_type
-    _public_image_type="$(_get "airootfs" \
-                               "image_type")"
-    _image_type="$(_get "${_volume}" \
-                        "image_type")"
-    _encryption_key="$(_get "${_volume}" \
-                            "encryption_key")"
-    if [[ "${_encryption_key}" == "auto" ]]; then
-        [[ "${_public_image_type}" != *"luks" ]] && \
-        [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-          _dest="dongle_persistent" \
-          _mode="plain"
-    elif [[ "${_public_image_type}" == *"luks" ]] && \
-         [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-        _dest="pacstrap"
-    elif [[ "${_public_image_type}" != *"luks" ]] && \
+  local \
+    _volume="${1}" \
+    _dest \
+    _encryption_key \
+    _image_type \
+    _mode \
+    _public_image_type
+  _mode="binary"
+  _public_image_type="$( \
+    _get \
+      "airootfs" \
+      "image_type")"
+  _image_type="$( \
+    _get \
+      "${_volume}" \
+      "image_type")"
+  _encryption_key="$( \
+    _get \
+      "${_volume}" \
+      "encryption_key")"
+  if [[ "${_encryption_key}" == "auto" ]]; then
+      if [[ "${_public_image_type}" != *"luks" ]] && \
          [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
         _dest="dongle_persistent"
-    elif [[ "${_public_image_type}" != *"luks" ]] && \
-         [[ "${_volume}" != "persistent" ]] && \
-         ( ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] ); then
-        _dest="persistent"
-    else
-        _dest="seedphrase"
         _mode="plain"
-    fi
-    echo "${_dest}" "${_mode}"
+      fi
+  elif [[ "${_public_image_type}" == *"luks" ]] && \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _dest="pacstrap"
+  elif [[ "${_public_image_type}" != *"luks" ]] && \
+       [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _dest="dongle_persistent"
+  elif [[ "${_public_image_type}" != *"luks" ]] && \
+       [[ "${_volume}" != "persistent" ]] && \
+       ( ! [[ " ${buildmodes[*]} " =~ ' dongle ' ]] ); then
+    _dest="persistent"
+  else
+    _dest="seedphrase"
+    _mode="plain"
+  fi
+  echo \
+    "${_dest}" \
+    "${_mode}"
 }
 
 # Resolves the value of an image encryption key from an
 # <image>_encryption_key profiledef.sh variable
 # $1: a value in volumes
 _resolve_secondary_key() {
-    local \
-      _volume="${1}" \
-      _auto_key \
-      _dest \
-      _msg \
-      _key_opts=() \
-      _key_gen_opts=() \
-      _type
-    _auto_key="${work_dir}/${_volume}.key"
-    if [[ "${quiet}" != "y" ]]; then
-      _key_gen_opts+=(
-        -v
-      )
-    fi
-    _key_opts=( $( \
-      _get_secondary_key_opts \
-        "${_volume}")
+  local \
+    _volume="${1}" \
+    _auto_key \
+    _dest \
+    _msg \
+    _key_opts=() \
+    _key_gen_opts=() \
+    _type
+  _auto_key="${work_dir}/${_volume}.key"
+  if [[ "${quiet}" != "y" ]]; then
+    _key_gen_opts+=(
+      -v
     )
-    _dest="${_key_opts[0]}"
-    _type="${_key_opts[1]}"
-    [[ "${_dest}" == "seedphrase" ]] && \
-      _msg=(
-        "Rootfs encryption and dongle buildmode disabled."
-        "You will be prompted to insert a password for"
-        "the ${_volume} partition."
-      ) && \
-      _msg_warning \
-        "${_msg[*]}" && \
-      _set \
-        "${_volume}" \
-        "encryption_key" \
-        "" && \
-      return
+  fi
+  _key_opts=( $( \
+    _get_secondary_key_opts \
+      "${_volume}")
+  )
+  _dest="${_key_opts[0]}"
+  _type="${_key_opts[1]}"
+  if [[ "${_dest}" == "seedphrase" ]]; then
+    _msg=(
+      "Rootfs encryption and dongle buildmode disabled."
+      "You will be prompted to insert a password for"
+      "the ${_volume} partition."
+    )
+    _msg_warning \
+      "${_msg[*]}"
     _set \
       "${_volume}" \
       "encryption_key" \
-      "${_auto_key}"
-    _key_gen_opts+=(
-      -t
-        "${_type}"
-    )
-    key-gen \
-      "${_key_gen_opts[@]}" \
-      "$(_get \
-           "${_volume}" \
-           "encryption_key")" 
-    _install_key \
-      "${_dest}" \
-      "${_auto_key}"
+      ""
+    return
+  fi
+  _set \
+    "${_volume}" \
+    "encryption_key" \
+    "${_auto_key}"
+  _key_gen_opts+=(
+    -t
+      "${_type}"
+  )
+  key-gen \
+    "${_key_gen_opts[@]}" \
+    "$(_get \
+         "${_volume}" \
+         "encryption_key")" 
+  _install_key \
+    "${_dest}" \
+    "${_auto_key}"
 }
 
 # Adds archiso hooks to profile's mkinitcpio.conf
 # $1: mkinitcpio.conf file to edit
 # $2: an encryption key to add to resulting initrd image
 _build_archiso_mkinitcpio_conf() {
-    local _mkinitcpio_conf="${1}"
-    local _encryption_key="${2}"
-    local _files=() _hooks=() _modules=()
-    local _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
-    [[ "$(_get "airootfs" \
-               "image_type")" == *luks ]] || \
-    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-      _hooks+=("encrypt") && \
-      [[ "${_encryption_key}" != "" ]] && \
-        _files+=("${_encryption_key}")
-    _hooks+=("archiso")
-    [[ "${airootfs_image_type}" == *"ext4"* ]] && \
-      _modules+=("ext4")
-    cp "${_mkinitcpio_conf}" "${_mkinitcpio_conf_tmp}"
-    sed "s|%ARCHISO_FILES%|${_files[*]}|g;
-         s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
-         s|%ARCHISO_MODULES%|${_modules[*]}|g" \
-        "${_mkinitcpio_conf_tmp}" > "${_mkinitcpio_conf}"
+  local \
+    _mkinitcpio_conf="${1}" \
+    _encryption_key="${2}" \
+    _files=() \
+    _hooks=() \
+    _modules=() \
+    _mkinitcpio_conf_tmp
+  _mkinitcpio_conf_tmp="${work_dir}/mkinitcpio.conf"
+  if [[ "$(_get \
+          "airootfs" \
+          "image_type")" == *luks ]] || \
+     [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _hooks+=(
+      "encrypt")
+    if [[ "${_encryption_key}" != "" ]]; then
+      _files+=(
+        "${_encryption_key}")
+    fi
+  fi
+  _hooks+=(
+    "archiso")
+  if [[ "${airootfs_image_type}" == *"ext4"* ]]; then
+    _modules+=(
+      "ext4")
+  fi
+  cp \
+    "${_mkinitcpio_conf}" \
+    "${_mkinitcpio_conf_tmp}"
+  sed \
+    "s|%ARCHISO_FILES%|${_files[*]}|g;
+    s|%ARCHISO_HOOKS%|${_hooks[*]}|g;
+    s|%ARCHISO_MODULES%|${_modules[*]}|g" \
+    "${_mkinitcpio_conf_tmp}" > \
+    "${_mkinitcpio_conf}"
 }
 
 _make_archiso_mkinitcpio_conf() {
-    local _root="${1}" \
-          _volume="${2}"
-    cp "$(_get "profile" \
-               "dir")/etc/mkinitcpio.conf" \
-       "$(_get "${_root}" \
-               "dir")/etc/mkinitcpio.${_volume}.conf"
-    _build_archiso_mkinitcpio_conf \
-       "$(_get "${_root}" \
-               "dir")/etc/mkinitcpio.${_volume}.conf" \
-       "$(_get "${_volume}" \
-               "encryption_key")"
+  local \
+    _root="${1}" \
+    _volume="${2}"
+  cp \
+    "$(_get \
+         "profile" \
+         "dir")/etc/mkinitcpio.conf" \
+     "$(_get \
+          "${_root}" \
+          "dir")/etc/mkinitcpio.${_volume}.conf"
+  _build_archiso_mkinitcpio_conf \
+    "$(_get \
+         "${_root}" \
+         "dir")/etc/mkinitcpio.${_volume}.conf" \
+    "$(_get \
+         "${_volume}" \
+         "encryption_key")"
 }
 
 # Sets up custom pacman.conf with custom cache and pacman hook directories.
 _make_pacman_conf() {
-    local _cache_dirs \
-          _default_cache="/var/cache/pacman/pkg" \
-          _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
-          _profile_cache_dirs \
-          _system_cache_dirs \
-    _system_cache_dirs="$(pacman-conf CacheDir | \
-                            tr '\n' ' ')"
-    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" \
-                                       CacheDir | \
-                             tr '\n' ' ')"
-
-    # Only use the profile's CacheDir, if it is not the
-    # default and not the same as the system cache dir.
-    if [[ "${_profile_cache_dirs}" != "${_default_cache}" ]] && \
-       [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
-        _cache_dirs="${_profile_cache_dirs}"
-    else
-        _cache_dirs="${_system_cache_dirs}"
-    fi
-
-    _msg_info "Copying custom pacman.conf to work directory..."
-    _msg_info "Using pacman CacheDir: ${_cache_dirs}"
-    # take the profile pacman.conf and strip all settings 
-    # that would break in chroot when using pacman -r.
-    # append CacheDir and HookDir to [options] section
-    # HookDir is *always* set to the airootfs' override directory
-    # see `man 8 pacman` for further info
-    pacman-conf --config "${pacman_conf}" | \
-        sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
-             /\[options\]/a HookDir = ${_hooks}/" > \
-          "$(_get "work" \
-                  "dir")/${buildmode}.pacman.conf"
+  local \
+    _cache_dirs \
+    _default_cache \
+    _hooks \
+    _profile_cache_dirs \
+    _system_cache_dirs \
+  _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
+  _default_cache="/var/cache/pacman/pkg" \
+  _system_cache_dirs="$( \
+    pacman-conf CacheDir | \
+    tr \
+      '\n' \
+      ' ')"
+  _profile_cache_dirs="$( \
+    pacman-conf \
+      --config \
+        "${pacman_conf}" \
+        CacheDir | \
+      tr \
+        '\n' \
+        ' ')"
+  # Only use the profile's CacheDir, if it is not the
+  # default and not the same as the system cache dir.
+  if [[ "${_profile_cache_dirs}" != "${_default_cache}" ]] && \
+     [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
+    _cache_dirs="${_profile_cache_dirs}"
+  else
+    _cache_dirs="${_system_cache_dirs}"
+  fi
+  _msg_info \
+    "Copying custom pacman.conf to work directory..."
+  _msg_info \
+    "Using pacman CacheDir: ${_cache_dirs}"
+  # take the profile pacman.conf and strip all settings 
+  # that would break in chroot when using pacman -r.
+  # append CacheDir and HookDir to [options] section
+  # HookDir is *always* set to the airootfs' override directory
+  # see `man 8 pacman` for further info
+  pacman-conf \
+    --config \
+      "${pacman_conf}" | \
+      sed \
+        "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
+         /\[options\]/a HookDir = ${_hooks}/" > \
+        "$(_get \
+             "work" \
+             "dir")/${buildmode}.pacman.conf"
 }
 
 #### Install
@@ -1161,18 +1302,24 @@ _make_pacman_conf() {
 # is present in the profile directories
 # $1: file system path
 _is_file_in_work_paths() {
-    local _filename="${1}"
-    local _dir
-    local _dirs=("$(_get "profile" \
-                         "dir")/airootfs"
-                 "$(_get "profile" \
-                         "dir")/persistent")
-    _pass="false"
-    for _dir in "${_dirs[@]}"; do
-        if [ -e "${_dir}${_filename}" ]; then
-            _pass=""
-        fi
-    done
+  local \
+    _filename="${1}" \
+    _dir \
+    _dirs
+  _dirs=(
+    "$(_get \
+         "profile" \
+         "dir")/airootfs"
+    "$(_get \
+         "profile" \
+         "dir")/persistent"
+  )
+  _pass="false"
+  for _dir in "${_dirs[@]}"; do
+    if [ -e "${_dir}${_filename}" ]; then
+      _pass=""
+    fi
+  done
 }
 
 # Checks if an image's file system path can be
@@ -1180,35 +1327,50 @@ _is_file_in_work_paths() {
 # $1: filename path
 # $2: image name (airootfs, persistent)
 _validate_file_path() {
-    local _filename="${1}" \
-          _storage="${2}"
-    local _msg \
-          _on_storage="${_storage}${_filename}" \
-          pacstrap_dir="$(_get "work" \
-                               "dir")/${arch}/airootfs" \
-          persistent_dir="$(_get "work" \
-                                 "dir")/persistent"
-    _validate_file_result="false"
-    _validate_file_err=""
-    _validate_file_warn=""
-    _is_file_in_work_paths "${_filename}"
-    if [[ "${_pass}" != "" ]]; then
-        _msg=("Cannot change permissions of '${_filename}'."
-              "The file or directory does not exist.")
-        _validate_file_err="${_msg[*]}"
-        return
-    fi
-    if [[ ! -e "${_on_storage}" ]]; then
-        _msg=("Cannot change permissions of '${_on_storage}'."
-              "The file or directory does not exist on this storage.")
-        _validate_file_warn="${_msg[*]}"
-    elif [[ "$(realpath -q -- "${_on_storage}")" != "${_storage}"* ]]; then
-        _msg=("Failed to set permissions on '${_on_storage}'."
-              "Outside of valid path.")
-        _validate_file_err="${_msg[*]}"
-    else
-        _validate_file_result=""
-    fi
+  local \
+    _filename="${1}" \
+    _storage="${2}"
+    _msg \
+    _on_storage \
+    pacstrap_dir \
+    persistent_dir
+  _on_storage="${_storage}${_filename}" \
+  pacstrap_dir="$( \
+    _get \
+      "work" \
+      "dir")/${arch}/airootfs"
+  persistent_dir="$( \
+    _get \
+      "work" \
+      "dir")/persistent"
+  _validate_file_result="false"
+  _validate_file_err=""
+  _validate_file_warn=""
+  _is_file_in_work_paths \
+    "${_filename}"
+  if [[ "${_pass}" != "" ]]; then
+    _msg=(
+      "Cannot change permissions of '${_filename}'."
+      "The file or directory does not exist."
+    )
+    _validate_file_err="${_msg[*]}"
+    return
+  fi
+  if [[ ! -e "${_on_storage}" ]]; then
+    _msg=(
+      "Cannot change permissions of '${_on_storage}'."
+      "The file or directory does not exist on this storage."
+    )
+    _validate_file_warn="${_msg[*]}"
+  elif [[ "$(realpath -q -- "${_on_storage}")" != "${_storage}"* ]]; then
+    _msg=(
+      "Failed to set permissions on '${_on_storage}'."
+      "Outside of valid path."
+    )
+    _validate_file_err="${_msg[*]}"
+  else
+    _validate_file_result=""
+  fi
 }
 
 # Apply file permissions on files 
@@ -1219,67 +1381,79 @@ _validate_file_path() {
 # $2: permissions string
 # $3: directory where files are being put into
 _apply_permissions() {
-    local _filename="${1}" \
-          _permissions="${2}" \
-          _volume="${3}"
-          _chmod_opts=() \
-          _chown_opts=() \
-          _dir \
-          _group \
-          _msg_type="warning" \
-          _opts=('-f')
-          _mode \
-          _permissions_array=()
-          _recur=() \
-          _user
-    _dir="$(_get "${_volume}" \
-                 "dir")"
-    _validate_file_err=""
-    _validate_file_warn=""
-    _validate_file_result=""
-    IFS=':' \
-      read -ra _permissions_array <<< \
-        "${_permissions}"
-    _user="${_permissions_array[0]}" \
-    _group="${_permissions_array[1]}" \
-    _mode="${_permissions_array[2]}"
-    _validate_file_path "${_filename}" \
-                        "${_dir}"
-    if [[ "${_validate_file_result}" == "" ]]; then
-        _msg=(
-          "Setting ${_mode} permissions for"
-          "${_user}:${_group} on ${_filename}")
-        [[ "${_filename: -1}" == "/" ]] && \
-          _recur+=(
-            '-R') \
-          _msg+=(
-            "recursively")
-        [[ "${quiet}" != "y" ]] && \
-          _msg_info "${_msg[*]}"
-        _chown_opts=(
-          "${_opts[@]}"
-          '-h'
-          "${_recur[@]}")
-        _chmod_opts=(
-          "${_opts[@]}"
-          "${_recur[@]}")
-        chown "${_chown_opts[@]}" -- \
-              "${_user}:${_group}" \
-              "${_dir}${_filename}"
-        chmod "${_chmod_opts[@]}" -- \
-              "${_mode}" \
-              "${_dir}${_filename}"
-    else
-	    [ "${_validate_file_err}" != "" ] && \
-	      _msg_type="error" \
-	      _error_code=1
-        [[ "${_validate_file_err}" != "" ]] && \
-          "_msg_${_msg_type}" "${_validate_file_err}" \
-                              "${_error_code}"
-        [[ "${quiet}" != "y" ]] && \
-        [[ "${_validate_file_warn}" != "" ]] && \
-          "_msg_${_msg_type}" "${_validate_file_warn}"
-    fi
+  local \
+    _filename="${1}" \
+    _permissions="${2}" \
+    _volume="${3}"
+    _chmod_opts=() \
+    _chown_opts=() \
+    _dir \
+    _group \
+    _msg_type \
+    _opts=()
+    _mode \
+    _permissions_array=()
+    _recur=() \
+    _user \
+    _validate_file_result \
+    _validate_file_err \
+    _validate_file_warn
+  _msg_type="warning"
+  _opts+=(
+    '-f'
+  )
+  _dir="$( \
+    _get \
+      "${_volume}" \
+      "dir")"
+  _validate_file_err=""
+  _validate_file_warn=""
+  _validate_file_result=""
+  IFS=':' \
+  read \
+    -ra \
+    _permissions_array <<< \
+      "${_permissions}"
+  _user="${_permissions_array[0]}" \
+  _group="${_permissions_array[1]}" \
+  _mode="${_permissions_array[2]}"
+  _validate_file_path "${_filename}" \
+                      "${_dir}"
+  if [[ "${_validate_file_result}" == "" ]]; then
+      _msg=(
+        "Setting ${_mode} permissions for"
+        "${_user}:${_group} on ${_filename}")
+      [[ "${_filename: -1}" == "/" ]] && \
+        _recur+=(
+          '-R') \
+        _msg+=(
+          "recursively")
+      [[ "${quiet}" != "y" ]] && \
+        _msg_info "${_msg[*]}"
+      _chown_opts=(
+        "${_opts[@]}"
+        '-h'
+        "${_recur[@]}")
+      _chmod_opts=(
+        "${_opts[@]}"
+        "${_recur[@]}")
+      chown "${_chown_opts[@]}" -- \
+            "${_user}:${_group}" \
+            "${_dir}${_filename}"
+      chmod "${_chmod_opts[@]}" -- \
+            "${_mode}" \
+            "${_dir}${_filename}"
+  else
+      [ "${_validate_file_err}" != "" ] && \
+        _msg_type="error" \
+        _error_code=1
+      [[ "${_validate_file_err}" != "" ]] && \
+        "_msg_${_msg_type}" "${_validate_file_err}" \
+                            "${_error_code}"
+      [[ "${quiet}" != "y" ]] && \
+      [[ "${_validate_file_warn}" != "" ]] && \
+        "_msg_${_msg_type}" "${_validate_file_warn}"
+  fi
 }
 
 # Copies custom files onto an image, reading and 
