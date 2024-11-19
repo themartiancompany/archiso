@@ -1417,42 +1417,53 @@ _apply_permissions() {
   _user="${_permissions_array[0]}" \
   _group="${_permissions_array[1]}" \
   _mode="${_permissions_array[2]}"
-  _validate_file_path "${_filename}" \
-                      "${_dir}"
+  _validate_file_path \
+    "${_filename}" \
+    "${_dir}"
   if [[ "${_validate_file_result}" == "" ]]; then
-      _msg=(
-        "Setting ${_mode} permissions for"
-        "${_user}:${_group} on ${_filename}")
-      [[ "${_filename: -1}" == "/" ]] && \
-        _recur+=(
-          '-R') \
-        _msg+=(
-          "recursively")
-      [[ "${quiet}" != "y" ]] && \
-        _msg_info "${_msg[*]}"
-      _chown_opts=(
-        "${_opts[@]}"
-        '-h'
-        "${_recur[@]}")
-      _chmod_opts=(
-        "${_opts[@]}"
-        "${_recur[@]}")
-      chown "${_chown_opts[@]}" -- \
-            "${_user}:${_group}" \
-            "${_dir}${_filename}"
-      chmod "${_chmod_opts[@]}" -- \
-            "${_mode}" \
-            "${_dir}${_filename}"
+    _msg=(
+      "Setting ${_mode} permissions for"
+      "${_user}:${_group} on ${_filename}")
+    if [[ "${_filename: -1}" == "/" ]]; then
+      _recur+=(
+        '-R') \
+      _msg+=(
+        "recursively")
+    fi
+    if [[ "${quiet}" != "y" ]]; then
+      _msg_info \
+        "${_msg[*]}"
+    fi
+    _chown_opts=(
+      "${_opts[@]}"
+      '-h'
+      "${_recur[@]}")
+    _chmod_opts=(
+      "${_opts[@]}"
+      "${_recur[@]}")
+    chown \
+      "${_chown_opts[@]}" -- \
+      "${_user}:${_group}" \
+      "${_dir}${_filename}"
+    chmod \
+      "${_chmod_opts[@]}" -- \
+      "${_mode}" \
+      "${_dir}${_filename}"
   else
-      [ "${_validate_file_err}" != "" ] && \
-        _msg_type="error" \
-        _error_code=1
-      [[ "${_validate_file_err}" != "" ]] && \
-        "_msg_${_msg_type}" "${_validate_file_err}" \
-                            "${_error_code}"
-      [[ "${quiet}" != "y" ]] && \
-      [[ "${_validate_file_warn}" != "" ]] && \
-        "_msg_${_msg_type}" "${_validate_file_warn}"
+    if [ "${_validate_file_err}" != "" ]; then
+      _msg_type="error"
+      _error_code=1
+    fi
+    if [[ "${_validate_file_err}" != "" ]]; then
+      "_msg_${_msg_type}" \
+        "${_validate_file_err}" \
+        "${_error_code}"
+    fi
+    if [[ "${quiet}" != "y" ]] && \
+    [[ "${_validate_file_warn}" != "" ]]; then
+      "_msg_${_msg_type}" \
+        "${_validate_file_warn}"
+    fi
   fi
 }
 
@@ -1463,175 +1474,254 @@ _apply_permissions() {
 #     image name (airootfs, persistent)
 # $2: work directory for that file system
 _copy_profile_files() {
-    local _volume="${1}" \
-          _dest="${2}" \
-          _cp_opts=() \
-          _error_code \
-          _file_name \
-          _msg=()
-    _cp_opts=(
-      -af
-      --no-preserve=ownership,mode)
-    _msg_info "Copying custom ${_volume} files..."
-    cp "${_cp_opts[@]}" -- \
-       "$(_get "profile" \
-               "dir")/${_volume}/." \
-       "$(_get "${_dest}" \
-               "dir")"
-    for _file_name in "${!file_permissions[@]}"; do
-        _apply_permissions "${_file_name}" \
-                           "${file_permissions[${_file_name}]}" \
-                           "${_dest}"
-    done
+  local \
+    _volume="${1}" \
+    _dest="${2}" \
+    _cp_opts=() \
+    _error_code \
+    _file_name \
+    _msg=()
+  _cp_opts=(
+    -af
+    --no-preserve=ownership,mode)
+  _msg_info \
+    "Copying custom ${_volume} files..."
+  cp \
+    "${_cp_opts[@]}" -- \
+    "$(_get \
+         "profile" \
+         "dir")/${_volume}/." \
+     "$(_get \
+          "${_dest}" \
+          "dir")"
+  for _file_name \
+    in "${!file_permissions[@]}"; do
+    _apply_permissions \
+      "${_file_name}" \
+      "${file_permissions[${_file_name}]}" \
+      "${_dest}"
+  done
 }
 
 # Sets up an empty root directory for
 # a root file system
 # $1: directory
 _install_root_dir() {
-    local _root="${1}"
-    install -d \
-            -m 0755 \
-            -o 0 \
-            -g 0 -- \
-            "${_root}"
+  local \
+    _root="${1}"
+  install \
+    -d \
+    -m 0755 \
+    -o 0 \
+    -g 0 -- \
+    "${_root}"
 } 
 
 # Prepares working directory and copies custom root file system files.
 _make_custom_airootfs() {
-    _validate_file_err="" _validate_file_warn=""
-    local _etc \
-          _root="pacstrap" \
-          _volume="airootfs"
-
-    install_root_dir "$(_get "${_root}" \
-                             "dir")"
-    [[ -d "$(_get "profile" \
-                  "dir")/${_volume}" ]] && \
-      _copy_profile_files "${_volume}" \
-                          "${_root}" && \
-      _build_archiso_mkinitcpio_conf \
-          "$(_get "${_root}" \
-                  "dir")/etc/mkinitcpio.conf" && \
-      [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-          _resolve_secondary_key "keys" && \
-          if [[ "$(_get "${_volume}" \
-                        "image_type")" == *luks ]]; then
-              # shellcheck disable=SC2034
-              _set "dongle_boot" \
-                   "encryption_key" \
-                   "$(_get "keys" \
-                           "encryption_key")"
-              _make_archiso_mkinitcpio_conf "${_root}" \
-                                            "dongle_boot"
-              _resolve_secondary_key "recovery"
-              _make_archiso_mkinitcpio_conf "${_root}" \
-                                            "recovery"
-          fi
+  local \
+    _etc \
+    _root \
+    _volume
+  _root="pacstrap"
+  _volume="airootfs"
+  install_root_dir \
+    "$(_get \
+         "${_root}" \
+         "dir")"
+  if [[ -d "$(_get "profile" \
+                "dir")/${_volume}" ]]; then
+    _copy_profile_files \
+      "${_volume}" \
+      "${_root}"
+    _build_archiso_mkinitcpio_conf \
+      "$(_get \
+           "${_root}" \
+           "dir")/etc/mkinitcpio.conf"
+    if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+      _resolve_secondary_key \
+        "keys"
+      if [[ "$(_get \
+                 "${_volume}" \
+                 "image_type")" == *luks ]]; then
+        # shellcheck disable=SC2034
+        _set \
+          "dongle_boot" \
+          "encryption_key" \
+          "$(_get \
+               "keys" \
+               "encryption_key")"
+        _make_archiso_mkinitcpio_conf \
+          "${_root}" \
+          "dongle_boot"
+        _resolve_secondary_key \
+          "recovery"
+        _make_archiso_mkinitcpio_conf \
+          "${_root}" \
+          "recovery"
+      fi
+    fi
+  fi
 }
 
 # Install desired packages to the root file system
 _make_packages() {
-    local _root="${1}" \
-          _msg=()  \
-          _opts=()
-    _opts=(
-      -C "$(_get "work" \
-                 "dir")/${buildmode}.pacman.conf"
-      -c
-      -G
-      -M)
-    _msg=(
-      "Installing packages to '$(_get "${_root}" \
-                                      "dir")/'...")
-    _msg_info "${_msg[*]}"
-    # Unset TMPDIR to work around
-    # https://bugs.archlinux.org/task/70580
-    [[ "${quiet}" = "y" ]] && \
-      env -u TMPDIR \
-        pacstrap "${_opts[@]}" -- \
-                 "$(_get "${_root}" \
-                         "dir")" \
-                 "${buildmode_pkg_list[@]}" > \
-          /dev/null 2>&1 && \
-      return
-    env -u TMPDIR \
-      pacstrap "${_opts[@]}" -- \
-               "$(_get "${_root}" \
-                       "dir")" \
-               "${buildmode_pkg_list[@]}"
-    _msg=(
-      "Done! Packages installed successfully.")
-    _msg_info "${_msg[*]}"
+  local \
+    _root="${1}" \
+    _msg=()  \
+    _opts=()
+  _opts=(
+    -C
+      "$(_get \
+           "work" \
+           "dir")/${buildmode}.pacman.conf"
+    -c
+    -G
+    -M
+  )
+  _msg=(
+    "Installing packages to '$(_get \
+                                 "${_root}" \
+                                 "dir")/'...")
+  _msg_info \
+    "${_msg[*]}"
+  # Unset TMPDIR to work around
+  # https://bugs.archlinux.org/task/70580
+  if [[ "${quiet}" = "y" ]]; then
+    env \
+      -u \
+        TMPDIR \
+      pacstrap \
+        "${_opts[@]}" -- \
+        "$(_get \
+             "${_root}" \
+             "dir")" \
+        "${buildmode_pkg_list[@]}" > \
+        /dev/null 2>&1
+    return
+  fi
+  env \
+    -u \
+      TMPDIR \
+    pacstrap \
+      "${_opts[@]}" -- \
+      "$(_get \
+           "${_root}" \
+           "dir")" \
+      "${buildmode_pkg_list[@]}"
+  _msg=(
+    "Done! Packages installed successfully.")
+  _msg_info \
+    "${_msg[*]}"
 }
 
 
 # Install desired packages to the root file system
 # for airootfs
 _make_packages_airootfs() {
-    local _root="pacstrap"
-    [[ -n "${gpg_key}" ]] && \
-      exec {ARCHISO_GNUPG_FD}<>"$(_get "work" \
-                                       "dir")/pubkey.gpg" && \
-      export ARCHISO_GNUPG_FD
-    _make_packages "${_root}"
-    [[ -n "${gpg_key}" ]] && \
-      exec {ARCHISO_GNUPG_FD}<&- && \
-      unset ARCHISO_GNUPG_FD
-    _msg_info "Done! Packages installed successfully."
+  local \
+    _root
+  _root="pacstrap"
+  if [[ -n "${gpg_key}" ]]; then
+    exec \
+      {ARCHISO_GNUPG_FD}<>"$(_get \
+                               "work" \
+                               "dir")/pubkey.gpg"
+    export \
+      ARCHISO_GNUPG_FD
+  fi
+  _make_packages \
+    "${_root}"
+  if [[ -n "${gpg_key}" ]]; then
+    exec \
+      {ARCHISO_GNUPG_FD}<&-
+    unset \
+      ARCHISO_GNUPG_FD
+  _msg_info \
+    "Done! Packages installed successfully."
+  fi
 }
 
 # Write version file to ISO 9660
 _make_version_iso() {
-    local _buildmode="${1}"
-    [[ "${_buildmode}" == @("iso"|"netboot") ]] && \
-      install_dir_cmd "iso" \
-                      "/$(_get "install" \
-                               "dir")" && \
-      printf '%s\n' \
-             "${iso_version}" > \
-        "$(_get "iso" \
-                "dir")/$(_get "install" \
-                              "dir")/version" && \
-      # Write grubenv with version information to ISO 9660
-      printf '%.1024s' \
-             "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
-                       "${iso_name}" \
-                       "${iso_version}" \
-                       "$(printf '%0.1s' \
-                                 "#"{1..1024})")" > \
-        "$(_get "iso" \
-                "dir")/$(_get "install" \
-                              "dir")/grubenv"
+  local \
+    _buildmode="${1}"
+  if [[ "${_buildmode}" == @("iso"|"netboot") ]]; then
+    install_dir_cmd \
+      "iso" \
+      "/$(_get \
+            "install" \
+            "dir")" 
+    printf \
+      '%s\n' \
+      "${iso_version}" > \
+      "$(_get \
+           "iso" \
+           "dir")/$(_get \
+                      "install" \
+                      "dir")/version"
+    # Write grubenv with version information to ISO 9660
+    printf \
+      '%.1024s' \
+      "$(printf \
+           '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
+           "${iso_name}" \
+           "${iso_version}" \
+           "$(printf \
+                '%0.1s' \
+                "#"{1..1024})")" > \
+      "$(_get \
+           "iso" \
+           "dir")/$(_get \
+                      "install" \
+                      "dir")/grubenv"
+  fi
 }
 
 # Append IMAGE_ID & IMAGE_VERSION to os-release
 _make_os_release() {
-    local _root="${1}"
-    local _msg=()
-    # Append IMAGE_ID & IMAGE_VERSION to os-release
-    _os_release="$(realpath -- "$(_get "${_root}" \
-                                       "dir")/etc/os-release")"
-    [[ ! -e "$(_get "${_root}" \
-                    "dir")/etc/os-release" ]] && \
-    [[ -e "$(_get "${_root}" \
-                  "dir")/usr/lib/os-release" ]] && \
-      _os_release="$(realpath -- "$(_get "${_root}" \
-                                         "dir")/usr/lib/os-release")"
-    if [[ "${_os_release}" != "$(_get "${_root}" \
-                                      "dir")"* ]]; then
-        _msg=("os-release file '${_os_release}'"
-              "is outside of valid path.")
-        _msg_warning "${_msg[*]}"
-    else
-        [[ ! -e "${_os_release}" ]] || \
-          sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' \
-              "${_os_release}"
-        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' \
-               "${iso_name}" \
-               "${iso_version}" >> \
-          "${_os_release}"
-    fi
+  local \
+    _root="${1}" \
+    _msg=()
+  # Append IMAGE_ID & IMAGE_VERSION to os-release
+  _os_release="$( \
+    realpath -- \
+      "$(_get \
+           "${_root}" \
+           "dir")/etc/os-release")"
+  if [[ ! -e "$(_get \
+                  "${_root}" \
+                  "dir")/etc/os-release" ]] && \
+     [[ -e "$(_get \
+                "${_root}" \
+                "dir")/usr/lib/os-release" ]]; then
+    _os_release="$( \
+      realpath -- \
+        "$(_get \
+             "${_root}" \
+             "dir")/usr/lib/os-release")"
+  fi
+  if [[ "${_os_release}" != "$(_get \
+                                 "${_root}" \
+                                 "dir")"* ]]; then
+    _msg=(
+      "os-release file '${_os_release}'"
+      "is outside of valid path."
+    )
+    _msg_warning \
+      "${_msg[*]}"
+  else
+    [[ ! -e "${_os_release}" ]] || \
+      sed \
+        -i \
+        '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' \
+        "${_os_release}"
+    printf \
+      'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' \
+      "${iso_name}" \
+      "${iso_version}" >> \
+      "${_os_release}"
+  fi
 }
 
 # Touch /usr/lib/clock-epoch to give another
@@ -1639,30 +1729,45 @@ _make_os_release() {
 # with screwed or broken RTC.
 # $1: location of a root file system
 _make_clock_epoch() {
-    local _root="${1}"
-    touch -m \
-          -d"@${SOURCE_DATE_EPOCH}" -- \
-          "$(_get "${_root}" \
-                  "dir")/usr/lib/clock-epoch"
+  local \
+    _root="${1}"
+  touch \
+    -m \
+    -d"@${SOURCE_DATE_EPOCH}" -- \
+    "$(_get \
+         "${_root}" \
+         "dir")/usr/lib/clock-epoch"
 }
 
 # Produces version files
 _make_version() {
-    local _root="pacstrap" \
-          _dest="iso" \
-          _os_release
-    _msg_info "Creating version files..."
-    rm -f -- \
-       "$(_get "${_root}" \
-               "dir")/version"
-    printf '%s\n' \
-           "${iso_version}" > \
-      "$(_get "${_root}" \
-              "dir")/version"
-    _make_version_iso "${buildmode}"
-    _make_os_release "${_root}"
-    _make_clock_epoch "${_root}"
-    _msg_info "Done!"
+  local \
+    _root \
+    _dest \
+    _os_release
+  _root="pacstrap"
+  _dest="iso"
+  _msg_info \
+    "Creating version files..."
+  rm \
+    -f -- \
+    "$(_get \
+         "${_root}" \
+         "dir")/version"
+  printf \
+    '%s\n' \
+    "${iso_version}" > \
+    "$(_get \
+         "${_root}" \
+         "dir")/version"
+  _make_version_iso \
+    "${buildmode}"
+  _make_os_release \
+    "${_root}"
+  _make_clock_epoch \
+    "${_root}"
+  _msg_info \
+    "Done!"
 }
 
 ### Post-install
@@ -1672,100 +1777,147 @@ _make_version() {
 # $1: volume name for the root file system
 # $2: passwd file path
 _user_setup_passwd() {
-   local _volume="${1}" \
-         _passwd="${2}" \
-         _chroot \
-         _gid \
-         _home \
-         _msg=() \
-         _passwd_array \
-         _path \
-         _uid \
-   _chroot="$(_get "${_volume}" \
-                   "dir")"
-   [[ "${_passwd}" == "" ]] && \
-     _passwd="${_chroot}/etc/passwd"
-   _msg_info "Copying /etc/skel/* to user homes..."
-   while IFS=':' read -a _passwd_array -r; do
-       _uid="${_passwd_array[2]}"
-       _gid="${_passwd_array[3]}"
-       _home="${_passwd_array[5]}"
-       # Only operate on UIDs in range 1000–59999
-       (( _uid >= 1000 && _uid < 60000 )) || \
-         continue
-       # Skip invalid home directories
-       [[ "${_home}" == '/' ]] && \
-         continue
-       [[ -z "${_home}" ]] && \
-         continue
-       # Prevent path traversal outside of $pacstrap_dir
-       _path="$(realpath -q -- \
-                         "${_chroot}${_home}")"
-       if [[ "${_path}" == "${_chroot}"* ]]; then
-           [[ ! -d "${_chroot}${_home}" ]] && \
-             install -d \
-                     -m 0750 \
-                     -o "${_uid}" \
-                     -g "${_gid}" -- \
-                     "${_chroot}${_home}"
-           cp -dnRT \
-              --preserve=mode,timestamps,links -- \
-              "${_chroot}/etc/skel/." \
-              "${_chroot}${_home}"
-           chmod -f 0750 -- \
-                 "${_chroot}${_home}"
-           chown -hR -- \
-                 "${_uid}:${_gid}" \
-                 "${_chroot}${_home}"
-       else
-           _msg=("Failed to set permissions on"
-                 "'${_chroot}${_home}'."
-                 "Outside of valid path.")
-           _msg_error "${_msg[*]}" 1
-       fi
-   done < "${_passwd}"
+  local \
+    _volume="${1}" \
+    _passwd="${2}" \
+    _chroot \
+    _gid \
+    _home \
+    _msg=() \
+    _passwd_array \
+    _path \
+    _uid \
+  _chroot="$( \
+    _get \
+      "${_volume}" \
+      "dir")"
+  if [[ "${_passwd}" == "" ]]; then
+    _passwd="${_chroot}/etc/passwd"
+  fi
+  _msg_info \
+    "Copying /etc/skel/* to user homes..."
+  while IFS=':' \
+        read \
+          -a \
+          _passwd_array \
+          -r; do
+    _uid="${_passwd_array[2]}"
+    _gid="${_passwd_array[3]}"
+    _home="${_passwd_array[5]}"
+    # Only operate on UIDs in range 1000–59999
+    (( _uid >= 1000 && _uid < 60000 )) || \
+      continue
+    # Skip invalid home directories
+    [[ "${_home}" == '/' ]] && \
+      continue
+    [[ -z "${_home}" ]] && \
+      continue
+    # Prevent path traversal outside of $pacstrap_dir
+    _path="$( \
+      realpath \
+        -q -- \
+        "${_chroot}${_home}")"
+    if [[ "${_path}" == "${_chroot}"* ]]; then
+      if [[ ! -d "${_chroot}${_home}" ]]; then
+        install \
+          -d \
+          -m 0750 \
+          -o "${_uid}" \
+          -g "${_gid}" -- \
+          "${_chroot}${_home}"
+      fi
+      cp \
+        -dnRT \
+        --preserve=mode,timestamps,links -- \
+        "${_chroot}/etc/skel/." \
+        "${_chroot}${_home}"
+      chmod \
+        -f \
+        0750 -- \
+        "${_chroot}${_home}"
+      chown \
+        -hR -- \
+        "${_uid}:${_gid}" \
+        "${_chroot}${_home}"
+    else
+      _msg=(
+        "Failed to set permissions on"
+        "'${_chroot}${_home}'."
+        "Outside of valid path."
+      )
+      _msg_error \
+        "${_msg[*]}" \
+        1
+    fi
+  done < "${_passwd}"
 }
 
 # Runs a script in a chroot
 # $1: chroot path
 # $2: custom script path (relative to chroot)
 _run_chroot_script() {
-    local _volume="${1}" \
-          _custom_script="${2}" \
-          _deprecation_msg=(
-            "customize_airootfs.sh is deprecated!"
-            "Support for it will be removed in a"
-            "future archiso version.")
-    local _start_msg=(
-            "Running customize_airootfs.sh in"
-            "'$(_get "${_volume}" \
-                     "dir")' chroot...")
-    _msg_info "${_start_msg[@]}"
-    _msg_warning "${_deprecation_msg[*]}"
-    chmod -f -- \
-          +x \
-          "$(_get "${_volume}" \
-                  "dir")${_custom_script}"
-    # Unset TMPDIR to work around 
-    # https://bugs.archlinux.org/task/70580
-    eval -- env -u TMPDIR \
-              arch-chroot "$(_get "${_volume}" \
-                                  "dir")" \
-                          "${_custom_script}"
-    rm -- "$(_get "${_volume}" \
-                  "dir")${_custom_script}"
-    _msg_info "Done! ${_custom_script} run successfully."
+  local \
+    _volume="${1}" \
+    _custom_script="${2}" \
+    _deprecation_msg=() \
+    _start_msg=()
+  _deprecation_msg=(
+    "customize_airootfs.sh is deprecated!"
+    "Support for it will be removed in a"
+    "future archiso version."
+  )
+  _start_msg=(
+    "Running customize_airootfs.sh in"
+    "'$(_get \
+          "${_volume}" \
+          "dir")'"
+    "chroot..."
+  )
+  _msg_info \
+    "${_start_msg[@]}"
+  _msg_warning \
+    "${_deprecation_msg[*]}"
+  chmod \
+    -f -- \
+    +x \
+    "$(_get \
+         "${_volume}" \
+         "dir")${_custom_script}"
+  # Unset TMPDIR to work around 
+  # https://bugs.archlinux.org/task/70580
+  eval -- \
+    env \
+      -u \
+        TMPDIR \
+      arch-chroot \
+        "$(_get \
+             "${_volume}" \
+             "dir")" \
+        "${_custom_script}"
+  rm -- \
+    "$(_get \
+         "${_volume}" \
+         "dir")${_custom_script}"
+  _msg_info \
+    "Done! ${_custom_script} run successfully."
 }
 
 # Customize installation.
 _make_customize_airootfs() {
-    local _root="pacstrap"
-          _custom_script="/root/customize_airootfs.sh"
-    [[ -e "${_passwd}" ]] &&
-      _user_setup_passwd "${_root}"
-    [[ -e "${_custom_script_path}" ]] && \
-      _run_chroot_script "${_root}" \
-                         "${_custom_script}"
+  local \
+    _root \
+    _custom_script
+  _root="pacstrap"
+  _custom_script="/root/customize_airootfs.sh"
+  if [[ -e "${_passwd}" ]]; then
+    _user_setup_passwd \
+      "${_root}"
+  fi
+  if [[ -e "${_custom_script_path}" ]]; then
+    _run_chroot_script \
+      "${_root}" \
+      "${_custom_script}"
+  fi
 }
 
 # $1: Root file system from which to generate the
@@ -1773,61 +1925,79 @@ _make_customize_airootfs() {
 # $2: Destination volume
 # $3: Directory path in the destination volume
 _gen_pkglist() {
-    local _root="${1}" \
-          _volume="${2}"
-          _dest="${3}"
-    _install_dir_cmd "${_volume}" \
-                     "${_dest}"
-    pacman -Q \
-           --sysroot "$(_get "${_root}" \
-                             "dir")" > \
-      "$(_get "${_volume}" \
-              "dir")${_dest}/pkglist.${arch}.txt"
+  local \
+    _root="${1}" \
+    _volume="${2}" \
+    _dest="${3}"
+  _install_dir_cmd \
+    "${_volume}" \
+    "${_dest}"
+  pacman \
+    -Q \
+    --sysroot \
+    "$(_get \
+         "${_root}" \
+         "dir")" > \
+    "$(_get \
+         "${_volume}" \
+         "dir")${_dest}/pkglist.${arch}.txt"
 }
 
 # Produces a list of the installed packages
 _make_pkglist() {
-    local _dest \
-          _msg=() \
-          _flag \
-          _path \
-          _root="pacstrap" \
-          _volume="airootfs"
-    _msg=("Creating a list of installed"
-          "packages on live-enviroment..."
-    _msg_info "${_msg[*]}"
-    case "${buildmode}" in
-        "bootstrap")
-            _flag=true
-            _dest="${_root}"
-            _path="/"
-            ;;
-        "iso")
-            [[ ! "$(_get "${_volume}" \
-                         "image_type")" == *"luks"* ]] && \
-              _flag=true \
-              _dest="iso" \
-              _path="/$(_get "install" \
-                             "dir")"
-            ;;
-        "netboot")
-            _flag=true
-            _dest="iso"
-            _path="$(_get "install" \
-                          "dir")"
-            ;;
-    esac
-    [[ "${_flag}" == "true" ]] && \
-      _gen_pkglist "${_root}" \
-                   "${_dest}" \
-                   "${_path}"
-    _msg_info "Done!"
+  local \
+    _dest \
+    _msg=() \
+    _flag \
+    _path \
+    _root \
+    _volume
+  _root="pacstrap"
+  _volume="airootfs"
+  _msg=(
+    "Creating a list of installed"
+    "packages on live-enviroment..."
+  )
+  _msg_info \
+    "${_msg[*]}"
+  case "${buildmode}" in
+    "bootstrap")
+      _flag=true
+      _dest="${_root}"
+      _path="/"
+      ;;
+    "iso")
+      if [[ ! "$(_get "${_volume}" \
+                   "image_type")" == *"luks"* ]]; then
+        _flag=true
+        _dest="iso"
+        _path="/$(_get \
+                    "install" \
+                    "dir")"
+      fi
+      ;;
+    "netboot")
+        _flag=true
+        _dest="iso"
+        _path="$(_get \
+                   "install" \
+                   "dir")"
+        ;;
+  esac
+  if [[ "${_flag}" == "true" ]]; then
+    _gen_pkglist \
+      "${_root}" \
+      "${_dest}" \
+      "${_path}"
+  fi
+  _msg_info \
+    "Done!"
 }
 
 # Cleanup airootfs
 _cleanup_pacstrap_dir() {
   local \
-    _root="pacstrap" \
+    _root \
     _images=() \
     _boot \
     _cp_opts=() \
@@ -1837,6 +2007,7 @@ _cleanup_pacstrap_dir() {
     _pacman_cache \
     _tmp \
     _root_dir
+  _root="pacstrap"
   _root_dir="$( \
     _get \
       "${_root}" \
@@ -2058,32 +2229,6 @@ _get_cryptomount_uuid() {
 # Bootloaders related functions
 ###############################################
 
-# probably deprecated
-# to adapt to mkgrub
-# Returns the correct device selection command line for use in a templatized GRUB
-# configuration file
-_get_device_select_cmdline() {
-  local \
-   _cmd=()
-  _cmd=(
-  search \
-    --no-floppy
-    --set=root
-    --fs-uuid \
-      "$(_get_bootable_uuid)")
-  #shellcheck disable=SC2005
-  if [[ "$(_get "persistent" \
-             "image_type")" == *luks ]]; then
-    _cmd+=(
-      cryptomount
-      -u
-        "$(_get_cryptomount_uuid)"
-    )
-  fi
-  echo \
-    "${_cmd[*]}"
-}
-
 # Partially deprecated
 # Produces the 'encrypt' hook's kernel parameters
 # needed to boot an encrypted ISO.
@@ -2129,6 +2274,7 @@ _get_crypto_params() {
     "${_cparams[@]}"
 }
 
+# Probably deprecated
 # Produces kernel parameters.
 _get_kernel_params() {
   local \
@@ -2164,6 +2310,7 @@ _get_kernel_params() {
     "${_kparams[@]}"
 }
 
+# Probably deprecated
 # Fill a bootloader configuration
 # template and copy the result in a file
 # $1: bootloader configuration file
@@ -2184,6 +2331,7 @@ _gen_bootloader_config() {
 
 ### GRUB
 
+# Probably deprecated; all bootloader functions are probably deprecated
 ## Copy configuration files
 # Prepare bootloader configuration files
 _make_common_bootloader_cfg(){
@@ -2207,63 +2355,29 @@ _make_common_bootloader_cfg(){
 #     in the volume
 # $@: configuration files
 _make_bootloader_config() {
-    local _volume="${1}" \
-          _dest="${2}"
-    shift
-    local _cfgs=("${@}")
-    local _tmp_cfg="$(_get "work" \
-                           "dir")/bl_tmp.cfg"
-    for _cfg in "${_cfgs[@]}"; do
-        _gen_bootloader_config "${_cfg}" > \
-          "${_tmp_cfg}"
-        _install_cmd "${_volume}" \
-                     "${_tmp_cfg}" \
-                     "${_dest}/${_cfg##*/}"
-        rm "${_tmp_cfg}"
-    done
-}
-
-# Produces a standalone GRUB binary
-# $1: architecture (x86_64, i386)
-# $2: platform (efi, pc)
-# $3: output file or directory
-#     default name: BOOT<IA32/X64>.EFI
-_make_grub() {
-    local _out="${1}"
-    local _bootmode="${2}"
-    local _cfg="$(_get "work" \
-                       "dir")/grub.cfg" \
-          _embed_cfg="$(_get "work" \
-                             "dir")/grub-embed.cfg" \
-          _grub_options=() \
-          _modules
-    _modules="$(_get_grub_modules \
-                    "$(_get_platform \
-                           "${_bootmode}")")"
-    _grub_options=(
-      -O "$(_get_arch \
-                "${_bootmode}")-$(_get_platform \
-                                      "${_bootmode}")"
-      --modules="${_modules}"
-      --locales="en@quot"
-      --themes=""
-      --sbat=/usr/share/grub/sbat.csv
-      --disable-shim-lock
-      --compress=xz)
-    [[ "$(_get_platform \
-              "${_bootmode}")" == "pc"* ]] && \
-      _embed_cfg="${_cfg}" \
-      _grub_options+=(
-        --install-modules="${_modules}"
-        --fonts="")
-    [ -d "${_out}" ] && \
-      _out="${_out}/$(_get_standalone_name \
-                                  "${_bootmode}")"
-    _run_once "_make_common_bootmode_grub_cfg"
-    _grub_options+=(
-      -o "${_out}")
-    grub-mkstandalone "${_grub_options[@]}" \
-                      "boot/grub/grub.cfg=${_embed_cfg}"
+  local \
+    _volume="${1}" \
+    _dest="${2}" \
+    _cfgs=() \
+    _tmp_cfg
+  shift
+  _cfgs=(
+    "${@}"
+  )
+  _tmp_cfg="$( \
+    _get \
+      "work" \
+      "dir")/bl_tmp.cfg"
+  for _cfg in "${_cfgs[@]}"; do
+    _gen_bootloader_config "${_cfg}" > \
+      "${_tmp_cfg}"
+    _install_cmd \
+      "${_volume}" \
+      "${_tmp_cfg}" \
+      "${_dest}/${_cfg##*/}"
+    rm \
+      "${_tmp_cfg}"
+  done
 }
 
 ### SYSLINUX
