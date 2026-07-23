@@ -16,6 +16,8 @@ _requirements() {
   _check_cmd \
     'uuidgen'
 }
+source \
+  "${_bin}/mksystemd-boot"
 
 # Sets global variables
 _global_variables() {
@@ -2435,19 +2437,24 @@ _make_syslinux() {
 }
 
 _make_systemd-boot_common() {
-    local _volume="${1}" \
-          _bootmode="${2}" \
-          _boot_loader
-    _boot_loader="$(_get_boot_loader "${_bootmode}")"
-    _install_dir_cmd "${_volume}" \
-                     "/loader" \
-    _install_cmd \
-        "${_volume}" \
-        "$(_get "work" \
-                "dir")/$(_get_bl \
-                             "${_boot_loader}")/$(_get_bl_cfg \
-                                                      "${_boot_loader}")/loader.conf" \
-                 "/loader"
+  local \
+    _volume="${1}" \
+    _bootmode="${2}" \
+    _boot_loader
+  _boot_loader="$(
+    _get_boot_loader \
+      "${_bootmode}")"
+  _install_dir_cmd \
+    "${_volume}" \
+    "/loader" \
+  _install_cmd \
+    "${_volume}" \
+    "${work_dir}/$(
+      _get_bl \
+        "${_boot_loader}")/$(
+          _get_bl_cfg \
+            "${_boot_loader}")/loader.conf" \
+             "/loader"
 }
 
 ###########################
