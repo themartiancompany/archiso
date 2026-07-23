@@ -3243,12 +3243,12 @@ _make_systemd-boot() {
   local \
     _out="${1}" \
     _bootmode="${2}" \
-    _root="pacstrap" \
     _bl \
     _filename \
     _lib \
-    _root \
-  # TODO:
+    _root
+  _root="pacstrap" \
+      # TODO:
   #   to be handled by mksystemdboot
   # _lib="/usr/lib/systemd/boot"
   # _filename="$(
@@ -3276,13 +3276,14 @@ _make_systemd-boot() {
 
 # Returns bootloader configuration files directory
 _get_booloader_cfg() {
-    local _boot_loader="${1}" \
-          _cfg_path
-    if [[ "${_boot_loader}" == "systemd-boot" ]]; then
-      _cfg_path="entries"
-    fi
-    echo \
-      "${_cfg_path}"
+  local \
+    _boot_loader="${1}" \
+    _cfg_path
+  if [[ "${_boot_loader}" == "systemd-boot" ]]; then
+    _cfg_path="entries"
+  fi
+  echo \
+    "${_cfg_path}"
 }
 
 # Get bootloader base directory in a volume
