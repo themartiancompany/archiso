@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-_bin="$( \
+_bin="$(
   dirname \
-    "$( \
+    "$(
       command \
         -v \
 	  "env")")"
@@ -222,8 +222,8 @@ _show_config() {
     TZ=UTC printf -v build_date '%(%FT%R%z)T' "${SOURCE_DATE_EPOCH}"
     _msg_info "${app_name} configuration settings"
     _msg_info "             Architecture:   ${arch}"
-    _msg_info "        Working directory:   $(_get "work" "dir")"
-    _msg_info "   Installation directory:   $(_get "install" "dir")"
+    _msg_info "        Working directory:   ${work_dir}"
+    _msg_info "   Installation directory:   ${install_dir}"
     _msg_info "               Build date:   ${build_date}"
     _msg_info "         Output directory:   ${out_dir}"
     _msg_info "       Current build mode:   ${buildmode}"
@@ -231,10 +231,9 @@ _show_config() {
     _msg_info "                  GPG key:   ${gpg_key:-None}"
     _msg_info "               GPG signer:   ${gpg_sender:-None}"
     _msg_info "                 GPG Home:   ${gpg_home:-None}"
-    _msg_info "           Encryption Key:   $(_get "airootfs" \
-                                                   "encryption_key"):-None}"
+    _msg_info "           Encryption Key:   ${airootfs_encryption_key:-None}"
     _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
-    _msg_info "                  Profile:   $(_get "profile" "dir")"
+    _msg_info "                  Profile:   ${profile_dir}"
     _msg_info "Pacman configuration file:   ${pacman_conf}"
     _msg_info "          Image file name:   ${image_name:-None}"
     _msg_info "         ISO volume label:   ${iso_label}"
@@ -248,14 +247,22 @@ _show_config() {
 # Helper function to run functions only one time.
 # $1: function name
 _run_once() {
-    if [[ ! -e "${work_dir}/${run_once_mode}.${1}" ]]; then
-        "${1}"
-        touch "${work_dir}/${run_once_mode}.${1}"
-    else
-        if [ "${quiet}" != "y"  ]; then
-            _msg_info "Command ${1} already run"
-        fi
+  local \
+    _command="${1}" \
+    _msg=()
+  if [[ ! -e "${work_dir}/${run_once_mode}.${_command}" ]]; then
+    "${_command}"
+    touch \
+      "${work_dir}/${run_once_mode}.${_command}"
+  else
+    if [ "${quiet}" != "y"  ]; then
+      _msg=(
+        "Command '${_command}' already run"
+      )
+      _msg_info \
+        "${_msg[*]}"
     fi
+  fi
 }
 
 _mkimg() {
@@ -263,10 +270,7 @@ _mkimg() {
     _image="${1}" \
     _type \
     _mkimg_opts=()
-  _type="$(\
-    _get \
-      "image" \
-      "type")"
+  _type="${image_type}"
   rm \
     -f -- \
     "${_image_path}"
@@ -330,12 +334,19 @@ _install_dir_cmd(){
     _cmd \
     _dir \
     _dir_array=() \
+    _mmd_opts=() \
     _path=() \
     _dirs=() \
     _total_dirs=()
   shift
   _dirs=(
     "$@"
+  )
+  _mmd_opts+=(
+    -D
+      "o"
+    -i
+      "${efi_boot_img}"
   )
   for _dir \
     in "${_dirs[@]}"; do
@@ -365,12 +376,7 @@ _install_dir_cmd(){
   if [[ "${_volume}" == "efi_boot" ]]; then
     _cmd=(
       mmd
-        -D
-          o
-        -i
-          "$(_get \
-               "efi_boot" \
-               "img")"
+        "${_mmd_opts[@]}"
         --
     )
     _dirs=(
@@ -411,7 +417,7 @@ _install_cmd(){
       "${_dest}"
   fi
   if [[ "${_volume}" == "efi_boot" ]]; then
-    _root="$( \
+    _root="$(
       _get \
         "${_volume}" \
         "img")"
@@ -425,7 +431,7 @@ _install_cmd(){
     )
     _dest="::${_dest}"
   else
-    _root="$( \
+    _root="$(
       _get \
         "${_volume}" \
         "dir")"
@@ -450,7 +456,7 @@ _install_key() {
     _volume="${1}" \
     _key="${2}" \
     _dest
-  _dest="$( \
+  _dest="$(
     _get \
       "${_dest}" \
       "dir")"
@@ -477,7 +483,7 @@ _get_fs_type() {
   local \
     _volume="${1}" \
     _tmp
-  _tmp="$( \
+  _tmp="$(
     _get \
       "${_volume}" \
       "image_type")"
@@ -492,7 +498,7 @@ _get_fs_ext() {
   local \
     _volume="${1}" \
     _fs_type
-  _fs_type=$( \
+  _fs_type=$(
     _get_fs_type \
       "${_volume}")
   if [ "${_fs_type}" = "squashfs" ]; then
@@ -526,10 +532,10 @@ _get_volume_img() {
     _volume="${1}" \
     _ext \
     _volume_name
-  _volume_name="$( \
+  _volume_name="$(
     _get_volume_name \
       "${_volume}")"
-  _ext="$( \
+  _ext="$(
     _get_fs_ext \
       "${_volume}")"
   echo \
@@ -545,7 +551,7 @@ _get_iso_partition_label() {
     _image="${1}" \
     _label=("${iso_label}") \
     _suffix
-  _suffix="$( \
+  _suffix="$(
     echo \
       "${_image}" | \
       tr \
@@ -577,7 +583,7 @@ _set_volume_guid() {
     _volume="${1}" \
     _guid \
     _image_type
-  _image_type="$( \
+  _image_type="$(
     _get \
       "${_volume}" \
       "image_type")"
@@ -599,28 +605,28 @@ _set_volume_guid() {
 _mkfs_common() {
   local \
     _volume="${1}"
-  _name="$( \
+  _name="$(
     _get_volume_name \
       "${_volume}")"
   _dir="$(\
     _get \
       "${_volume}" \
       "dir")"
-  _epoch="$( \
+  _epoch="$(
     _get_epoch \
       "${_fs_image}")"
-  _encryption_key="$( \
+  _encryption_key="$(
     _get \
       "${_volume}" \
       "encryption_key")"
-  _label="$( \
+  _label="$(
     _get_iso_partition_label \
       "${_volume}")"
-  _size="$( \
+  _size="$(
     _get \
       "${_volume}" \
       "size")"
-  _image_path="$( \
+  _image_path="$(
     _get_volume_img \
       "${_volume}")"
   _grub="false"
@@ -636,18 +642,13 @@ _mkfs_common() {
 # Returns destination airootfs image path
 _get_airootfs_dir() {
   echo \
-    "$(_get \
-         "iso" \
-         "dir")/$( \
-         _get \
-           "install" \
-           "dir")/${arch}"
+    "${iso_dir}/${install_dir}/${arch}"
 }
 
 # Returns path of airootfs image in work directory
 _get_airootfs_img(){
   echo \
-    "$(_get_airootfs_dir)/airootfs.$( \
+    "$(_get_airootfs_dir)/airootfs.$(
          _get_fs_ext \
            "airootfs")"
 }
@@ -657,7 +658,7 @@ _get_airootfs_path(){
   echo \
     "$(_get \
          "install" \
-         "dir")/${arch}/airootfs.$( \
+         "dir")/${arch}/airootfs.$(
            _get_fs_ext \
              "airootfs")"
 }
@@ -695,11 +696,11 @@ _mkairootfs() {
     "airootfs"
   _mkfs_options=(\
     "${airootfs_image_tool_options[@]}")
-  _dir="$( \
+  _dir="$(
     _get \
       "pacstrap" \
       "dir")"
-  _image_path="$( \
+  _image_path="$(
     _get_airootfs_img)"
   _auto_size=""
   [[ -e "${_dir}" ]] || \
@@ -724,7 +725,7 @@ _mkefi_boot() {
   _mkfs_common \
     "efi_boot"
   _label="ARCHISO_EFI"
-  _size="$( \
+  _size="$(
     du \
       -bcs -- \
       "${efi_boot_files[@]}" 2>/dev/null | \
@@ -781,7 +782,7 @@ _get_keys_img(){
   echo \
     "$(_get \
          "dongle_isofs" \
-         "dir")/${_name}.$( \
+         "dir")/${_name}.$(
            _get_fs_ext \
              "keys")"
 }
@@ -793,7 +794,7 @@ _mkkeys() {
   _mkfs_options=(
     "${keys_image_tool_options[@]}"
   )
-  _image_path="$( \
+  _image_path="$(
     _get_keys_img)"
   _auto_size=""
   _mkimg \
@@ -864,10 +865,10 @@ _mkchecksum() {
     _file="${1}" \
     _dir \
     _name
-  _dir=$( \
+  _dir=$(
     dirname \
       "${_file}")
-  _name=$( \
+  _name=$(
     basename \
       "${_file%.*}")
   cd -- \
@@ -986,7 +987,7 @@ _build_crypttab() {
   if [[ "${swap_image_type}" == *"luks" ]]; then
     sed \
       -i \
-      "s|%SWAP_UUID%|$( \
+      "s|%SWAP_UUID%|$(
         _get_swap_uuid)|g" \
       "${_out}"
   else
@@ -999,7 +1000,7 @@ _build_crypttab() {
      [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
     sed \
       -i \
-      "s|%DONGLE_SWAP_UUID%|$( \
+      "s|%DONGLE_SWAP_UUID%|$(
         _get_dongle_swap_uuid)|g" \
       "${_out}"
   else
@@ -1045,11 +1046,11 @@ _resolve_fs_encryption_key(){
     _encryption_key \
     _msg=() \
     _out_dir
-  _encryption_key="$( \
+  _encryption_key="$(
     _get \
       "${_volume}" \
       "encryption_key")"
-  _out_dir="$( \
+  _out_dir="$(
     dirname \
       "${_auto_key}")"
   if [ ! -f "${_encryption_key}" ]; then
@@ -1094,15 +1095,15 @@ _get_secondary_key_opts() {
     _mode \
     _public_image_type
   _mode="binary"
-  _public_image_type="$( \
+  _public_image_type="$(
     _get \
       "airootfs" \
       "image_type")"
-  _image_type="$( \
+  _image_type="$(
     _get \
       "${_volume}" \
       "image_type")"
-  _encryption_key="$( \
+  _encryption_key="$(
     _get \
       "${_volume}" \
       "encryption_key")"
@@ -1149,7 +1150,7 @@ _resolve_secondary_key() {
       -v
     )
   fi
-  _key_opts=( $( \
+  _key_opts=( $(
     _get_secondary_key_opts \
       "${_volume}")
   )
@@ -1257,12 +1258,12 @@ _make_pacman_conf() {
     _system_cache_dirs \
   _hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
   _default_cache="/var/cache/pacman/pkg" \
-  _system_cache_dirs="$( \
+  _system_cache_dirs="$(
     pacman-conf CacheDir | \
     tr \
       '\n' \
       ' ')"
-  _profile_cache_dirs="$( \
+  _profile_cache_dirs="$(
     pacman-conf \
       --config \
         "${pacman_conf}" \
@@ -1337,11 +1338,11 @@ _validate_file_path() {
     pacstrap_dir \
     persistent_dir
   _on_storage="${_storage}${_filename}" \
-  pacstrap_dir="$( \
+  pacstrap_dir="$(
     _get \
       "work" \
       "dir")/${arch}/airootfs"
-  persistent_dir="$( \
+  persistent_dir="$(
     _get \
       "work" \
       "dir")/persistent"
@@ -1404,7 +1405,7 @@ _apply_permissions() {
   _opts+=(
     '-f'
   )
-  _dir="$( \
+  _dir="$(
     _get \
       "${_volume}" \
       "dir")"
@@ -1686,7 +1687,7 @@ _make_os_release() {
     _root="${1}" \
     _msg=()
   # Append IMAGE_ID & IMAGE_VERSION to os-release
-  _os_release="$( \
+  _os_release="$(
     realpath -- \
       "$(_get \
            "${_root}" \
@@ -1697,7 +1698,7 @@ _make_os_release() {
      [[ -e "$(_get \
                 "${_root}" \
                 "dir")/usr/lib/os-release" ]]; then
-    _os_release="$( \
+    _os_release="$(
       realpath -- \
         "$(_get \
              "${_root}" \
@@ -1789,7 +1790,7 @@ _user_setup_passwd() {
     _passwd_array \
     _path \
     _uid \
-  _chroot="$( \
+  _chroot="$(
     _get \
       "${_volume}" \
       "dir")"
@@ -1815,7 +1816,7 @@ _user_setup_passwd() {
     [[ -z "${_home}" ]] && \
       continue
     # Prevent path traversal outside of $pacstrap_dir
-    _path="$( \
+    _path="$(
       realpath \
         -q -- \
         "${_chroot}${_home}")"
@@ -2010,7 +2011,7 @@ _cleanup_pacstrap_dir() {
     _tmp \
     _root_dir
   _root="pacstrap"
-  _root_dir="$( \
+  _root_dir="$(
     _get \
       "${_root}" \
       "dir")"
@@ -2143,11 +2144,11 @@ _get_archiso_uuid() {
 _get_swap_uuid() {
   local \
     _epoch
-  _epoch="$( \
+  _epoch="$(
     _get_epoch \
       swap)"
   if [[ "${buildmode}" == 'dongle' ]]; then
-    _epoch="$( \
+    _epoch="$(
       _get_epoch \
         dongle_swap)"
   fi
@@ -2183,7 +2184,7 @@ _get_dongle_persistent_uuid() {
 _get_dongle_swap_uuid() {
   local \
     _epoch
-  _epoch="$( \
+  _epoch="$(
     _get_epoch \
       "dongle_swap")"
   _get_epoch_fsuuid \
@@ -2198,10 +2199,10 @@ _get_dongle_swap_uuid() {
 _get_bootable_uuid() {
   local \
     _uuid
-  _uuid="$( \
+  _uuid="$(
     _get_archiso_uuid)"
   if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-    _uuid=$( \
+    _uuid=$(
       _get_dongle_uuid)
   fi
   echo \
@@ -2215,10 +2216,10 @@ _get_cryptomount_uuid() {
   local \
     _epoch
   if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
-    _epoch="$( \
+    _epoch="$(
       _get_epoch dongle_boot)"
   else
-    _epoch="$( \
+    _epoch="$(
       _get_epoch persistent)"
   fi
   _get_epoch_fsuuid \
@@ -2244,14 +2245,14 @@ _get_crypto_params() {
           "${_volume}" \
           "image_type")" == *luks ]] && \
     _cryptdevice=(
-      "UUID=$( \
-        _get_archiso_uuid),$( \
+      "UUID=$(
+        _get_archiso_uuid),$(
         _get_airootfs_path)"
       "root"
       "readonly") && \
     _cparams+=(
       "root=/dev/mapper/root"
-      "cryptdevice=$( \
+      "cryptdevice=$(
         IFS=: ; \
         echo \
           "${_cryptdevice[*]}")") && \
@@ -2259,16 +2260,16 @@ _get_crypto_params() {
            "${_volume}" \
            "encryption_key")" != "" ] && \
       _cryptkey=(
-        "UUID=$( \
+        "UUID=$(
           _get_dongle_uuid)"
-        "iso9660,$( \
+        "iso9660,$(
           _get_fs_type \
             "keys")"
-        "keys.$( \
+        "keys.$(
           _get_fs_ext \
             "keys"),${volume}.key") && \
   _cparams+=(
-    "cryptkey=$( \
+    "cryptkey=$(
       IFS=: ; \
       echo \
         "${_cryptkey[*]}")")
@@ -2284,24 +2285,24 @@ _get_kernel_params() {
     _kparams=() \
     _sigdevice=()
   _kparams+=(
-    "archisobasedir=$( \
+    "archisobasedir=$(
       _get \
         "install" \
         "dir")"
     "archisolabel=${iso_label}"
-    "archisouuid=$( \
+    "archisouuid=$(
       _get_archiso_uuid)"
     "$(_get_crypto_params)"
   )
   if [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
     _sigdevice+=(
-      "UUID=$( \
+      "UUID=$(
         _get_dongle_uuid)"
       "iso9660"
       "$("_get_${_volume}_path").sig"
     )
     _kparams+=(
-      "sigdevice=$( \
+      "sigdevice=$(
         IFS=: ; \
         echo \
           "${_sigdevice[*]}")"
@@ -2342,11 +2343,11 @@ _make_common_bootloader_cfg(){
     _boot_loader="${2}"
   _make_bootloader_config \
     "${_volume}" \
-    "/$(_get_bl \
-          "${_boot_loader}")/$( \
-            _get_bl_cfg \
+    "/$(_get_bootloader \
+          "${_boot_loader}")/$(
+            _get_bootloader_cfg \
               "${_boot_loader}")" \
-    $(_get_bl_cfg_files \
+    $(_get_bootloader_cfg_files \
         "profile" \
         "${_boot_loader}")
 }
@@ -2366,7 +2367,7 @@ _make_bootloader_config() {
   _cfgs=(
     "${@}"
   )
-  _tmp_cfg="$( \
+  _tmp_cfg="$(
     _get \
       "work" \
       "dir")/bl_tmp.cfg"
@@ -2450,9 +2451,9 @@ _make_systemd-boot_common() {
   _install_cmd \
     "${_volume}" \
     "${work_dir}/$(
-      _get_bl \
+      _get_bootloader \
         "${_boot_loader}")/$(
-          _get_bl_cfg \
+          _get_bootloader_cfg \
             "${_boot_loader}")/loader.conf" \
              "/loader"
 }
@@ -2694,7 +2695,7 @@ _make_common_bootmode_grub_cfg_install() {
     local _volume="${1}" \
           _boot_loader="grub"
     _install_cmd "${_volume}" \
-                 "$(_get_bl_cfg_files "work" \
+                 "$(_get_bootloader_cfg_files "work" \
                                       "${_boot_loader}")" \
                  "/EFI/BOOT"
 }
@@ -2811,7 +2812,7 @@ _make_bl_standalone() {
     "${_volume}" \
     "$(_get_boot_loader \
         "${_bootmode}")" \
-        "/EFI/BOOT/$( \
+        "/EFI/BOOT/$(
           _get_standalone_name \
             "${_bootmode}")"
 }
@@ -2845,10 +2846,10 @@ _make_common_bootmode() {
     [[ "${_boot_loader}" == "grub" ]] && \
       _make_bootloader_config \
           "${_volume}" \ 
-          "/$(_get_bl \
-                  "${_boot_loader}")/$(_get_bl_cfg \
+          "/$(_get_bootloader \
+                  "${_boot_loader}")/$(_get_bootloader_cfg \
                                                "${_boot_loader}")" \
-          $(_get_bl_cfg_files \
+          $(_get_bootloader_cfg_files \
                 "${_src}" \
                 "${_boot_loader}")
     [[ "${_boot_loader}" == "grub" ]] && \
@@ -2916,7 +2917,7 @@ _make_bootmode() {
     _bootmode="${2}" \
     _msg=()
   _msg=(
-    "Setting up '$( \
+    "Setting up '$(
       _get_boot_loader \
         "${_bootmode}")' for"
     "'$(_get_PLATFORM \
@@ -2929,10 +2930,10 @@ _make_bootmode() {
     "${bootmode}"
   _make_kernel_on_isos
   _msg=(
-    "Done! '$( \
+    "Done! '$(
       _get_boot_loader \
         "${bootmode}")'"
-    "set up for '$( \
+    "set up for '$(
       _get_PLATFORM \
         "${_bootmode}")'"
     "booting from a disk successfully.")
@@ -2972,23 +2973,23 @@ _make_bootmode_bios.syslinux.mbr() {
     _volume="${1}" \
     _cfg_files=() \
     _msg=()
-  _cfg_files=( $( \
-    _get_bl_cfg_files \
+  _cfg_files=( $(
+    _get_bootloader_cfg_files \
       "profile" \
       "$(_get_boot_loader \
            "${bootmode}")")
   )
   _msg=(
-    "Setting up '$( \
+    "Setting up '$(
       _get_boot_loader \
         "${bootmode}")'"
-    "for '$( \
+    "for '$(
       _get_PLATFORM \
         "${bootmode}")'"
     "booting from a disk...")
   _msg_info \
     "${_msg[*]}"
-  # "_make_$( \
+  # "_make_$(
   #   _get_boot_loader \
   #     "${bootmode}")" \
   #   "${_volume}"
@@ -3061,42 +3062,57 @@ _make_bootmode_bios.grub.eltorito_dongle_iso() {
 # Prepares syslinux for El-Torito booting
 # $1: volume on which to install syslinux
 _make_bootmode_bios.syslinux.eltorito() {
-    local _volume="${1}" \
-          _root="pacstrap" \
-          _msg=()
-    _make_common_bootloader "${bootmode}"
-    _msg=(
-      "Setting up '${_boot_loader}' for '${_PLATFORM}'"
-      "booting from an optical disc...")
-    _msg_info "${_msg[*]}"
-    _install_dir_cmd "${_volume}" \
-                     "/${_boot_loader}"
-    _install_cmd "${_volume}" \
-                 "$(_get "${_root}" \
-                         "dir")/usr/lib/${_boot_loader}/bios/isolinux.bin" \
-                 "/${_boot_loader}"
-    _install_cmd "${_volume}"
-                 "$(_get "${_root}" \
-                         "dir")/usr/lib/${_boot_loader}/bios/isohdpfx.bin" \
-                 "/${_boot_loader}"
-    _msg=(
-      "Done! '${_boot_loader}' set up for '${_PLATFORM}' booting"
-      "from an optical disc successfully.")
-    _msg_info "${_msg[*]}"
+  local \
+    _volume="${1}" \
+    _root="pacstrap" \
+    _msg=()
+  _make_common_bootloader \
+    "${bootmode}"
+  _msg=(
+    "Setting up '${_boot_loader}' for '${_PLATFORM}'"
+    "booting from an optical disc..."
+  )
+  _msg_info \
+    "${_msg[*]}"
+  _install_dir_cmd \
+    "${_volume}" \
+    "/${_boot_loader}"
+  _install_cmd \
+    "${_volume}" \
+    "$(_get \
+         "${_root}" \
+         "dir")/usr/lib/${_boot_loader}/bios/isolinux.bin" \
+    "/${_boot_loader}"
+  _install_cmd \
+    "${_volume}"
+    "$(_get \
+         "${_root}" \
+         "dir")/usr/lib/${_boot_loader}/bios/isohdpfx.bin" \
+    "/${_boot_loader}"
+  _msg=(
+    "Done! '${_boot_loader}' set up for '${_PLATFORM}' booting"
+    "from an optical disc successfully."
+  )
+  _msg_info \
+    "${_msg[*]}"
 }
 
 # Prepares syslinux for El-Torito booting on BIOS on the ISO
 _make_bootmode_bios.syslinux.eltorito_iso() {
-    _make_bootmode_bios.syslinux.eltorito "iso"
-    # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.syslinux.mbr_iso
+  _make_bootmode_bios.syslinux.eltorito \
+    "iso"
+  # ISOLINUX and SYSLINUX installation is shared
+  _run_once \
+    "_make_bootmode_bios.syslinux.mbr_iso"
 }
 
 # Prepares syslinux for El-Torito booting on BIOS on the dongle ISO
 _make_bootmode_bios.syslinux.eltorito_dongle_iso() {
-    _make_bootmode_bios.syslinux.eltorito "dongle_iso"
-    # ISOLINUX and SYSLINUX installation is shared
-    _run_once _make_bootmode_bios.syslinux.mbr_dongle_iso
+  _make_bootmode_bios.syslinux.eltorito \
+    "dongle_iso"
+  # ISOLINUX and SYSLINUX installation is shared
+  _run_once \
+    "_make_bootmode_bios.syslinux.mbr_dongle_iso"
 }
 
 #### UEFI
@@ -3108,32 +3124,45 @@ _make_bootmode_bios.syslinux.eltorito_dongle_iso() {
 # Prepares GRUB (32-bit) for EFI boot
 # $1: device type ('iso', 'dongle')
 _make_bootmode_uefi-ia32.grub.esp() {
-    local _volume="${1}"
-    _make_common_bootloader "${bootmode}"
-    _make_grub "$(_get "work" \
-                       "dir")" \
-               "${bootmode}"
-    # Add GRUB to the list of files used to
-    # calculate the required FAT image size.
-    if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
-        _run_once "_make_bootmode_uefi-x64.systemd-boot.esp_${_bootable}"
-    elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
-        _run_once "_make_bootmode_uefi-x64.grub.esp_${_bootable}"
-    else
-        _run_once "_mkefi_boot"
-    fi
-    _make_common_bootmode
-    _msg_info "Done! '${_boot_loader}' set up for '${_PLATFORM}' booting successfully."
+  local \
+    _volume="${1}"
+  _make_common_bootloader \
+    "${bootmode}"
+  _make_grub \
+    "${work_dir}" \
+    "${bootmode}"
+  # Add GRUB to the list of files used to
+  # calculate the required FAT image size.
+  if [[ " ${bootmodes[*]} " =~ uefi-x64.systemd-boot.esp ]]; then
+    _run_once \
+      "_make_bootmode_uefi-x64.systemd-boot.esp_${_bootable}"
+  elif [[ " ${bootmodes[*]} " =~ uefi-x64.grub.esp ]]; then
+    _run_once \
+      "_make_bootmode_uefi-x64.grub.esp_${_bootable}"
+  else
+    _run_once \
+      "_mkefi_boot"
+  fi
+  _make_common_bootmode
+  _msg=(
+    "Done! '${_boot_loader}' set"
+    "up for '${_PLATFORM}' booting"
+    "successfully."
+  )
+  _msg_info \
+    "${_msg[*]}"
 }
 
 # Prepares GRUB (32 bit) for UEFI the ISO image
 _make_bootmode_uefi-ia32.grub.esp_iso() {
-    _make_bootmode_uefi-ia32.grub.esp "iso"
+  _make_bootmode_uefi-ia32.grub.esp \
+    "iso"
 }
 
 # Prepares GRUB (32 bit) for UEFI the dongle ISO image
 _make_bootmode_uefi-ia32.grub.esp_dongle_iso() {
-    _make_bootmode_uefi-ia32.grub.esp "dongle_iso"
+  _make_bootmode_uefi-ia32.grub.esp \
+    "dongle_iso"
 }
 
 ### UEFI IA32 ELTORITO
@@ -3144,28 +3173,36 @@ _make_bootmode_uefi-ia32.grub.esp_dongle_iso() {
 # $1: root file system for GRUB
 # $2: device type ('iso' or 'dongle')
 _make_bootmode_uefi-ia32.grub.eltorito() {
-    local _volume="${1}" \
-          _bl \
-          _msg=()
-    _make_common_bootloader "${bootmode}"
-    _bootmode="u${_platform}-${_code}.${_boot_loader}.esp_${_volume}"
-    _run_once "_make_bootmode_${_bootmode}"
-    _msg=(
-      "Preparing an /EFI directory for"
-      "the ISO 9660 file system...")
-    _msg_info "${_msg[*]}"
-    _make_common_bootmode
-    _msg_info "Done!"
+  local \
+    _volume="${1}" \
+    _bl \
+    _msg=()
+  _make_common_bootloader \
+    "${bootmode}"
+  _bootmode="u${_platform}-${_code}.${_boot_loader}.esp_${_volume}"
+  _run_once \
+    "_make_bootmode_${_bootmode}"
+  _msg=(
+    "Preparing an /EFI directory for"
+    "the ISO 9660 file system..."
+  )
+  _msg_info \
+    "${_msg[*]}"
+  _make_common_bootmode
+  _msg_info \
+    "Done!"
 }
 
 # Prepares GRUB (32 bit) El Torito for UEFI on the ISO image
 _make_bootmode_uefi-ia32.grub.eltorito_iso() {
-    _make_bootmode_uefi-ia32.grub.eltorito "iso"
+  _make_bootmode_uefi-ia32.grub.eltorito \
+    "iso"
 }
  
 # Prepares GRUB (32 bit) El Torito for UEFI on the dongle ISO image
 _make_bootmode_uefi-ia32.grub.eltorito_dongle_iso() {
-    _make_bootmode_uefi-ia32.grub.eltorito "dongle_iso"
+  _make_bootmode_uefi-ia32.grub.eltorito \
+    "dongle_iso"
 }
 
 #### UEFI x64
@@ -3176,24 +3213,28 @@ _make_bootmode_uefi-ia32.grub.eltorito_dongle_iso() {
 
 # Prepares GRUB for EFI boot
 _make_bootmode_uefi-x64.grub.esp() {
-    local _bl \
-          _volume="efi_boot"
-    _make_common_bootloader "${bootmode}"
-    _make_grub "$(_get "work" \
-                       "dir")"
-    _run_once "_mk${_volume}"
-    _make_common_bootmode
-    _msg_info "Done! GRUB set up for UEFI booting successfully."
+  local \
+    _bl \
+    _volume="efi_boot"
+  _make_common_bootloader \
+    "${bootmode}"
+  _make_grub \
+    "${work_dir}"
+  _run_once \
+    "_mk${_volume}"
+  _make_common_bootmode
+  _msg_info \
+    "Done! GRUB set up for UEFI booting successfully."
 }
  
 # Prepares GRUB for the ISO image
 _make_bootmode_uefi-x64.grub.esp_iso() {
-    _make_bootmode_uefi-x64.grub.esp
+  _make_bootmode_uefi-x64.grub.esp
 }
 
 # Prepares GRUB for the dongle ISO image
 _make_bootmode_uefi-x64.grub.esp_dongle_iso() {
-    _make_bootmode_uefi-x64.grub.esp
+  _make_bootmode_uefi-x64.grub.esp
 }
 
 ## SYSTEMD-BOOT UEFI x64 ESP
@@ -3207,32 +3248,34 @@ _make_systemd-boot() {
     _filename \
     _lib \
     _root \
-  _lib="/usr/lib/systemd/boot"
-  _filename="$( \
-    _get_bootloader \
-      "${_bootmode}")$( \
-        _get_arch_code \
-          "${_bootmode}").$( \
-            _get_platform \
-              "${_bootmode}")"
-  _bl="$(\
-    _get \
-      "${_root}" \
-      "dir")${_lib}/$( \
-        _get_platform \
-          "${_bootmode}")/${_filename}"
-  if [ -d "${_out}" ]; then
-    _out="${_out}/$( \
-      _get_standalone_name \
-        "${_bootmode}")"
-  fi
-  cp \
-    "${_bl}" \
-    "${_out}"
+  # TODO:
+  #   to be handled by mksystemdboot
+  # _lib="/usr/lib/systemd/boot"
+  # _filename="$(
+  #   _get_bootloader \
+  #     "${_bootmode}")$(
+  #       _get_arch_code \
+  #         "${_bootmode}").$(
+  #           _get_platform \
+  #             "${_bootmode}")"
+  # _bl="$(\
+  #   _get \
+  #     "${_root}" \
+  #     "dir")${_lib}/$(
+  #       _get_platform \
+  #         "${_bootmode}")/${_filename}"
+  # if [ -d "${_out}" ]; then
+  #   _out="${_out}/$(
+  #     _get_standalone_name \
+  #       "${_bootmode}")"
+  # fi
+  # cp \
+  #   "${_bl}" \
+  #   "${_out}"
 }
 
 # Returns bootloader configuration files directory
-_get_bl_cfg() {
+_get_booloader_cfg() {
     local _boot_loader="${1}" \
           _cfg_path
     [[ "${_boot_loader}" == "systemd-boot" ]] && \
@@ -3242,7 +3285,7 @@ _get_bl_cfg() {
 
 # Get bootloader base directory in a volume
 # $1: boot loader
-_get_bl() {
+_get_bootloader() {
   local \
     _boot_loader="${1}"
   if [[ "${_boot_loader}" == "systemd-boot" ]]; then
@@ -3256,34 +3299,34 @@ _get_bl() {
 # given a volume
 # $1: a volume
 # $2: a boot loader
-_get_bl_profile() {
-   local \
-     _volume="${1}" \
-     _boot_loader="${2}" \
-     _dir
-   _dir="$( \
-     _get \
-       "${_volume}" \
-       "dir")"
-   if [[ "${_boot_loader}" == "systemd-boot" ]]; then
-      _dir="${_dir}/efiboot"
-    echo \
-      "${_dir}/$( \
-        _get_bl \
-          "${_boot_loader}")"
-   fi
+_get_bootloader_profile() {
+  local \
+    _volume="${1}" \
+    _boot_loader="${2}" \
+    _dir
+  _dir="$(
+    _get \
+      "${_volume}" \
+      "dir")"
+  if [[ "${_boot_loader}" == "systemd-boot" ]]; then
+     _dir="${_dir}/efiboot"
+   echo \
+     "${_dir}/$(
+       _get_bootloader \
+         "${_boot_loader}")"
+  fi
 }
 
 # Returns profile configuration files for a bootloader
-_get_bl_cfg_files() {
+_get_bootloader_cfg_files() {
   local \
     _volume="${1}" \
     _boot_loader="${2}"
   echo \
-    "$(_get_bl_profile \
+    "$(_get_bootloader_profile \
          "${_volume}" \
-         "${_boot_loader}")/$( \
-           _get_bl_cfg \
+         "${_boot_loader}")/$(
+           _get_bootloader_cfg \
              "${_boot_loader}")/"*".conf"
 }
 
@@ -3295,7 +3338,7 @@ _get_available_ucodes() {
     _file
   for _file \
     in "${ucodes[@]}"; do
-    _path="$( \
+    _path="$(
       _get \
         "${_root}" \
         "dir")/boot/${_file}" 
@@ -3322,8 +3365,8 @@ _make_bootmode_uefi-x64.systemd-boot.esp() {
     _root="pacstrap"
     _systemd_boot
   # _bl="${pacstrap_dir}${_lib}/${_platform}/${_systemd_boot}"
-  _cfg_files=( $( \
-    _get_bl_cfg_files \
+  _cfg_files=( $(
+    _get_bootloader_cfg_files \
       "profile" \
       "${_boot_loader}")
   )
@@ -3506,11 +3549,11 @@ _validate_requirements_airootfs_image_type_luks() {
   local \
     _encryption_key \
     _key_auto
-  _encryption_key="$( \
+  _encryption_key="$(
     _get \
       "airootfs" \
       "encryption_key")"
-  _key_auto="$( \
+  _key_auto="$(
     _get \
       "airootfs" \
       "encryption_key_auto")"
@@ -3568,7 +3611,7 @@ _validate_requirements_persistent_image_type_ext4() {
   if [ ! -e "${_dongle_ro_udev_rule}" ]; then
     (( validation_error=validation_error+1 ))
     _msg=(
-      "Validating '$( \
+      "Validating '$(
         _get \
           "dongle_persistent" \
           "image_type")' "
@@ -3984,13 +4027,13 @@ _prepare_efi_boot_image() {
     [[ " ${_bootmodes[*]} " =~ ' '*'systemd-boot'*' ' ]] && \
       efi_boot_files+=(
         "$(_get "profile" \
-                "dir")/$(_get_bl "systemd-boot")/loader.conf"
+                "dir")/$(_get_bootloader "systemd-boot")/loader.conf"
         $(_get_available_ucodes \
               "${_root}"))
     [[ " ${_bootmodes[*]} " =~ ' '*'grub'*' ' ]] && \
       run_once "_make_common_bootmode_grub_cfg" && \
       efi_boot_files+=(
-        $(_get_bl_cfg_files "work" \
+        $(_get_bootloader_cfg_files "work" \
                             "grub"))
     for _bootmode in "${_bootmodes[@]}"; do
         "_make_$(_get_boot_loader \
