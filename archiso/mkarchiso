@@ -3278,9 +3278,11 @@ _make_systemd-boot() {
 _get_booloader_cfg() {
     local _boot_loader="${1}" \
           _cfg_path
-    [[ "${_boot_loader}" == "systemd-boot" ]] && \
+    if [[ "${_boot_loader}" == "systemd-boot" ]]; then
       _cfg_path="entries"
-    echo "${_cfg_path}"
+    fi
+    echo \
+      "${_cfg_path}"
 }
 
 # Get bootloader base directory in a volume
@@ -5292,329 +5294,419 @@ _validate_options() {
 # current directory.
 # $1: volume
 _override_volume() {
-    local _volume="${1}"
-    _override_path "${_volume}" \
-                   "dir" \
-                   "./${volume}"
+  local \
+    _volume="${1}"
+  _override_path \
+    "${_volume}" \
+    "dir" \
+    "./${volume}"
 }
 
 # Set defaults and, if present, overrides
 # from mkarchiso command line option parameters
 _set_overrides() {
-    local _img \
-          _msg=() \
-          _no_override_ciphered_volumes=() \
-          _no_override_volumes=() \
-          _var \
-          _volume
-    declare -A \
-            _no_override_vars
-    # Set variables that have command line overrides
-    [[ ! -v override_buildmodes ]] || \
-      buildmodes=(
-        "${override_buildmodes[@]}")
-    (( ${#buildmodes[@]} < 1 )) && \
-      buildmodes+=(
-        'iso')
-    _override_volume "work"
-    _override_volume "out"
-    _override_path "pacman" \
-                   "conf" \
-                   "/etc/pacman.conf"
-    [[ ! -v override_pkg_list ]] || \
-      pkg_list+=(
-        "${override_pkg_list[@]}")
-    # TODO: allow overriding bootstrap_pkg_list
-    _set_override "iso" \
-                  "label" \
-                  "${app_name^^}"
-    _set_override "iso" \
-                  "publisher" \
-                  "${app_name}"
-    _set_override "iso" \
-                  "application" \
-                  "${app_name} iso"
-    _set_override "install" \
-                  "dir" \
-                  "${app_name}"
-    if [[ -v override_quiet ]]; then
-        quiet="${override_quiet}"
-    elif [[ -z "${quiet}" ]]; then
-        quiet="y"
-    fi
-    [[ ! -v override_gpg_key ]] || \
-      gpg_key="${override_gpg_key}"
-    [[ ! -v override_gpg_sender ]] || \
-      gpg_sender="${override_gpg_sender}"
-    [[ ! -v override_gpg_home ]] || \
-      gpg_home="${override_gpg_home}"
-    [[ -v override_cert_list ]] && \
-      sign_netboot_artifacts="y"
-    [[ ! -v override_cert_list ]] || \
-      cert_list+=("${override_cert_list[@]}")
-    if [[ -v override_quiet ]]; then
-        quiet="${override_quiet}"
-    elif [[ -z "${quiet}" ]]; then
-        quiet="y"
-    fi
-    # Set variables that do not have overrides
-    _set_volume_dir "iso"
-    _set_volume_dir "dongle_iso"
-    _encrypted_volumes=(
-      "boot"
-      "dongle_boot"
-      "dongle_persistent"
-      "dongle_swap"
-      "keys"
-      "persistent"
-      "recovery"
-      "swap")
-    _no_override_volumes=(
-      "${_no_encrypted_volumes[@]}"
-      "efi_boot")
-    _no_override_vars=(
-      ["airootfs_image_type"]="squashfs"
-      ["boot_image_type"]="ext4+luks"
-      ["dongle_boot_image_type"]="ext4+luks"
-      ["dongle_persistent_image_type"]="ext4+luks"
-      ["dongle_swap_image_type"]="swap+luks"
-      ["keys_image_type"]="squashfs+luks"
-      ["persistent_image_type"]="ext4+luks"
-      ["recovery_image_type"]="ext4+luks"
-      ["swap_image_type"]="swap+luks"
-      ["airootfs_encryption_key_auto"]="$(_get "work" \
-                                               "dir")/$(_get "iso" \
-                                                             "label").key"
-      ["airootfs_dir"]="$(_get_airootfs_dir)"
-      ["recovery"]="false"
-      ["iso_name"]="${app_name}")
-    for _volume in "${_encrypted_volumes[@]}"; do
-        _msg=(
-          "Setting ${_volume} encryption key to auto")
-        _msg_info "${_msg[*]}"
-        _no_override_vars["${_volume}_encryption_key"]="auto"
-    done
-    for _volume in "${_no_override_volumes[@]}"; do
-        _msg=(
-          "Setting ${_volume} image to"
-          "'$(_get_volume_img ${_volume})'"
-        _msg_info "${_msg[*]}"
-        _no_override_vars["${_volume}_img"]="$(_get_volume_img \
-                                                   "${_volume}")"
-    done
-    for _var in "${!_no_override_vars[@]}"; do
-        _msg=(
-          "Setting ${_var} to ${_no_override_vars[${_var}]}")
-        _msg_info "${_msg[*]}"
-        _set_no_override "${_var}" \
-                         "${_no_override_vars[${_var}]}"
-    done
+  local \
+    _img \
+    _msg=() \
+    _no_override_ciphered_volumes=() \
+    _no_override_volumes=() \
+    _var \
+    _volume
+  declare -A \
+          _no_override_vars
+  # Set variables that have command line overrides
+  [[ ! -v override_buildmodes ]] || \
+    buildmodes=(
+      "${override_buildmodes[@]}")
+  (( ${#buildmodes[@]} < 1 )) && \
+    buildmodes+=(
+      'iso')
+  _override_volume "work"
+  _override_volume "out"
+  _override_path "pacman" \
+                 "conf" \
+                 "/etc/pacman.conf"
+  [[ ! -v override_pkg_list ]] || \
+    pkg_list+=(
+      "${override_pkg_list[@]}")
+  # TODO: allow overriding bootstrap_pkg_list
+  _set_override "iso" \
+                "label" \
+                "${app_name^^}"
+  _set_override "iso" \
+                "publisher" \
+                "${app_name}"
+  _set_override "iso" \
+                "application" \
+                "${app_name} iso"
+  _set_override "install" \
+                "dir" \
+                "${app_name}"
+  if [[ -v override_quiet ]]; then
+      quiet="${override_quiet}"
+  elif [[ -z "${quiet}" ]]; then
+      quiet="y"
+  fi
+  [[ ! -v override_gpg_key ]] || \
+    gpg_key="${override_gpg_key}"
+  [[ ! -v override_gpg_sender ]] || \
+    gpg_sender="${override_gpg_sender}"
+  [[ ! -v override_gpg_home ]] || \
+    gpg_home="${override_gpg_home}"
+  [[ -v override_cert_list ]] && \
+    sign_netboot_artifacts="y"
+  [[ ! -v override_cert_list ]] || \
+    cert_list+=("${override_cert_list[@]}")
+  if [[ -v override_quiet ]]; then
+      quiet="${override_quiet}"
+  elif [[ -z "${quiet}" ]]; then
+      quiet="y"
+  fi
+  # Set variables that do not have overrides
+  _set_volume_dir "iso"
+  _set_volume_dir "dongle_iso"
+  _encrypted_volumes=(
+    "boot"
+    "dongle_boot"
+    "dongle_persistent"
+    "dongle_swap"
+    "keys"
+    "persistent"
+    "recovery"
+    "swap")
+  _no_override_volumes=(
+    "${_no_encrypted_volumes[@]}"
+    "efi_boot")
+  _no_override_vars=(
+    ["airootfs_image_type"]="squashfs"
+    ["boot_image_type"]="ext4+luks"
+    ["dongle_boot_image_type"]="ext4+luks"
+    ["dongle_persistent_image_type"]="ext4+luks"
+    ["dongle_swap_image_type"]="swap+luks"
+    ["keys_image_type"]="squashfs+luks"
+    ["persistent_image_type"]="ext4+luks"
+    ["recovery_image_type"]="ext4+luks"
+    ["swap_image_type"]="swap+luks"
+    ["airootfs_encryption_key_auto"]="$(_get "work" \
+                                             "dir")/$(_get "iso" \
+                                                           "label").key"
+    ["airootfs_dir"]="$(_get_airootfs_dir)"
+    ["recovery"]="false"
+    ["iso_name"]="${app_name}")
+  for _volume in "${_encrypted_volumes[@]}"; do
+      _msg=(
+        "Setting ${_volume} encryption key to auto")
+      _msg_info "${_msg[*]}"
+      _no_override_vars["${_volume}_encryption_key"]="auto"
+  done
+  for _volume in "${_no_override_volumes[@]}"; do
+      _msg=(
+        "Setting ${_volume} image to"
+        "'$(_get_volume_img ${_volume})'"
+      _msg_info "${_msg[*]}"
+      _no_override_vars["${_volume}_img"]="$(_get_volume_img \
+                                                 "${_volume}")"
+  done
+  for _var in "${!_no_override_vars[@]}"; do
+      _msg=(
+        "Setting ${_var} to ${_no_override_vars[${_var}]}")
+      _msg_info "${_msg[*]}"
+      _set_no_override "${_var}" \
+                       "${_no_override_vars[${_var}]}"
+  done
 }
 
 _export_gpg_publickey() {
-    local gpg_options=(
-      --batch
-      --no-armor
-      --output "${work_dir}/pubkey.gpg"
-      --export "${gpg_key}")
-
-    rm -f -- "${work_dir}/pubkey.gpg"
-    if [ "${gpg_home}" != "" ]; then
-        gpg_options+=('--homedir' "${gpg_home}")
-        GNUPGHOME="${gpg_home}" \
-          gpg "${gpg_options[@]}"
-    else
-        gpg "${gpg_options[@]}"
-    fi
+  local \
+    gpg_options=()
+  gpg_options+=(
+    --batch
+    --no-armor
+    --output "${work_dir}/pubkey.gpg"
+    --export "${gpg_key}"
+  )
+  rm \
+    -f -- \
+    "${work_dir}/pubkey.gpg"
+  if [ "${gpg_home}" != "" ]; then
+    gpg_options+=(
+      --homedir="${gpg_home}"
+    )
+    GNUPGHOME="${gpg_home}" \
+    gpg \
+      "${gpg_options[@]}"
+  else
+    gpg \
+      "${gpg_options[@]}"
+  fi
 }
 
 # Builds the base for an ISO and/or a netboot target
 _build_dongle_base() {
-    local run_once_mode="base" \
-          _sig_dir \
-          _volume="dongle_iso"
-    _setup_volume_dir "${_volume}"
-    _setup_volume_dir "keys"
-    _setup_volume_dir "dongle_boot"
-    _setup_volume_dir "dongle_persistent"
-    _setup_volume_dir "dongle_boot"
-    _sig_dir="$(_get "${_volume}" \
-                     "dir")/${install_dir}/${arch}"
-    [ "$(_get "airootfs" \
-              "encryption_key")" != "" ] && \
-      cp "$(_get "airootfs" \
-                 "encryption_key")" \
-         "$(_get "keys" \
-                 "dir")/airootfs.key"
-    [[ "$(_get "airootfs" \
-               "image_type")" == *"luks"* ]] && \
-    [[ " ${buildmodes[*]} " =~ ' dongle ' ]] && \
-      _run_once "_prepare_keys_image"
-    _run_once "_make_kernel_on_${_volume}"
-    "_make_bootmodes_${_volume}"
+  local \
+    run_once_mode \
+    _sig_dir \
+    _volume=
+  run_once_mode="base"
+  _volume="dongle_iso"
+  _setup_volume_dir \
+    "${_volume}"
+  _setup_volume_dir \
+    "keys"
+  _setup_volume_dir \
+    "dongle_boot"
+  _setup_volume_dir \
+    "dongle_persistent"
+  _setup_volume_dir \
+    "dongle_boot"
+  _sig_dir="$(
+    _get \
+      "${_volume}" \
+      "dir")/${install_dir}/${arch}"
+  if [ "${airootfs_encryption_key}" != "" ]; then
+    cp "${airootfs_encryption_key}" \
+       "${keys_dir}/airootfs.key"
+  fi
+  if [[ "${airootfs_image_type}" == *"luks"* ]] && \
+     [[ " ${buildmodes[*]} " =~ ' dongle ' ]]; then
+    _run_once \
+      "_prepare_keys_image"
+  fi
+  _run_once \
+    "_make_kernel_on_${_volume}"
+  "_make_bootmodes_${_volume}"
 }
 
 # Create working directory
 # $1: value in fs_images
 _setup_volume_dir() {
-    local _volume="${1}"
-    [[ "$(_get "${_volume}" \
-               "dir")" == "" ]] && \
-      _set_volume_dir "${_volume}"
-    [[ -d "$(_get "${volume}" \
-                  "dir")" ]] || \
-      install_root_dir "$(_get "${_volume}" \
-                               "dir")"
+  local \
+    _volume="${1}" \
+    _volume_dir
+  _volume_dir="$(
+    _get \
+      "${_volume}" \
+      "dir")"
+  if [[ "${_volume_dir}" == "" ]]; then
+    _set_volume_dir \
+      "${_volume}"
+  fi
+  if [[ ! -d "${_volume_dir}" ]]; then
+    install_root_dir \
+      "${_volume_dir}"
+  fi
 }
 
 # Write build date to file or if the file exists,
 # read it from there
 _make_build_date() {
-    if [[ -e "$(_get "work" \
-                     "dir")/build_date" ]]; then
-        SOURCE_DATE_EPOCH="$(<"$(_get "work" \
-                                      "dir")/build_date")"
-    else
-        printf '%s\n' \
-               "${SOURCE_DATE_EPOCH}" > \
-          "$(_get "work" \
-                  "dir")/build_date"
-    fi
+  if [[ -e "${work_dir}/build_date" ]]; then
+    SOURCE_DATE_EPOCH="$(<"${work_dir}/build_date")"
+  else
+    printf \
+      '%s\n' \
+      "${SOURCE_DATE_EPOCH}" > \
+    "${work_dir}/build_date"
+  fi
 }
 
 # build the base for an ISO and/or a netboot target
 _build_iso_base() {
-    local _volume="airootfs" \
-          _root="pacstrap" \
-          run_once_mode="base" \
-          buildmode_packages="${packages}" \
-          buildmode_pkg_list=("${pkg_list[@]}")
-    # Set up essential directory paths
-    _setup_volume_dir "iso"
-    _setup_volume_dir "keys"
-    _setup_volume_dir "persistent"
-    _setup_volume_dir "dongle_persistent"
-    _setup_volume_dir "dongle_boot"
-    _set "${_root}" \
-         "dir" \
-         "$(_get "work" \
-                 "dir")/${arch}/${_volume}"
-    _set "${_volume}" \
-         "dir" \
-         "$(_get "iso" \
-                 "dir")/$(_get "install" \
-                               "dir")/${arch}"
-    _setup_volume_dir "${_volume}"
-    _make_build_date
-    [[ "${quiet}" == "y" ]] || \
-      _show_config
-    _run_once _make_pacman_conf
-    [[ -z "${gpg_key}" ]] || \
-      _run_once _export_gpg_publickey
-    _run_once "_make_custom_${_volume}"
-    _run_once "_make_packages_${_volume}"
-    _run_once "_make_version"
-    _run_once "_make_customize_${_volume}"
-    _run_once "_make_pkglist"
-    _run_once "_prepare_persistent_image"
-    _run_once "_prepare_swap_image"
-    _run_once "_prepare_dongle_boot_image"
-    _run_once "_prepare_dongle_swap_image"
-    if [[ "${buildmode}" == 'netboot' ]]; then
-        _run_once _make_kernel_on_iso
-    else
-        _make_bootmodes_iso
-    fi
-    _run_once "_cleanup_${_root}_dir"
-    _run_once "_prepare_${_volume}_image"
-    _run_once "_prepare_recovery_image"
+  local \
+    _volume \
+    _root \
+    run_once_mode \
+    buildmode_packages \
+    buildmode_pkg_list=()
+  _volume="airootfs"
+  _root="pacstrap"
+  run_once_mode="base"
+  buildmode_packages="${packages}"
+  buildmode_pkg_list+=(
+    "${pkg_list[@]}"
+  )
+  # Set up essential directory paths
+  _setup_volume_dir \
+    "iso"
+  _setup_volume_dir \
+    "keys"
+  _setup_volume_dir \
+    "persistent"
+  _setup_volume_dir \
+    "dongle_persistent"
+  _setup_volume_dir \
+    "dongle_boot"
+  _set \
+    "${_root}" \
+    "dir" \
+    "${work_dir}/${arch}/${_volume}"
+  _set \
+    "${_volume}" \
+    "dir" \
+    "${iso_dir}/${install_dir}/${arch}"
+  _setup_volume_dir \
+    "${_volume}"
+  _make_build_date
+  _show_config
+  _run_once \
+    "_make_pacman_conf"
+  if [[ -z "${gpg_key}" ]]; then
+    _run_once \
+      "_export_gpg_publickey"
+  fi
+  _run_once \
+    "_make_custom_${_volume}"
+  _run_once \
+    "_make_packages_${_volume}"
+  _run_once \
+    "_make_version"
+  _run_once \
+    "_make_customize_${_volume}"
+  _run_once \
+    "_make_pkglist"
+  _run_once \
+    "_prepare_persistent_image"
+  _run_once \
+    "_prepare_swap_image"
+  _run_once \
+    "_prepare_dongle_boot_image"
+  _run_once \
+    "_prepare_dongle_swap_image"
+  if [[ "${buildmode}" == 'netboot' ]]; then
+    _run_once \
+      _make_kernel_on_iso
+  else
+    _make_bootmodes_iso
+  fi
+  _run_once \
+    "_cleanup_${_root}_dir"
+  _run_once \
+    "_prepare_${_volume}_image"
+  _run_once \
+    "_prepare_recovery_image"
 }
 
 _get_image_name() {
-    local _buildmode="${1}" \
-          _image_name=()
-    _image_name=(
-      "${iso_name}")
-    [[ "${_buildmode}" != "iso" ]] && \
-      _image_name+=(
-        "${_buildmode}")
+  local \
+    _buildmode="${1}" \
+    _image_name=()
+  _image_name+=(
+    "${iso_name}"
+  )
+  if [[ "${_buildmode}" != "iso" ]]; then
     _image_name+=(
-      "${iso_version}"
-      "${arch}")
-    echo "$(IFS="-" ; \
-            echo "${_image_name[*]}")"
+      "${_buildmode}"
+    )
+  fi
+  _image_name+=(
+    "${iso_version}"
+    "${arch}"
+  )
+  IFS="-"; \
+  echo \
+    "${_image_name[*]}"
+  IFS=" ";
 }
 
 # Build the bootstrap buildmode
 _build_buildmode_bootstrap() {
-    local _root="pacstrap" \
-          buildmode_packages="${bootstrap_packages}" \
-          # Set the package list to use
-          buildmode_pkg_list=("${bootstrap_pkg_list[@]}") \
-          image_name="$(_get_image_name "${bootstrap}").tar.gz" \
-          run_once_mode="${buildmode}"
-    # Set up essential directory paths
-    _set "${_root}" \
-         "dir" \
-         "$(_get "work" \
-                 "dir")/${arch}/${buildmode}/root.${arch}"
-    
-    [[ -d "$(_get "work" \
-                  "dir")" ]] || \
-      install -d -- \
-              "$(_get "work" \
-                      "dir")"
-    _install_root_dir "$(_get "${_root}" \
-                              "dir")"
-    [[ "${quiet}" == "y" ]] || \
-      _show_config
-    _run_once "_make_pacman_conf"
-    _run_once "_make_packages"
-    _run_once "_make_version"
-    _run_once "_make_pkglist"
-    _run_once "_cleanup_${_root}_dir"
-    _run_once "_build_${buildmode}_image"
+  local \
+    _cmd \
+    _root \
+    buildmode_packages \
+    buildmode_pkg_list=() \
+    image_name \
+    run_once_mode
+  _root="pacstrap"
+  buildmode_packages="${bootstrap_packages}"
+  # Set the package list to use
+  buildmode_pkg_list=("${bootstrap_pkg_list[@]}")
+  image_name="$(_get_image_name "${bootstrap}").tar.gz"
+  run_once_mode="${buildmode}"
+  # Set up essential directory paths
+  _set \
+    "${_root}" \
+    "dir" \
+    "${work_dir}/${arch}/${buildmode}/root.${arch}"
+  if [[ -d "${work_dir}" ]]; then
+    install \
+      -d -- \
+      "${work_dir}"
+  _install_root_dir \
+    "$(_get \
+         "${_root}" \
+         "dir")"
+  _show_config
+  for _cmd \
+    in "make_pacman_conf"
+       "make_packages"
+       "make_version"
+       "make_pkglist"
+       "cleanup_${_root}_dir"
+       "build_${buildmode}_image"; do
+    _run_once \
+      "_${_cmd}"
 }
 
 # Build the netboot buildmode
 _build_buildmode_netboot() {
-    local run_once_mode="${buildmode}"
-    _build_iso_base
-    [[ -v cert_list ]] && \
-      _run_once "_sign_${buildmode}_artifacts"
-    _run_once "_export_${buildmode}_artifacts"
+  local \
+    run_once_mode
+  run_once_mode="${buildmode}"
+  _build_iso_base
+  if [[ -v cert_list ]]; then
+    _run_once \
+      "_sign_${buildmode}_artifacts"
+  fi
+  _run_once \
+    "_export_${buildmode}_artifacts"
 }
 
 # Build the ISO buildmode
 _build_buildmode_iso() {
-    local image_name="$(_get_image_name "${buildmode}").iso" \
-          run_once_mode="${buildmode}"
-    _set "efi_boot" \
-         "img" \
-         "$(_get_volume_img "efi_boot")"
-    "_build_${buildmode}_base"
-    _run_once "_build_${buildmode}_image"
+  local \
+    image_name \
+    run_once_mode
+  image_name="$(
+    _get_image_name \
+      "${buildmode}").iso"
+  run_once_mode="${buildmode}"
+  efi_boot_img="$(
+    _get_volume_img \
+      "efi_boot")"
+  "_build_${buildmode}_base"
+  _run_once \
+    "_build_${buildmode}_image"
 }
 
 # Build the dongle ISO buildmode
 _build_buildmode_dongle() {
-    local image_name="$(_get_image_name "${buildmode}").iso" \
-          run_once_mode="${buildmode}"
-    _set "efi_boot" \
-         "img" \
-         "$(_get_volume_img "efi_boot")"
-    "_build_${buildmode}_base"
-    _run_once "_build_${buildmode}_image"
+  local \
+    image_name \
+    run_once_mode
+  image_name="$(
+    _get_image_name \
+      "${buildmode}").iso"
+  run_once_mode="${buildmode}"
+  efi_boot_img="$(
+    _get_volume_img \
+      "efi_boot")"
+  "_build_${buildmode}_base"
+  _run_once \
+    "_build_${buildmode}_image"
 }
 
 # build all buildmodes
 _build() {
-    local buildmode
-    local run_once_mode="build"
+  local \
+    buildmode
+  local \
+    run_once_mode="build"
 
-    for buildmode in "${buildmodes[@]}"; do
-        _run_once "_build_buildmode_${buildmode}"
-    done
+  for buildmode in "${buildmodes[@]}"; do
+    _run_once \
+      "_build_buildmode_${buildmode}"
+  done
 }
 
 _globals
@@ -5622,46 +5714,85 @@ _global_variables
 _constants
 _requirements
 _config_user_init \
-  "$(_get \
-       "app" \
-       "name")"
+  "${app_name}"
 while \
   getopts \
-    'c:p:C:L:P:A:D:w:m:o:g:G:H:vh?' arg; do
+    'c:p:C:L:P:A:D:w:m:o:g:G:H:vh?' \
+  arg; do
   case "${arg}" in
-      p) read -r -a override_pkg_list <<< "${OPTARG}" ;;
-      C) override_pacman_conf="${OPTARG}" ;;
-      L) override_iso_label="${OPTARG}" ;;
-      P) override_iso_publisher="${OPTARG}" ;;
-      A) override_iso_application="${OPTARG}" ;;
-      D) override_install_dir="${OPTARG}" ;;
-      c) read -r -a override_cert_list <<< "${OPTARG}" ;;
-      w) override_work_dir="${OPTARG}" ;;
-      m) read -r -a override_buildmodes <<< "${OPTARG}" ;;
-      o) override_out_dir="${OPTARG}" ;;
-      g) override_gpg_key="${OPTARG}" ;;
-      G) override_gpg_sender="${OPTARG}" ;;
-      H) override_gpg_home="${OPTARG}" ;;
-      v) override_quiet="n" ;;
-      h|?) _usage 0 ;;
+      p)
+        read \
+          -r \
+          -a \
+          "override_pkg_list" <<< \
+          "${OPTARG}" ;;
+      C)
+        override_pacman_conf="${OPTARG}" ;;
+      L)
+        override_iso_label="${OPTARG}" ;;
+      P)
+        override_iso_publisher="${OPTARG}" ;;
+      A)
+        override_iso_application="${OPTARG}" ;;
+      D)
+        override_install_dir="${OPTARG}" ;;
+      c)
+        read \
+          -r \
+          -a \
+          "override_cert_list" <<< "${OPTARG}" ;;
+      w)
+        override_work_dir="${OPTARG}" ;;
+      m)
+        read \
+          -r \
+          -a \
+          "override_buildmodes" <<< \
+          "${OPTARG}" ;;
+      o)
+        override_out_dir="${OPTARG}" ;;
+      g)
+        override_gpg_key="${OPTARG}" ;;
+      G)
+        override_gpg_sender="${OPTARG}" ;;
+      H)
+        override_gpg_home="${OPTARG}" ;;
+      v)
+        override_quiet="n" ;;
+      h|?)
+        _usage \
+          0 ;;
       *)
-          _msg_error "Invalid argument '${arg}'" 0
-          _usage 1
-          ;;
+        _msg=(
+          "Invalid argument '${arg}'."
+        )
+        _msg_error \
+          "${_msg[*]}" \
+          0
+          _usage \
+            1 ;;
   esac
 done
-shift \
-  $((OPTIND - 1))
-(( $# < 1 )) && \
+shift $((
+  OPTIND - 1))
+if (( $# < 1 )); then
+  _msg=(
+    "No profile specified."
+  )
   _msg_error \
-    "No profile specified" \
-    0 && \
+    "${_msg[*]}" \
+    0
   _usage \
-  1
-(( EUID != 0 )) && \
-  _msg_error \
-    "${app_name} must be run as root." \
     1
+fi
+if (( EUID != 0 )); then
+  _msg=(
+    "${app_name} must be run as root."
+  )
+  _msg_error \
+    "${_msg[*]}" \
+    1
+fi
 # get the absolute path representation
 # of the first non-option argument
 _set \
